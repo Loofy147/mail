@@ -1655,6 +1655,27 @@ fn create_email_font_ctx_with_system_fonts(system_fonts: bool) -> parley::FontCo
     font_ctx
 }
 
+/// Render a complete message the way the reader paints it, using only the
+/// bundled fonts so committed screenshots do not depend on the host's fonts.
+#[cfg(test)]
+pub(crate) fn render_screenshot_email(
+    html: &str,
+    logical_width: u32,
+    scale_factor: f32,
+    appearance: EmailAppearance,
+) -> Result<RenderedEmail, String> {
+    let mut email = prepare_email_html_at_with_font_ctx(
+        html,
+        None,
+        (logical_width as f32 * scale_factor).ceil() as u32,
+        (INITIAL_HEIGHT as f32 * scale_factor).ceil() as u32,
+        scale_factor,
+        create_email_font_ctx_with_system_fonts(false),
+        appearance,
+    )?;
+    render_prepared_cpu(&mut email, logical_width, INITIAL_HEIGHT, scale_factor)
+}
+
 #[cfg(test)]
 fn prepare_email_html_with_provider(
     html: &str,

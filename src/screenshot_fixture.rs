@@ -2,6 +2,68 @@
 //! Both renderers receive the output of scripts/prepare-screenshot-data.jq.
 use super::*;
 use serde_json::Value;
+use slint::Rgb8Pixel;
+use slint::platform::{
+    Platform, WindowAdapter, WindowEvent,
+    software_renderer::{MinimalSoftwareWindow, RepaintBufferType},
+};
+
+struct Headless(Rc<MinimalSoftwareWindow>);
+impl Platform for Headless {
+    fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
+        Ok(self.0.clone())
+    }
+}
+
+/// The real application window, rendered offscreen with the prepared fixture.
+pub(super) struct ScreenshotWindow {
+    pub app: AppWindow,
+    window: Rc<MinimalSoftwareWindow>,
+    scale: f32,
+}
+
+impl ScreenshotWindow {
+    pub fn new(scale: f32) -> Self {
+        let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+        slint::platform::set_platform(Box::new(Headless(window.clone()))).unwrap();
+        let app = AppWindow::new().unwrap();
+        app.window()
+            .dispatch_event(WindowEvent::ScaleFactorChanged {
+                scale_factor: scale,
+            });
+        apply(&app);
+        app.show().unwrap();
+        Self { app, window, scale }
+    }
+
+    /// Resize to `width`×`height` logical pixels and let layout, change
+    /// handlers and transitions settle before painting the final frame.
+    pub fn capture(&self, width: u32, height: u32) -> image::RgbImage {
+        let (physical_width, physical_height) = (
+            (width as f32 * self.scale) as u32,
+            (height as f32 * self.scale) as u32,
+        );
+        self.app
+            .window()
+            .set_size(slint::PhysicalSize::new(physical_width, physical_height));
+        let mut pixels = vec![Rgb8Pixel::default(); (physical_width * physical_height) as usize];
+        for _ in 0..3 {
+            slint::platform::update_timers_and_animations();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            slint::platform::update_timers_and_animations();
+            self.app.window().request_redraw();
+            self.window.draw_if_needed(|r| {
+                r.render(&mut pixels, physical_width as usize);
+            });
+        }
+        self.app.window().request_redraw();
+        self.window.draw_if_needed(|r| {
+            r.render(&mut pixels, physical_width as usize);
+        });
+        let bytes: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b]).collect();
+        image::RgbImage::from_raw(physical_width, physical_height, bytes).unwrap()
+    }
+}
 
 trait FixtureValue: Sized {
     fn read(value: &Value) -> Self;
@@ -234,7 +296,7 @@ impl FixtureValue for SidebarRowKind {
     }
 }
 
-pub(super) fn apply(app: &AppWindow) {
+fn apply(app: &AppWindow) {
     let path = std::env::var_os("FLECTAR_SCREENSHOT_DATA")
         .expect("run scripts/generate-screenshots.sh to prepare FLECTAR_SCREENSHOT_DATA");
     let data: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();

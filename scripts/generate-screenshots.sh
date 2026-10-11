@@ -24,28 +24,6 @@ command -v jq >/dev/null 2>&1 || {
 
 slint-viewer --check "$ui"
 
-demo_email_svg="$output_dir/demo-email.svg"
-demo_email_png="$temporary_dir/demo-email.png"
-demo_email_ui="$temporary_dir/demo-email.slint"
-ln -s "$demo_email_svg" "$temporary_dir/demo-email.svg"
-cat > "$demo_email_ui" <<'EOF'
-export component DemoEmail inherits Window {
-    preferred-width: 720px;
-    preferred-height: 760px;
-
-    Image {
-        width: 100%;
-        height: 100%;
-        source: @image-url("demo-email.svg");
-        image-fit: fill;
-    }
-}
-EOF
-SLINT_SCALE_FACTOR=2 slint-viewer \
-  --style fluent \
-  --screenshot "$demo_email_png" \
-  "$demo_email_ui"
-
 favicon_dir="$temporary_dir/favicons"
 mapfile -t sender_addresses < <(
   jq -r '[.selected_address, (.emails[].address), (.thread_messages[]? | select(.outgoing | not) | .address)] | unique[]' "$fixture"
@@ -68,9 +46,12 @@ prepare_data() {
   local tab_strip="${12:-default}"
   local window_frame=""
   local data_file="$temporary_dir/$output_name.json"
+  local email_file="$email_dir/demo-email-$theme_preset-$theme.json"
+  local email="null"
   # Desktop screenshots show the integrated macOS frame; the traffic lights
   # are painted after rendering because AppKit draws them natively.
   [[ "$output_name" != desktop-* ]] || window_frame="macos"
+  [[ ! -f "$email_file" ]] || email="$(<"$email_file")"
 
   jq \
     --arg theme "$theme" \
@@ -82,12 +63,21 @@ prepare_data() {
     --arg tab_strip "$tab_strip" \
     --arg window_frame "$window_frame" \
     --arg favicon_dir "$favicon_dir" \
-    --arg demo_email "$demo_email_png" \
     --argjson show_threads "$show_threads" \
     --argjson show_account_markers "$show_account_markers" \
+    --argjson email "$email" \
     -f "$repo_dir/scripts/prepare-screenshot-data.jq" "$fixture" > "$data_file"
 
 }
+
+# The reader renders the demo message once per theme preset and scheme, at
+# the reading pane's width, so dark screenshots show the adapted body.
+email_dir="$temporary_dir/email"
+echo "Rendering demo-email bodies"
+prepare_data email 1320 800 light
+FLECTAR_SCREENSHOT_DATA="$temporary_dir/email.json" \
+FLECTAR_EMAIL_SCREENSHOTS="$email_dir" cargo test --quiet --locked \
+  -p flectar-mail --lib screenshot_email::email_screenshots -- --ignored --exact
 
 # Desktop screenshots that still need their macOS traffic lights.
 macos_screenshots=()

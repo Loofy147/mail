@@ -32,6 +32,8 @@ mod reader_clipboard;
 #[cfg(test)]
 mod reader_validation;
 #[cfg(test)]
+mod screenshot_email;
+#[cfg(test)]
 mod screenshot_frameless;
 #[cfg(test)]
 mod screenshot_fixture;

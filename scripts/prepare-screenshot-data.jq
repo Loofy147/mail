@@ -43,7 +43,8 @@ def favicon_path(address):
     {"kind": "databases", "size": "1.34 GB", "fraction": 0.0727, "offset": 0.9125, "color": "#a855f7"},
     {"kind": "other", "size": "279.6 MB", "fraction": 0.0148, "offset": 0.9852, "color": "#94a3b8"}
   ]
-| .email_tiles |= map(.image = $demo_email)
+# The reader's rendering of demo-email.html for this preset and scheme.
+| if $email == null then . else . + $email end
 | .selected_favicon = favicon_path(.selected_address)
 | .selected_has_favicon = true
 | .contacts |= map(.suggested = (.suggested // false))

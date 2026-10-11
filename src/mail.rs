@@ -2473,8 +2473,8 @@ pub fn fixtures() -> Vec<EmailFixture> {
             .expect("valid shared screenshot fixture");
     for email in &mut data.emails {
         email.to.clone_from(&data.selected_to);
-        // Renderer tests need an HTML document; screenshot bodies use the
-        // shared demo-email.svg instead. Build test HTML from the same rows.
+        // Renderer tests need an HTML document; screenshots render the shared
+        // demo-email.html instead. Build test HTML from the same rows.
         email.html = markdown_to_html(&format!(
             "# {}\n\n{}\n\n[Open message](https://{}) · [Flectar Mail](https://flectar.com)",
             email.subject,

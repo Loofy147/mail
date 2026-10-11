@@ -4,26 +4,16 @@
 //! `FLECTAR_FRAMELESS_SCREENSHOTS` set to the output directory. The real
 //! application window loads the same prepared Cloudflare fixture as the normal
 //! screenshots and is rendered offscreen, so the images
-//! follow the shipping layout. macOS keeps AppKit's native traffic lights,
+//! follow the shipping layout. The message body is rendered by the reader for
+//! each theme and window size. macOS keeps AppKit's native traffic lights,
 //! which an offscreen renderer cannot draw; `screenshot_traffic_lights` paints
 //! them at macOS 26's size and spacing, where the application moves them to.
 use super::*;
-use slint::Rgb8Pixel;
-use slint::platform::{
-    Platform, WindowAdapter, WindowEvent,
-    software_renderer::{MinimalSoftwareWindow, RepaintBufferType},
-};
+use screenshot_fixture::ScreenshotWindow;
 
 const SCALE: f32 = 2.0;
 const WIDTH: u32 = 1320;
 const HEIGHT: u32 = 800;
-
-struct Headless(Rc<MinimalSoftwareWindow>);
-impl Platform for Headless {
-    fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
-        Ok(self.0.clone())
-    }
-}
 
 /// Paint the lights where the application places the native buttons, using
 /// the macOS 26 metrics `WindowChrome` defaults to.
@@ -50,15 +40,8 @@ fn frameless_screenshots() {
     };
     std::fs::create_dir_all(&out).unwrap();
 
-    let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
-    slint::platform::set_platform(Box::new(Headless(window.clone()))).unwrap();
-    let app = AppWindow::new().unwrap();
-    app.window()
-        .dispatch_event(WindowEvent::ScaleFactorChanged {
-            scale_factor: SCALE,
-        });
-    screenshot_fixture::apply(&app);
-    app.show().unwrap();
+    let screen = ScreenshotWindow::new(SCALE);
+    let app = &screen.app;
 
     let subject = |index: usize| {
         app.get_emails()
@@ -89,32 +72,14 @@ fn frameless_screenshots() {
         ])));
 
     let draw = |name: &str, width: u32, height: u32| {
-        let (physical_width, physical_height) = (
-            (width as f32 * SCALE) as u32,
-            (height as f32 * SCALE) as u32,
-        );
-        app.window()
-            .set_size(slint::PhysicalSize::new(physical_width, physical_height));
-        let mut pixels = vec![Rgb8Pixel::default(); (physical_width * physical_height) as usize];
-        // Settle layout, transitions and the message frame for the theme.
-        for _ in 0..3 {
-            slint::platform::update_timers_and_animations();
-            std::thread::sleep(std::time::Duration::from_millis(300));
-            slint::platform::update_timers_and_animations();
-            app.window().request_redraw();
-            window.draw_if_needed(|r| {
-                r.render(&mut pixels, physical_width as usize);
-            });
-        }
-        app.window().request_redraw();
-        window.draw_if_needed(|r| {
-            r.render(&mut pixels, physical_width as usize);
-        });
-        let bytes: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b]).collect();
-        let mut image = image::RgbImage::from_raw(physical_width, physical_height, bytes).unwrap();
+        // Lay out at this size first so the body matches the reader's width
+        // and the message colors of the current theme.
+        screen.capture(width, height);
+        screenshot_email::show(app, SCALE);
+        let mut image = screen.capture(width, height);
         let chrome = app.global::<WindowChrome>();
         if chrome.get_platform() == "macos" && chrome.get_controls_visible() {
-            paint_traffic_lights(&app, &mut image);
+            paint_traffic_lights(app, &mut image);
         }
         image.save(out.join(format!("{name}.png"))).unwrap();
     };

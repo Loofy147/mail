@@ -6,14 +6,8 @@
   "unified_count": "14",
   "has_selected": true,
   "text_mode": false,
-  "email-content-aspect": 1.055556,
-  "email_tiles": [
-    {
-      "image": "resources/screenshots/demo-email.svg",
-      "y": 0,
-      "height": 1
-    }
-  ],
+  "email-content-aspect": 1,
+  "email_tiles": [],
   "selected_thread_index": 2,
   "thread_messages": [
     {
