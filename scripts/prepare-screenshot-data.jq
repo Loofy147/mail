@@ -7,11 +7,24 @@ def favicon_path(address):
 | .active_view = $active_view
 # The app always has at least one tab; show the same strip as the frameless
 # screenshots: the current view, a background conversation and the calendar.
-| .["TabsUi.rows"] = [
+# The tabs showcase adds more conversations and every other workspace.
+| .["TabsUi.rows"] = (if $tab_strip == "showcase" then [
+    {"id": 1, "workspace": $active_view, "title": "", "active": true},
+    {"id": 2, "workspace": "mail", "title": .emails[1].subject, "active": false},
+    {"id": 3, "workspace": "mail", "title": .emails[2].subject, "active": false},
+    {"id": 4, "workspace": "calendar", "title": "", "active": false},
+    {"id": 5, "workspace": "contacts", "title": "", "active": false},
+    {"id": 6, "workspace": "files", "title": "", "active": false}
+  ] else [
     {"id": 1, "workspace": $active_view, "title": "", "active": true},
     {"id": 2, "workspace": "mail", "title": .emails[1].subject, "active": false},
     {"id": 3, "workspace": (if $active_view == "calendar" then "mail" else "calendar" end), "title": "", "active": false}
-  ]
+  ] end)
+| if $window_frame == "" then . else
+    .["WindowChrome.platform"] = $window_frame
+    | .["WindowChrome.preference"] = "integrated"
+    | .["WindowChrome.integrated"] = true
+  end
 | .startup_hydrated = true
 | .calendar_view_mode = $calendar_mode
 | .calendar_period_title = (if $calendar_mode == "agenda" then .calendar_month_title else .calendar_period_title end)

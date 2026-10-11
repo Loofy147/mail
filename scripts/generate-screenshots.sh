@@ -14,7 +14,7 @@ command -v slint-viewer >/dev/null 2>&1 || {
   exit 1
 }
 command -v cargo >/dev/null 2>&1 || {
-  echo "Cargo is required to generate sender favicons" >&2
+  echo "Cargo is required to generate sender favicons and window controls" >&2
   exit 1
 }
 command -v jq >/dev/null 2>&1 || {
@@ -65,7 +65,12 @@ prepare_data() {
   local show_account_markers="${9:-false}"
   local settings_tab="${10:-}"
   local calendar_mode="${11:-week}"
+  local tab_strip="${12:-default}"
+  local window_frame=""
   local data_file="$temporary_dir/$output_name.json"
+  # Desktop screenshots show the integrated macOS frame; the traffic lights
+  # are painted after rendering because AppKit draws them natively.
+  [[ "$output_name" != desktop-* ]] || window_frame="macos"
 
   jq \
     --arg theme "$theme" \
@@ -74,6 +79,8 @@ prepare_data() {
     --arg active_view "$active_view" \
     --arg calendar_mode "$calendar_mode" \
     --arg settings_tab "$settings_tab" \
+    --arg tab_strip "$tab_strip" \
+    --arg window_frame "$window_frame" \
     --arg favicon_dir "$favicon_dir" \
     --arg demo_email "$demo_email_png" \
     --argjson show_threads "$show_threads" \
@@ -81,6 +88,9 @@ prepare_data() {
     -f "$repo_dir/scripts/prepare-screenshot-data.jq" "$fixture" > "$data_file"
 
 }
+
+# Desktop screenshots that still need their macOS traffic lights.
+macos_screenshots=()
 
 render() {
   local output_name="$1"
@@ -120,6 +130,7 @@ render() {
     --load-data "$data_file" \
     --screenshot "$output_dir/$output_name.png" \
     "$temporary_ui"
+  [[ "$output_name" != desktop-* ]] || macos_screenshots+=("$output_dir/$output_name.png")
   rm -f "$temporary_ui"
   temporary_ui=""
 }
@@ -140,6 +151,8 @@ render_selected desktop-profiles-light 1320 800 light default default mail false
 render_selected desktop-profiles-dark 1320 800 dark default default mail false true
 render_selected desktop-thread-light 1320 800 light default default mail true
 render_selected desktop-thread-dark 1320 800 dark default default mail true
+render_selected desktop-tabs-light 1320 800 light default default mail false false "" week showcase
+render_selected desktop-tabs-dark 1320 800 dark default default mail false false "" week showcase
 render_selected desktop-minimal-light 1320 800 light minimal
 render_selected desktop-minimal-dark 1320 800 dark minimal
 render_selected desktop-teal-light 1320 800 light default teal
@@ -165,6 +178,10 @@ render_selected tablet-agenda-light 768 1024 light default default calendar fals
 render_selected tablet-agenda-dark 768 1024 dark default default calendar false false "" agenda
 render_selected mobile-agenda-light 390 844 light default default calendar false false "" agenda
 render_selected mobile-agenda-dark 390 844 dark default default calendar false false "" agenda
+
+if (( ${#macos_screenshots[@]} > 0 )); then
+  cargo run --quiet --example paint-screenshot-traffic-lights -- "${macos_screenshots[@]}"
+fi
 
 # The integrated window frame is rendered from the real application window
 # by an ignored test, because each platform's window controls are chosen at
