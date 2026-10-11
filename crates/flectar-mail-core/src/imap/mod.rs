@@ -1075,7 +1075,7 @@ async fn fetch_full_batch_inner(
     Ok(out)
 }
 
-/// All UIDs currently in the selected folder (for expunge reconciliation).
+/// All UIDs currently in the selected folder, including `\\Deleted` messages.
 pub async fn uid_search_all(session: &mut Session) -> Result<Vec<u32>> {
     with_deadline(
         "UID SEARCH ALL",
@@ -1093,6 +1093,20 @@ async fn uid_search_all_inner(session: &mut Session) -> Result<Vec<u32>> {
     let mut v: Vec<u32> = set.into_iter().collect();
     v.sort_unstable();
     Ok(v)
+}
+
+/// UIDs visible in the selected folder, excluding messages awaiting expunge.
+pub async fn uid_search_undeleted(session: &mut Session) -> Result<Vec<u32>> {
+    with_deadline("UID SEARCH UNDELETED", METADATA_TIMEOUT, async {
+        let set = session
+            .uid_search("UNDELETED")
+            .await
+            .map_err(|e| CoreError::Imap(e.to_string()))?;
+        let mut uids: Vec<u32> = set.into_iter().collect();
+        uids.sort_unstable();
+        Ok(uids)
+    })
+    .await
 }
 
 /// Find messages by one RFC 5322 header in the selected mailbox. This is used
@@ -1126,7 +1140,7 @@ pub async fn uid_search_header(
     .await
 }
 
-/// UIDs greater than `last_seen` in the currently selected mailbox.
+/// Undeleted UIDs greater than `last_seen` in the currently selected mailbox.
 ///
 /// `UIDNEXT` is only a prediction in IMAP4rev1 and older/quirky servers may
 /// omit it from SELECT entirely. SEARCH is the interoperable source of truth
@@ -1147,7 +1161,7 @@ pub async fn uid_search_after(session: &mut Session, last_seen: u32) -> Result<V
 }
 
 async fn uid_search_after_inner(session: &mut Session, last_seen: u32) -> Result<Vec<u32>> {
-    let query = format!("UID {}:*", last_seen + 1);
+    let query = format!("UID {}:* UNDELETED", last_seen + 1);
     let set = session
         .uid_search(&query)
         .await
@@ -1172,7 +1186,7 @@ async fn uid_search_since_inner(
     date: chrono::NaiveDate,
 ) -> Result<Vec<u32>> {
     // IMAP date format: 1-Jan-2024
-    let q = format!("SINCE {}", date.format("%-d-%b-%Y"));
+    let q = format!("SINCE {} UNDELETED", date.format("%-d-%b-%Y"));
     let set = session
         .uid_search(&q)
         .await

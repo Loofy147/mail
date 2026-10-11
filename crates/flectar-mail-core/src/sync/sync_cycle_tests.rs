@@ -342,3 +342,402 @@ async fn courier_cycle_applies_move_and_downloads_sparse_new_uid_without_uidnext
         "queued move was not scheduled before Inbox catch-up"
     );
 }
+
+async fn deleted_mail_context(port: u16) -> (tempfile::TempDir, SyncCtx, AccountConfig, Folder) {
+    let dir = tempfile::tempdir().unwrap();
+    let credentials: CredentialStoreHandle = Arc::new(
+        credentials::DevelopmentFileCredentialStore::new(dir.path().join("credentials.json")),
+    );
+    let ctx = SyncCtx {
+        db: Db::open(&dir.path().join("mail.db")).unwrap(),
+        calendar_db: Db::open_calendar(&dir.path().join("calendar.db")).unwrap(),
+        bus: EventBus::new(),
+        paths: Arc::new(Paths::for_tests(dir.path())),
+        tokens: TokenProvider::new(
+            credentials.clone(),
+            Arc::new(crate::oauth::redirect::LoopbackRedirectBroker::default()),
+        ),
+        credentials,
+    };
+    let (mut config, folder) = ctx
+        .db
+        .write(move |conn| {
+            let account_id = repo::accounts::insert(
+                conn,
+                &repo::accounts::NewAccount {
+                    email: "reader@example.test",
+                    display_name: None,
+                    avatar_url: None,
+                    provider: Provider::Imap,
+                    auth_kind: AuthKind::Password,
+                    mail_protocol: MailProtocol::Imap,
+                    username: "reader@example.test",
+                    jmap_url: "",
+                    jmap_account_id: None,
+                    imap_host: "127.0.0.1",
+                    imap_port: port,
+                    smtp_host: "127.0.0.1",
+                    smtp_port: 465,
+                },
+            )?;
+            let folder_id =
+                repo::folders::upsert(conn, account_id, "INBOX", Some("/"), Some(roles::INBOX))?;
+            repo::folders::set_backfill(conn, folder_id, Some(1), true)?;
+            Ok((
+                repo::accounts::get_config(conn, account_id)?.unwrap(),
+                repo::folders::get(conn, folder_id)?.unwrap(),
+            ))
+        })
+        .await
+        .unwrap();
+    config.settings.connection = MailConnectionSettings {
+        imap_security: ConnectionSecurity::Tls,
+        smtp_security: ConnectionSecurity::Tls,
+        trusted_certificate_pem: CERT.into(),
+    };
+    credentials::store_async(
+        ctx.credentials.clone(),
+        config.id,
+        Slot::Password,
+        "fixture-secret".into(),
+    )
+    .await
+    .unwrap();
+    (dir, ctx, config, folder)
+}
+
+fn deletion_header(uid: u32, deleted: bool) -> FetchedHeader {
+    FetchedHeader {
+        uid,
+        flags: imap::FetchedFlags { deleted, ..Default::default() },
+        internal_date_ms: Some(now_ms()),
+        size: None,
+        header_bytes: format!("Message-ID: <deletion-{uid}@example.test>\r\nFrom: sender@example.test\r\nTo: reader@example.test\r\nSubject: Message {uid}\r\n\r\n").into_bytes(),
+        has_attachments: false,
+        mime_plan: None,
+    }
+}
+
+#[tokio::test]
+async fn deleted_headers_are_skipped_without_stalling_progress_or_notifying() {
+    let (_dir, ctx, config, folder) = deleted_mail_context(1).await;
+    let folder_id = folder.id;
+    let failure_id = ctx
+        .db
+        .write(move |conn| {
+            repo::sync_failures::record_header(conn, folder_id, 42, None, "old parse failure")
+        })
+        .await
+        .unwrap();
+    let (updated, fresh) = store_headers(
+        &ctx,
+        &config,
+        &folder,
+        vec![deletion_header(42, true)],
+        Some(1),
+    )
+    .await
+    .unwrap();
+    assert!(updated.is_empty());
+    assert!(fresh.is_empty());
+    ctx.db
+        .read(move |conn| {
+            assert!(repo::messages::uids_in_folder(conn, folder_id)?.is_empty());
+            assert_eq!(
+                repo::folders::get(conn, folder_id)?.unwrap().last_seen_uid,
+                42
+            );
+            assert!(repo::sync_failures::get(conn, failure_id)?.is_none());
+            let notifications: i64 =
+                conn.query_row("SELECT COUNT(*) FROM notification_outbox", [], |row| {
+                    row.get(0)
+                })?;
+            assert_eq!(notifications, 0);
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    // Mixed batches still import and notify for the real arrival.
+    let (updated, fresh) = store_headers(
+        &ctx,
+        &config,
+        &folder,
+        vec![deletion_header(43, false), deletion_header(44, true)],
+        Some(1),
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(fresh, updated);
+    ctx.db
+        .read(move |conn| {
+            assert!(repo::messages::by_folder_uid(conn, folder_id, 43)?.is_some());
+            assert!(repo::messages::by_folder_uid(conn, folder_id, 44)?.is_none());
+            assert_eq!(
+                repo::folders::get(conn, folder_id)?.unwrap().last_seen_uid,
+                44
+            );
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    // Being in Trash does not imply the IMAP \Deleted flag.
+    let account_id = config.id;
+    let trash = ctx
+        .db
+        .write(move |conn| {
+            let id =
+                repo::folders::upsert(conn, account_id, "Trash", Some("/"), Some(roles::TRASH))?;
+            Ok(repo::folders::get(conn, id)?.unwrap())
+        })
+        .await
+        .unwrap();
+    let (updated, _) = store_headers(
+        &ctx,
+        &config,
+        &trash,
+        vec![deletion_header(45, false)],
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.len(), 1);
+}
+
+#[tokio::test]
+async fn reload_removes_deleted_messages_even_outside_flag_window() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let restored = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let server_restored = restored.clone();
+    let server = tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        let mut stream = BufReader::new(tls_acceptor().accept(tcp).await.unwrap());
+        stream.write_all(b"* OK fixture ready\r\n").await.unwrap();
+        loop {
+            let command = read_line(&mut stream).await;
+            let fields: Vec<_> = command.split_whitespace().collect();
+            let tag = fields[0];
+            let response = match fields[1] {
+                "LOGIN" => format!("{tag} OK logged in\r\n"),
+                "CAPABILITY" => format!("* CAPABILITY IMAP4rev1\r\n{tag} OK capability\r\n"),
+                "SELECT" => {
+                    format!(
+                        "* 3 EXISTS\r\n* OK [UIDVALIDITY 7] valid\r\n* OK [UIDNEXT 1000043] next\r\n{tag} OK selected\r\n"
+                    )
+                }
+                "UID" if fields[2] == "FETCH" => {
+                    if command.contains("HEADER.FIELDS") {
+                        assert_eq!(fields[3], "41:42");
+                        let mut response = String::new();
+                        for uid in [41, 42] {
+                            let header =
+                                String::from_utf8(deletion_header(uid, false).header_bytes)
+                                    .unwrap();
+                            response.push_str(&format!(
+                                "* {uid} FETCH (UID {uid} FLAGS () BODY[HEADER.FIELDS (MESSAGE-ID FROM TO SUBJECT)] {{{}}}\r\n{header})\r\n",
+                                header.len()
+                            ));
+                        }
+                        response.push_str(&format!("{tag} OK fetched\r\n"));
+                        response
+                    } else {
+                        assert_eq!(fields[3], "999042:1000042");
+                        assert!(command.contains("FLAGS"));
+                        format!("* 3 FETCH (UID 1000042 FLAGS ())\r\n{tag} OK fetched\r\n")
+                    }
+                }
+                "UID" => {
+                    assert_eq!(
+                        fields[2], "SEARCH",
+                        "sync must not mutate the server: {command}"
+                    );
+                    let hits = match fields[3..].join(" ").as_str() {
+                        // 42 and 43 still exist on the server, but are deleted.
+                        "ALL" => "42 43 1000042",
+                        "UNDELETED"
+                            if server_restored.load(std::sync::atomic::Ordering::SeqCst) =>
+                        {
+                            "41 42 1000042"
+                        }
+                        "UNDELETED" => "1000042",
+                        "SINCE 1-Oct-2026 UNDELETED" => "1000042",
+                        "UID 44:* UNDELETED" => "1000042",
+                        other => panic!("unexpected search: {other}"),
+                    };
+                    format!("* SEARCH {hits}\r\n{tag} OK searched\r\n")
+                }
+                "LOGOUT" => {
+                    stream
+                        .write_all(format!("* BYE closing\r\n{tag} OK logout\r\n").as_bytes())
+                        .await
+                        .unwrap();
+                    break;
+                }
+                other => panic!("unexpected command {other}: {command}"),
+            };
+            stream.write_all(response.as_bytes()).await.unwrap();
+        }
+    });
+    let (_dir, ctx, config, folder) = deleted_mail_context(port).await;
+    // Reproduce a cache populated by an older version (plus an expunged UID).
+    store_headers(
+        &ctx,
+        &config,
+        &folder,
+        vec![
+            deletion_header(41, true),
+            deletion_header(42, false),
+            deletion_header(43, false),
+            deletion_header(44, false),
+            deletion_header(1_000_042, false),
+        ],
+        None,
+    )
+    .await
+    .unwrap();
+    let folder_id = folder.id;
+    let account_id = config.id;
+    let removed_threads = ctx
+        .db
+        .write(move |conn| {
+            let pending = repo::messages::by_folder_uid(conn, folder_id, 43)?.unwrap();
+            repo::actions::enqueue(
+                conn,
+                account_id,
+                "mark_read",
+                Some(pending.id),
+                pending.thread_id,
+                &serde_json::json!({}),
+                Some(now_ms() + 60_000),
+            )?;
+            Ok(vec![
+                repo::messages::by_folder_uid(conn, folder_id, 42)?
+                    .unwrap()
+                    .thread_id
+                    .unwrap(),
+                repo::messages::by_folder_uid(conn, folder_id, 44)?
+                    .unwrap()
+                    .thread_id
+                    .unwrap(),
+            ])
+        })
+        .await
+        .unwrap();
+    let mut session = connect(&ctx, &config).await.unwrap();
+    imap::select(&mut session, "INBOX").await.unwrap();
+    assert_eq!(
+        imap::uid_search_all(&mut session).await.unwrap(),
+        [42, 43, 1_000_042]
+    );
+    assert_eq!(
+        imap::uid_search_since(
+            &mut session,
+            chrono::NaiveDate::from_ymd_opt(2026, 10, 1).unwrap()
+        )
+        .await
+        .unwrap(),
+        [1_000_042]
+    );
+    assert_eq!(
+        imap::uid_search_after(&mut session, 43).await.unwrap(),
+        [1_000_042]
+    );
+    let mut events = ctx.bus.subscribe();
+    let (hist_tx, _hist_rx) = mpsc::channel(1);
+    // A manual reload on cycle 1 must not wait for the periodic fifth cycle.
+    run_cycle(
+        &ctx,
+        &config,
+        &mut session,
+        1,
+        &hist_tx,
+        &mut None,
+        CycleMode {
+            foreground_only: true,
+            immediate_follow_up: false,
+        },
+    )
+    .await
+    .unwrap();
+    let CoreEvent::MailUpdated { mut thread_ids } = events.try_recv().unwrap() else {
+        panic!("expected list refresh after removing deleted messages");
+    };
+    thread_ids.sort_unstable();
+    let mut expected = removed_threads.clone();
+    expected.sort_unstable();
+    assert_eq!(thread_ids, expected);
+    ctx.db
+        .read(move |conn| {
+            assert!(repo::messages::by_folder_uid(conn, folder_id, 42)?.is_none());
+            assert!(repo::messages::by_folder_uid(conn, folder_id, 44)?.is_none());
+            assert!(
+                repo::messages::by_folder_uid(conn, folder_id, 43)?.is_some(),
+                "pending local actions must survive reconciliation"
+            );
+            assert!(repo::messages::by_folder_uid(conn, folder_id, 1_000_042)?.is_some());
+            for tid in removed_threads {
+                let count: i64 =
+                    conn.query_row("SELECT COUNT(*) FROM threads WHERE id = ?1", [tid], |row| {
+                        row.get(0)
+                    })?;
+                assert_eq!(count, 0, "empty threads must be removed");
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    // Repeated reloads are idempotent.
+    reconcile_mailbox(&ctx, &config, &mut session, &folder)
+        .await
+        .unwrap();
+    assert!(events.try_recv().is_err());
+
+    // Clearing \Deleted preserves UID and UIDNEXT. Recover both a removed
+    // cached message and one skipped during its initial download.
+    restored.store(true, std::sync::atomic::Ordering::SeqCst);
+    run_cycle(
+        &ctx,
+        &config,
+        &mut session,
+        2,
+        &hist_tx,
+        &mut None,
+        CycleMode {
+            foreground_only: true,
+            immediate_follow_up: false,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        events.try_recv().unwrap(),
+        CoreEvent::MailUpdated { .. }
+    ));
+    assert!(
+        events.try_recv().is_err(),
+        "restoration must not emit MailNew"
+    );
+    ctx.db
+        .read(move |conn| {
+            for uid in [41, 42] {
+                assert!(repo::messages::by_folder_uid(conn, folder_id, uid)?.is_some());
+            }
+            assert_eq!(
+                repo::folders::get(conn, folder_id)?.unwrap().last_seen_uid,
+                1_000_042
+            );
+            let notifications: i64 =
+                conn.query_row("SELECT COUNT(*) FROM notification_outbox", [], |row| {
+                    row.get(0)
+                })?;
+            assert_eq!(notifications, 0);
+            Ok(())
+        })
+        .await
+        .unwrap();
+    imap::logout(session).await;
+    server.await.unwrap();
+}

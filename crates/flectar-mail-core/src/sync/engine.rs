@@ -1341,7 +1341,9 @@ async fn run_cycle(
             config,
             session,
             inbox,
-            !immediate_follow_up && cycle > 0 && cycle.is_multiple_of(5),
+            // Reload must also reconcile existing Inbox messages, even when
+            // the next scheduled flag/expunge pass is several cycles away.
+            foreground_only || (!immediate_follow_up && cycle > 0 && cycle.is_multiple_of(5)),
             hist_tx,
             inbox_baseline,
         )
@@ -1629,7 +1631,7 @@ async fn sync_folder(
         }
         if heavy {
             reconcile_flags(ctx, session, &fresh_folder).await?;
-            reconcile_expunges(ctx, session, &fresh_folder).await?;
+            reconcile_mailbox(ctx, config, session, &fresh_folder).await?;
         }
         // Historical backfill (extending the window downward) also runs on the
         // history connection; just make sure it's awake.
@@ -2135,6 +2137,14 @@ async fn store_headers(
             for fh in &headers {
                 max_uid = max_uid.max(fh.uid as i64);
 
+                // History FETCH ranges include messages awaiting expunge, and
+                // flags can change between SEARCH and FETCH. Never import
+                // these into the visible cache or generate arrival events.
+                if fh.flags.deleted {
+                    repo::sync_failures::clear_header(&tx, folder_id, fh.uid as i64)?;
+                    continue;
+                }
+
                 // Already have this UID?
                 if let Some(existing) =
                     repo::messages::by_folder_uid(&tx, folder_id, fh.uid as i64)?
@@ -2410,19 +2420,40 @@ async fn reconcile_flags(ctx: &SyncCtx, session: &mut Session, folder: &Folder) 
     Ok(())
 }
 
-/// Remove local messages whose UIDs vanished from the server (within the
-/// synced window).
-async fn reconcile_expunges(ctx: &SyncCtx, session: &mut Session, folder: &Folder) -> Result<()> {
-    let remote_uids = imap::uid_search_all(session).await?;
+/// Remove local messages that vanished or are marked `\\Deleted` on the
+/// server (within the synced window). Search the whole folder so this also
+/// repairs cached messages outside the recent flag-reconciliation window.
+/// Re-import missing visible UIDs in that window as well: another client can
+/// clear `\\Deleted` without assigning a new UID or advancing UIDNEXT.
+async fn reconcile_mailbox(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    session: &mut Session,
+    folder: &Folder,
+) -> Result<()> {
+    let remote_uids = imap::uid_search_undeleted(session).await?;
     let folder_id = folder.id;
     let cursor = folder.backfill_cursor.unwrap_or(i64::MAX);
+    let last_seen = folder.last_seen_uid;
 
-    let changed = ctx
+    let (changed, missing) = ctx
         .db
         .write(move |conn| {
             let remote: std::collections::HashSet<i64> =
                 remote_uids.iter().map(|u| *u as i64).collect();
             let local = repo::messages::uids_in_folder(conn, folder_id)?;
+            let local_uids: std::collections::HashSet<i64> =
+                local.iter().map(|(_, uid)| *uid).collect();
+            // Bound recovery to already-scanned history and one batch per
+            // pass. The live and history workers own everything outside it.
+            let missing: Vec<u32> = remote_uids
+                .into_iter()
+                .filter(|uid| {
+                    let uid = i64::from(*uid);
+                    uid >= cursor && uid <= last_seen && !local_uids.contains(&uid)
+                })
+                .take(HEADER_CHUNK)
+                .collect();
             let tx = conn.transaction()?;
             let mut changed_threads: Vec<i64> = Vec::new();
             for (id, uid) in local {
@@ -2445,7 +2476,7 @@ async fn reconcile_expunges(ctx: &SyncCtx, session: &mut Session, folder: &Folde
                 }
             }
             tx.commit()?;
-            Ok(changed_threads)
+            Ok((changed_threads, missing))
         })
         .await?;
 
@@ -2453,6 +2484,14 @@ async fn reconcile_expunges(ctx: &SyncCtx, session: &mut Session, folder: &Folde
         ctx.bus.emit(CoreEvent::MailUpdated {
             thread_ids: changed,
         });
+    }
+    if !missing.is_empty() {
+        let headers = imap::fetch_headers(session, &imap::uid_set(&missing)).await?;
+        // Restoration is a list update, never a new-mail notification.
+        let (thread_ids, _) = store_headers(ctx, config, folder, headers, None).await?;
+        if !thread_ids.is_empty() {
+            ctx.bus.emit(CoreEvent::MailUpdated { thread_ids });
+        }
     }
     Ok(())
 }
