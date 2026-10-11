@@ -50,6 +50,7 @@ mod iframe;
 /// Integration of taffy and the DOM.
 mod layout;
 mod mutator;
+mod presentational_hints;
 mod query_selector;
 mod resolve;
 /// Scrolling of nodes and the viewport, and scroll animations.
@@ -75,6 +76,7 @@ pub mod util;
 mod accessibility;
 
 pub use crate::layout::replaced::IntrinsicSizes;
+pub use crate::layout::table::{CollapsedBorders, CollapsedEdge};
 #[cfg(feature = "custom-widget")]
 pub use crate::node::Widget;
 

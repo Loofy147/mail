@@ -332,11 +332,41 @@ impl BaseDocument {
                     };
                     let context = Arc::clone(context);
 
+                    *context.relax_text_minimums.borrow_mut() = false;
                     let mut table_wrapper = TableTreeWrapper {
                         doc: self,
                         ctx: context,
                     };
                     let mut output = compute_grid_layout(&mut table_wrapper, node_id, inputs);
+
+                    // An auto-layout table is never narrower than its columns'
+                    // minimums, even with an authored width or max-width:
+                    // over-wide content widens the table instead of painting
+                    // across its neighbours. Long words in text-only cells
+                    // are the exception: `overflow-wrap` may break them, so
+                    // those cells wrap first and the table only widens for
+                    // content that cannot wrap.
+                    if inputs.run_mode == taffy::RunMode::PerformLayout {
+                        if table_wrapper
+                            .required_width()
+                            .is_some_and(|required| required > output.size.width + 0.5)
+                        {
+                            *table_wrapper.ctx.relax_text_minimums.borrow_mut() = true;
+                            output = compute_grid_layout(&mut table_wrapper, node_id, inputs);
+                        }
+                        if let Some(required) = table_wrapper.required_width() {
+                            if required > output.size.width + 0.5 {
+                                let widened = taffy::LayoutInput {
+                                    known_dimensions: taffy::Size {
+                                        width: Some(required),
+                                        ..inputs.known_dimensions
+                                    },
+                                    ..inputs
+                                };
+                                output = compute_grid_layout(&mut table_wrapper, node_id, widened);
+                            }
+                        }
+                    }
 
                     // HACK: Cap scrollable overflow at node size to prevent scrolling
                     output.scrollable_overflow_rect.left = 0.0;

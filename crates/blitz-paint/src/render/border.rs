@@ -1,17 +1,17 @@
 use anyrender::PaintScene;
+use blitz_dom::CollapsedEdge;
 use blitz_dom::node::SpecialElementData;
-use kurbo::{BezPath, Cap, Circle, Insets, Join, PathEl, Point, Rect, Shape as _, Stroke, Vec2};
+use kurbo::{
+    Affine, BezPath, Cap, Circle, Insets, Join, PathEl, Point, Rect, Shape as _, Stroke, Vec2,
+};
 use peniko::{Color, Fill};
 use smallvec::SmallVec;
-use style::{
-    computed_values::border_collapse::T as BorderCollapse,
-    values::computed::{BorderStyle, OutlineStyle},
-};
+use style::values::computed::{BorderStyle, OutlineStyle};
 
 use crate::{
     color::{ToColorColor as _, contrast_ratio},
     kurbo_css::Edge,
-    render::{ElementCx, PhysicalTracks},
+    render::ElementCx,
 };
 
 /// A darker version of a colour (mirrors WebKit/Blink's `Color::Dark`): the
@@ -147,6 +147,9 @@ fn sample_points_along_path(path: &BezPath, spacing: f64, count: usize) -> Vec<P
 impl ElementCx<'_, '_> {
     /// Draw all borders for a node
     pub(crate) fn draw_border(&self, scene: &mut impl PaintScene) {
+        if self.border_painted_by_table() {
+            return;
+        }
         let style = &*self.style;
         let border = style.get_border();
         let current_color = style.clone_color();
@@ -509,105 +512,205 @@ impl ElementCx<'_, '_> {
         scene.pop_layer();
     }
 
-    pub(crate) fn draw_table_borders(&self, scene: &mut impl PaintScene) {
+    /// Whether a table paints this element's border in the collapsed model,
+    /// for the table box itself and for each of its cells.
+    pub(crate) fn border_painted_by_table(&self) -> bool {
+        let collapsed = |data: &SpecialElementData| {
+            matches!(data, SpecialElementData::TableRoot(table) if table.collapsed_borders.is_some())
+        };
+        collapsed(&self.element.special_data)
+            || self
+                .node
+                .layout_parent
+                .get()
+                .and_then(|parent| self.context.dom.get_node(parent))
+                .and_then(|parent| parent.element_data())
+                .is_some_and(|parent| collapsed(&parent.special_data))
+    }
+
+    /// Paint the resolved borders of a `border-collapse: collapse` table, on
+    /// top of its cells' backgrounds. Each edge is centred on its grid line
+    /// and painted once, merging runs of identical segments so long borders
+    /// are single shapes without seams.
+    pub(crate) fn draw_collapsed_table_borders(&self, scene: &mut impl PaintScene) {
         let SpecialElementData::TableRoot(table) = &self.element.special_data else {
             return;
         };
-        // Borders are only handled at the table level when BorderCollapse::Collapse
-        if table.border_collapse != BorderCollapse::Collapse {
-            return;
-        }
-
-        let Some(grid_info) = &mut *table.computed_grid_info.borrow_mut() else {
+        let Some(borders) = &table.collapsed_borders else {
             return;
         };
-        let Some(border_style) = table.border_style.as_deref() else {
+        let grid_info = table.computed_grid_info.borrow();
+        let Some(grid_info) = grid_info.as_ref() else {
             return;
         };
-
-        // Email layout tables overwhelmingly use `border-collapse: collapse`
-        // with the default `border-style: none`. CSS still computes a medium
-        // border width in that case, but it must not be painted. Treating that
-        // latent width as visible turns every row and cell into a black grid.
-        if border_style.border_top_style.none_or_hidden() {
+        let (columns, rows) = (&grid_info.columns.positions, &grid_info.rows.positions);
+        let (column_count, row_count) = (borders.columns, borders.rows);
+        if column_count == 0 || row_count == 0 || columns.len() < column_count || rows.len() < row_count
+        {
             return;
         }
 
-        let outer_border_style = self.style.get_border();
+        let rtl = table.rtl;
+        // Grid line positions in the table's border box. Vertical lines are
+        // numbered in column order, which runs right to left in RTL tables.
+        let column_line = |line: usize| -> f64 {
+            f64::from(match (rtl, line < column_count) {
+                (false, true) => columns[line].start,
+                (false, false) => columns[column_count - 1].end,
+                (true, true) => columns[line].end,
+                (true, false) => columns[column_count - 1].start,
+            })
+        };
+        let row_line = |line: usize| -> f64 {
+            f64::from(if line < row_count {
+                rows[line].start
+            } else {
+                rows[row_count - 1].end
+            })
+        };
+        // The physical extent of a vertical edge to the left and right of its line.
+        let vertical_extent = |edge: &CollapsedEdge| -> (f64, f64) {
+            let (before, after) = (f64::from(edge.before()), f64::from(edge.after()));
+            if rtl { (after, before) } else { (before, after) }
+        };
+        // How far the vertical edges meeting horizontal line `line` at vertical
+        // line `joint` reach to the left and right, so corners are covered.
+        let joint_extent = |line: usize, joint: usize| -> (f64, f64) {
+            let above = line.checked_sub(1).and_then(|row| borders.vertical(row, joint));
+            let below = (line < row_count).then(|| borders.vertical(line, joint)).flatten();
+            [above, below]
+                .into_iter()
+                .flatten()
+                .map(vertical_extent)
+                .fold((0.0, 0.0), |(l, r), (el, er)| (f64::max(l, el), f64::max(r, er)))
+        };
 
-        let cols = PhysicalTracks::from_tracks(&grid_info.columns);
-        let rows = PhysicalTracks::from_tracks(&grid_info.rows);
+        // Horizontal lines, merged along each line.
+        for line in 0..=row_count {
+            let y = row_line(line);
+            let mut run: Option<(CollapsedEdge, f64, f64)> = None;
+            for column in 0..=column_count {
+                let edge = (column < column_count)
+                    .then(|| borders.horizontal(line, column))
+                    .flatten();
+                let segment = edge.map(|edge| {
+                    let (start, end) = (column_line(column), column_line(column + 1));
+                    let (start_left, start_right) = joint_extent(line, column);
+                    let (end_left, end_right) = joint_extent(line, column + 1);
+                    let (x0, x1) = if rtl {
+                        (end - end_left, start + start_right)
+                    } else {
+                        (start - start_left, end + end_right)
+                    };
+                    (*edge, x0, x1)
+                });
+                run = match (run, segment) {
+                    (Some((edge, x0, x1)), Some((next, n0, n1))) if edge == next => {
+                        Some((edge, x0.min(n0), x1.max(n1)))
+                    }
+                    (finished, next) => {
+                        if let Some((edge, x0, x1)) = finished {
+                            let rect = Rect::new(
+                                x0,
+                                y - f64::from(edge.before()),
+                                x1,
+                                y + f64::from(edge.after()),
+                            );
+                            self.fill_collapsed_edge(scene, &edge, rect, true);
+                        }
+                        next
+                    }
+                };
+            }
+        }
 
-        let inner_width = cols.span() as f64;
-        let inner_height = rows.span() as f64;
+        // Vertical lines, merged down each line.
+        for line in 0..=column_count {
+            let x = column_line(line);
+            let mut run: Option<(CollapsedEdge, f64, f64)> = None;
+            for row in 0..=row_count {
+                let segment = (row < row_count)
+                    .then(|| borders.vertical(row, line))
+                    .flatten()
+                    .map(|edge| (*edge, row_line(row), row_line(row + 1)));
+                run = match (run, segment) {
+                    (Some((edge, y0, _)), Some((next, _, n1))) if edge == next => {
+                        Some((edge, y0, n1))
+                    }
+                    (finished, next) => {
+                        if let Some((edge, y0, y1)) = finished {
+                            let (left, right) = vertical_extent(&edge);
+                            let rect = Rect::new(x - left, y0, x + right, y1);
+                            self.fill_collapsed_edge(scene, &edge, rect, false);
+                        }
+                        next
+                    }
+                };
+            }
+        }
+    }
 
-        // TODO: support different colors for different borders
-        let current_color = self.style.clone_color();
-        let border_color = border_style
-            .border_top_color
-            .resolve_to_absolute(&current_color)
-            .as_srgb_color();
-
-        // No need to draw transparent borders (as they won't be visible anyway)
-        if border_color == Color::TRANSPARENT {
+    /// Fill one merged collapsed edge. Bevelled styles have no single shared
+    /// light source across a collapsed grid, so they paint as solid lines.
+    fn fill_collapsed_edge(
+        &self,
+        scene: &mut impl PaintScene,
+        edge: &CollapsedEdge,
+        rect: Rect,
+        horizontal: bool,
+    ) {
+        let color = edge.color.as_srgb_color();
+        if color.components[3] <= 0.0 || rect.width() <= 0.0 || rect.height() <= 0.0 {
             return;
         }
+        let thickness = if horizontal { rect.height() } else { rect.width() };
+        let length = if horizontal { rect.width() } else { rect.height() };
+        let piece = |offset: f64, size: f64, cross: f64, cross_size: f64| {
+            if horizontal {
+                Rect::new(
+                    rect.x0 + offset,
+                    rect.y0 + cross,
+                    rect.x0 + offset + size,
+                    rect.y0 + cross + cross_size,
+                )
+            } else {
+                Rect::new(
+                    rect.x0 + cross,
+                    rect.y0 + offset,
+                    rect.x0 + cross + cross_size,
+                    rect.y0 + offset + size,
+                )
+            }
+        };
 
-        let border_width = border_style.border_top_width.0.to_f64_px();
-
-        // Draw horizontal inner borders (the gutters between adjacent row tracks)
-        let row_origin = rows.origin();
-        for (prev, next) in rows.iter().zip(rows.iter().skip(1)) {
-            let shape = Rect::new(
-                0.0,
-                (prev.end - row_origin) as f64,
-                inner_width,
-                (next.start - row_origin) as f64,
-            )
-            .scale_from_origin(self.scale);
-            scene.fill(Fill::NonZero, self.transform, border_color, None, &shape);
+        let mut path = BezPath::new();
+        match edge.style {
+            BorderStyle::Dashed | BorderStyle::Dotted => {
+                let (dash, gap) = if edge.style == BorderStyle::Dashed {
+                    (thickness * 3.0, thickness * 3.0)
+                } else {
+                    (thickness, thickness)
+                };
+                let period = (dash + gap).max(1.0);
+                // Centre the pattern so both ends look alike.
+                let count = ((length + gap) / period).floor().max(1.0);
+                let lead = ((length - (count * period - gap)) / 2.0).max(0.0);
+                let mut offset = lead;
+                while offset < length {
+                    let size = dash.min(length - offset);
+                    path.extend(piece(offset, size, 0.0, thickness).path_elements(0.1));
+                    offset += period;
+                }
+            }
+            BorderStyle::Double if thickness >= 3.0 => {
+                let line = (thickness / 3.0).round().max(1.0);
+                path.extend(piece(0.0, length, 0.0, line).path_elements(0.1));
+                path.extend(piece(0.0, length, thickness - line, line).path_elements(0.1));
+            }
+            _ => path.extend(rect.path_elements(0.1)),
         }
-
-        // Draw horizontal outer borders
-        // Top border
-        if !outer_border_style.border_top_style.none_or_hidden() {
-            let shape =
-                Rect::new(0.0, 0.0, inner_width, border_width).scale_from_origin(self.scale);
-            scene.fill(Fill::NonZero, self.transform, border_color, None, &shape);
-        }
-        // Bottom border
-        if !outer_border_style.border_bottom_style.none_or_hidden() {
-            let shape = Rect::new(0.0, inner_height, inner_width, inner_height + border_width)
-                .scale_from_origin(self.scale);
-            scene.fill(Fill::NonZero, self.transform, border_color, None, &shape);
-        }
-
-        // Draw vertical inner borders (the gutters between adjacent column tracks)
-        let col_origin = cols.origin();
-        for (prev, next) in cols.iter().zip(cols.iter().skip(1)) {
-            let shape = Rect::new(
-                (prev.end - col_origin) as f64,
-                0.0,
-                (next.start - col_origin) as f64,
-                inner_height,
-            )
-            .scale_from_origin(self.scale);
-            scene.fill(Fill::NonZero, self.transform, border_color, None, &shape);
-        }
-
-        // Draw vertical outer borders
-        // Left border
-        if !outer_border_style.border_left_style.none_or_hidden() {
-            let shape =
-                Rect::new(0.0, 0.0, border_width, inner_height).scale_from_origin(self.scale);
-            scene.fill(Fill::NonZero, self.transform, border_color, None, &shape);
-        }
-        // Right border
-        if !outer_border_style.border_right_style.none_or_hidden() {
-            let shape = Rect::new(inner_width, 0.0, inner_width + border_width, inner_height)
-                .scale_from_origin(self.scale);
-            scene.fill(Fill::NonZero, self.transform, border_color, None, &shape);
-        }
+        path.apply_affine(Affine::scale(self.scale));
+        scene.fill(Fill::NonZero, self.transform, color, None, &path);
     }
 
     /// ❌ dotted - Defines a dotted border

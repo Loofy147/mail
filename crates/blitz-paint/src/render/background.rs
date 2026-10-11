@@ -1,4 +1,4 @@
-use super::{ElementCx, PhysicalTracks, to_image_quality, to_peniko_image};
+use super::{ElementCx, to_image_quality, to_peniko_image};
 use crate::color::{Color, ToColorColor};
 use crate::gradient::to_peniko_gradient;
 use anyrender::PaintScene;
@@ -223,24 +223,38 @@ impl ElementCx<'_, '_> {
         let SpecialElementData::TableRoot(table) = &self.element.special_data else {
             return;
         };
-        let Some(grid_info) = &mut *table.computed_grid_info.borrow_mut() else {
+        let grid_info = table.computed_grid_info.borrow();
+        let Some(grid_info) = grid_info.as_ref() else {
             return;
         };
 
-        let cols = PhysicalTracks::from_tracks(&grid_info.columns);
-        let inner_width = cols.span() as f64;
+        // Track positions are relative to the table's border box. A row's
+        // background spans its cells, from the first column to the last.
+        let cols = &grid_info.columns.positions;
+        let (Some(x0), Some(x1)) = (
+            cols.iter().map(|line| line.start.min(line.end)).reduce(f32::min),
+            cols.iter().map(|line| line.start.max(line.end)).reduce(f32::max),
+        ) else {
+            return;
+        };
 
-        let rows = PhysicalTracks::from_tracks(&grid_info.rows);
-        let row_origin = rows.origin();
-        for (row, row_position) in table.rows.iter().zip(rows.iter()) {
+        let rows = &grid_info.rows.positions;
+        for row in &table.rows {
+            let Some(position) = rows.get(usize::from(row.index)) else {
+                continue;
+            };
             let row_node = &self.context.dom.get_node(row.node_id).unwrap();
             let Some(style) = row_node.primary_styles() else {
                 continue;
             };
 
-            let y = (row_position.start - row_origin) as f64;
-            let height = (row_position.end - row_position.start) as f64;
-            let shape = Rect::new(0.0, y, inner_width, y + height).scale_from_origin(self.scale);
+            let shape = Rect::new(
+                f64::from(x0),
+                f64::from(position.start),
+                f64::from(x1),
+                f64::from(position.end),
+            )
+            .scale_from_origin(self.scale);
 
             let current_color = style.clone_color();
             let background_color = &style.get_background().background_color;

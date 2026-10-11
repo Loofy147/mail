@@ -149,6 +149,8 @@ pub struct DocumentData {
     pub scroll_offset: crate::Point<f64>,
     pub scrollable_overflow: KurboRect,
     pub transform: Option<Affine>,
+    /// Interned presentational-hint blocks shared by this document's elements.
+    pub(crate) presentational_hints: crate::presentational_hints::PresentationalHintCache,
 }
 
 // Hand-written like `ElementData`'s, because `ElementSelectorFlags` does not
@@ -194,6 +196,7 @@ impl DocumentData {
             scroll_offset: crate::Point::ZERO,
             scrollable_overflow: KurboRect::ZERO,
             transform: None,
+            presentational_hints: Default::default(),
         }
     }
 }
