@@ -69,8 +69,10 @@ impl Core {
         self.resolve_sender_identity(account_id, None).await
     }
 
-    /// Refresh identities using the account provider. Providers without a
-    /// discoverable identity endpoint expose their authenticated address only.
+    /// Refresh identities using the account provider and return every saved
+    /// identity, including manual addresses the provider does not list.
+    /// Providers without a discoverable identity endpoint expose their
+    /// authenticated address only.
     pub async fn refresh_sender_identities(&self, account_id: i64) -> Result<Vec<SenderIdentity>> {
         let account = self
             .db
@@ -93,14 +95,12 @@ impl Core {
                 vec![primary_identity(&account)]
             }
         };
-        let saved = identities.clone();
         self.db
             .write(move |conn| {
-                repo::sender_identities::replace(conn, account_id, &saved)?;
-                Ok(())
+                repo::sender_identities::replace(conn, account_id, &identities)?;
+                repo::sender_identities::list(conn, account_id)
             })
-            .await?;
-        Ok(identities)
+            .await
     }
 
     /// Resolve and validate a requested From address against provider-derived
