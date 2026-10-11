@@ -171,11 +171,7 @@ pub fn record_sent_recipients(
     let settings = super::settings::get(conn)?;
     let mut learned = 0;
     if settings.collect_outgoing_contacts {
-        let own_addresses = super::sender_identities::list(conn, account_id)?
-            .into_iter()
-            .filter(|identity| identity.is_primary || identity.verification_status == "accepted")
-            .map(|identity| identity.email.to_ascii_lowercase())
-            .collect::<std::collections::HashSet<_>>();
+        let own_addresses = super::sender_identities::own_addresses(conn, account_id)?;
         let mut recipients = Vec::new();
         for json in [&to_json, &cc_json, &bcc_json] {
             recipients.extend(serde_json::from_str::<Vec<Address>>(json).unwrap_or_default());

@@ -11,6 +11,7 @@ import { CollapsibleWorkspaceSidebar, CompactPageHeader, WorkspaceMiniHeading } 
 import { CalendarAgenda, CalendarAgendaFilter } from "calendar-agenda.slint";
 import { CalendarAgendaRow, CalendarAgendaFilterRow } from "../models.slint";
 import { ScrollFade } from "scroll-fade.slint";
+import { WindowControlsClearance } from "../window-chrome.slint";
 
 export component CalendarEvent inherits Rectangle {
     in property <string> title;
@@ -359,6 +360,7 @@ export component FunctionalCalendarSidebar inherits CollapsibleWorkspaceSidebar 
 }
 
 export component FunctionalCalendarView inherits Rectangle {
+    private property <bool> toolbar-roomy: true;
     in property <bool> active: true;
     in property <bool> compact: false;
     in-out property <bool> sidebar-collapsed: false;
@@ -525,9 +527,17 @@ export component FunctionalCalendarView inherits Rectangle {
             height: LayoutMetrics.desktop-mail-toolbar-height;
             background: root.surface-color;
             z: 20;
+            // Integrated window controls can cover the trailing corner; the
+            // period title and week number give way before the view buttons.
+            private property <bool> roomy-now: self.width
+                - max(LayoutMetrics.content-inset, toolbar-clearance.leading)
+                - max(LayoutMetrics.content-inset, toolbar-clearance.trailing) >= 640px;
+            changed roomy-now => { root.toolbar-roomy = self.roomy-now; }
+            init => { root.toolbar-roomy = self.roomy-now; }
+            toolbar-clearance := WindowControlsClearance { width: parent.width; height: parent.height; }
             HorizontalBox {
-                padding-left: LayoutMetrics.content-inset;
-                padding-right: LayoutMetrics.content-inset;
+                padding-left: max(LayoutMetrics.content-inset, toolbar-clearance.leading);
+                padding-right: max(LayoutMetrics.content-inset, toolbar-clearance.trailing);
                 spacing: 6px;
                 cross-axis-alignment: center;
 
@@ -540,8 +550,8 @@ export component FunctionalCalendarView inherits Rectangle {
                     accessible-id: "calendar-sidebar-button";
                     clicked => { root.sidebar-collapsed = !root.sidebar-collapsed; }
                 }
-                Text { horizontal-stretch: 1; min-width: 120px; text: root.period-title; color: root.title-color; font-size: TypeScale.heading-small; font-weight: 600; vertical-alignment: center; overflow: elide; }
-                Text { visible: root.view-mode == "week"; width: root.view-mode == "week" ? 42px : 0px; text: root.week-label; color: root.muted-color; font-size: TypeScale.caption; font-weight: 700; vertical-alignment: center; }
+                Text { horizontal-stretch: 1; min-width: root.toolbar-roomy ? 120px : 0px; text: root.period-title; color: root.title-color; font-size: TypeScale.heading-small; font-weight: 600; vertical-alignment: center; overflow: elide; }
+                Text { visible: root.view-mode == "week" && root.toolbar-roomy; width: self.visible ? 42px : 0px; text: root.week-label; color: root.muted-color; font-size: TypeScale.caption; font-weight: 700; vertical-alignment: center; }
                 ToolbarIconButton {
                     visible: root.sidebar-collapsed;
                     width: root.sidebar-collapsed ? LayoutMetrics.desktop-icon-button-size : 0px;

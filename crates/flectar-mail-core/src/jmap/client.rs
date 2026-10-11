@@ -2,7 +2,14 @@ use crate::error::{CoreError, Result};
 use crate::models::AccountConfig;
 use jmap_client::URI;
 use jmap_client::client::{Client, Credentials};
+use jmap_client::core::changes::ChangesResponse;
+use jmap_client::core::query::{Filter, QueryResponse};
+use jmap_client::core::request::Request;
+use jmap_client::core::response::{EmailSetResponse, MailboxSetResponse};
 use jmap_client::core::session::{Capabilities, Session};
+use jmap_client::core::set::SetObject;
+use jmap_client::email::Email;
+use jmap_client::mailbox::{Mailbox, Role};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use url::Url;
@@ -31,6 +38,138 @@ pub struct ConnectedClient {
     pub base_url: String,
     pub supports_submission: bool,
     pub may_create_top_level_mailbox: bool,
+}
+
+/// Start a request that declares only capabilities the session advertises.
+///
+/// jmap-client puts every capability it knows into `using`. RFC 8620 §3.6.1
+/// lets a server reject a request naming a capability it does not support,
+/// and Fastmail does so with HTTP 400 for every call. Methods that need an
+/// extra capability (EmailSubmission) still add it themselves.
+pub fn advertised_request(client: &Client) -> Request<'_> {
+    let mut request = client.build();
+    let session = client.session();
+    request
+        .using
+        .retain(|capability| session.has_capability(capability.as_ref()));
+    request
+}
+
+/// Equivalents of jmap-client's single-call helpers, which build their
+/// requests with the full capability list.
+impl ConnectedClient {
+    pub fn request(&self) -> Request<'_> {
+        advertised_request(&self.client)
+    }
+
+    pub async fn email_changes(
+        &self,
+        since_state: impl Into<String>,
+        max_changes: usize,
+    ) -> jmap_client::Result<ChangesResponse<Email>> {
+        let mut request = self.request();
+        request.changes_email(since_state).max_changes(max_changes);
+        request.send_single().await
+    }
+
+    pub async fn email_query(
+        &self,
+        filter: impl Into<Filter<jmap_client::email::query::Filter>>,
+    ) -> jmap_client::Result<QueryResponse> {
+        let mut request = self.request();
+        request.query_email().filter(filter);
+        request.send_single::<QueryResponse>().await
+    }
+
+    pub async fn email_submission_query(
+        &self,
+        filter: impl Into<Filter<jmap_client::email_submission::query::Filter>>,
+    ) -> jmap_client::Result<QueryResponse> {
+        let mut request = self.request();
+        request.query_email_submission().filter(filter);
+        request.send_single::<QueryResponse>().await
+    }
+
+    pub async fn email_set_keyword(
+        &self,
+        id: &str,
+        keyword: &str,
+        set: bool,
+    ) -> jmap_client::Result<Option<Email>> {
+        let mut request = self.request();
+        request.set_email().update(id).keyword(keyword, set);
+        request.send_single::<EmailSetResponse>().await?.updated(id)
+    }
+
+    pub async fn email_set_mailboxes<T, U>(
+        &self,
+        id: &str,
+        mailbox_ids: T,
+    ) -> jmap_client::Result<Option<Email>>
+    where
+        T: IntoIterator<Item = U>,
+        U: Into<String>,
+    {
+        let mut request = self.request();
+        request.set_email().update(id).mailbox_ids(mailbox_ids);
+        request.send_single::<EmailSetResponse>().await?.updated(id)
+    }
+
+    pub async fn email_destroy(&self, id: &str) -> jmap_client::Result<()> {
+        let mut request = self.request();
+        request.set_email().destroy([id]);
+        request
+            .send_single::<EmailSetResponse>()
+            .await?
+            .destroyed(id)
+    }
+
+    pub async fn mailbox_create(
+        &self,
+        name: impl Into<String>,
+        parent_id: Option<impl Into<String>>,
+        role: Role,
+    ) -> jmap_client::Result<Mailbox> {
+        let mut request = self.request();
+        let id = request
+            .set_mailbox()
+            .create()
+            .name(name)
+            .role(role)
+            .parent_id(parent_id)
+            .create_id()
+            .ok_or_else(|| jmap_client::Error::Internal("mailbox create id".into()))?;
+        request
+            .send_single::<MailboxSetResponse>()
+            .await?
+            .created(&id)
+    }
+
+    pub async fn mailbox_rename(
+        &self,
+        id: &str,
+        name: impl Into<String>,
+    ) -> jmap_client::Result<Option<Mailbox>> {
+        let mut request = self.request();
+        request.set_mailbox().update(id).name(name);
+        request
+            .send_single::<MailboxSetResponse>()
+            .await?
+            .updated(id)
+    }
+
+    pub async fn mailbox_destroy(&self, id: &str, delete_emails: bool) -> jmap_client::Result<()> {
+        let mut request = self.request();
+        request
+            .set_mailbox()
+            .destroy([id])
+            .arguments()
+            .on_destroy_remove_emails(delete_emails);
+        request
+            .send_single::<MailboxSetResponse>()
+            .await?
+            .destroyed(id)
+    }
 }
 
 /// Turn a user-entered host/base URL into the base expected by RFC 8620

@@ -31,6 +31,8 @@ mod preview_controls;
 mod reader_clipboard;
 #[cfg(test)]
 mod reader_validation;
+#[cfg(test)]
+mod screenshot_frameless;
 mod remote;
 mod renderer;
 mod renderer_input_controller;
@@ -41,9 +43,11 @@ mod settings_controller;
 mod sidebar_model;
 mod startup;
 mod startup_metrics;
+mod tabs;
 mod theme;
 mod ui_dispatch;
 mod ui_message;
+mod window_chrome;
 mod window_controller;
 
 slint::include_modules!();
@@ -564,6 +568,9 @@ struct InboxState {
     page: usize,
     next_cursor: Option<MailCursor>,
     selected_id: Option<i32>,
+    /// Conversation to select once the next replacing page arrives, for a
+    /// tab restored without cached rows.
+    pending_selection: Option<i32>,
     checked_ids: HashSet<i32>,
     rendered_id: Option<i32>,
     preview_closed: bool,
@@ -1002,6 +1009,7 @@ impl InboxState {
             page: 1,
             next_cursor: None,
             selected_id: None,
+            pending_selection: None,
             checked_ids: HashSet::new(),
             rendered_id: None,
             preview_closed: false,
@@ -1288,6 +1296,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     normalize_appimage_environment();
 
     let renderer_preference_path = platform.paths.data_dir.join("renderer.json");
+    let tabs_path = platform.paths.data_dir.join("tabs.json");
     let preferred_renderer = renderer_preferences::load(&renderer_preference_path);
     let requested_renderer = renderer_preferences::requested(preferred_renderer);
     eprintln!(
@@ -1298,8 +1307,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             "gpu_supported": renderer_preferences::GPU_SUPPORTED,
         })
     );
+    // Read before the backend is selected: native frame attributes are fixed
+    // when the window is created. This is the same zero-wait lookup used for
+    // the rest of the first frame's presentation state.
+    let startup_presentation = flectar_mail_core::startup_presentation(&platform.paths);
+    let window_frame = window_chrome::WindowFrame::parse(
+        startup_presentation.window_frame.as_deref().unwrap_or_default(),
+    );
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let use_wgpu = renderer_preferences::select_backend(requested_renderer)?;
+    let use_wgpu = renderer_preferences::select_backend(requested_renderer, window_frame)?;
 
     // Android installs its backend in android_main before entering this shared
     // function. iOS uses Slint's documented winit + Skia combination.
@@ -1351,15 +1367,18 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     configure_emoji_font_fallback()?;
 
     // Construct the window before opening or migrating either database. Seed
-    // the one geometry preference visible in the inert mailbox shell through a
-    // zero-wait read-only lookup, then map the first frame at its saved width.
-    // Full settings validation still happens during normal background startup.
+    // the presentation preferences visible in the inert mailbox shell from
+    // the zero-wait read-only lookup above, then map the first frame with its
+    // saved list width and window frame. Full settings validation still
+    // happens during normal background startup.
+    window_chrome::prepare(window_frame);
     let app = renderer_preferences::initialize_step(use_wgpu, AppWindow::new)?;
     app.global::<MailListNavigation>()
         .on_target(mail_navigation::target);
-    if let Some(width) = flectar_mail_core::startup_workspace_list_pane_width(&platform.paths) {
+    if let Some(width) = startup_presentation.workspace_list_pane_width {
         app.set_workspace_list_pane_width(width as f32);
     }
+    window_chrome::register(&app, &runtime);
     app.set_app_version(env!("CARGO_PKG_VERSION").into());
     app.on_settings_search_matches(|haystack, query| {
         let query = query.to_string().trim().to_lowercase();
@@ -3759,6 +3778,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     app.set_startup_hydrated(true);
                     app.set_startup_ready(true);
                     app.invoke_product_changed(app.get_active_view());
+                    app.global::<TabsUi>().invoke_restore_active();
                     app.set_startup_failed(false);
                     schedule_profile_avatar_fetches(
                         &app,
@@ -4216,6 +4236,18 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     });
 
     register_window_preference_callbacks(&app, tray.as_ref(), &state, &runtime, &ui_task_tx);
+    tabs::register(
+        &app,
+        tabs::TabContext {
+            app: app.as_weak(),
+            state: Rc::clone(&state),
+            runtime: Rc::clone(&runtime),
+            calendar: Rc::clone(&calendar_state),
+            mail_pagination_generation: Rc::clone(&mail_pagination_generation),
+            mail_pagination_in_progress: Rc::clone(&mail_pagination_in_progress),
+            path: tabs_path,
+        },
+    );
 
     app.on_make_account_transfer(DataTransfer::from);
     app.on_read_account_transfer(|data| data.plain_text().unwrap_or_default());
@@ -6836,6 +6868,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         {
             let mut state = state_for_search.borrow_mut();
             state.query = query.to_string();
+            state.pending_selection = None;
             state.mail_groups.clear();
             state.page = 1;
             state.next_cursor = None;
@@ -6887,6 +6920,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         {
             let mut state = state_for_scope.borrow_mut();
             state.scope = scope.to_string();
+            state.pending_selection = None;
             state.mail_groups.clear();
             state.page = 1;
             state.next_cursor = None;

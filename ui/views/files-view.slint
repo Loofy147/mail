@@ -11,6 +11,7 @@ import { SidebarItem, SidebarSectionHeader } from "../components/sidebar-control
 import { CollapsibleWorkspaceSidebar, WorkspaceMiniHeading, WorkspacePaneResizeHandle, WorkspaceTitleRow, WorkspaceSearchToolbar, WorkspaceSearchFilter } from "../components/workspace-layout.slint";
 import { WorkspaceListLoadingRow, WorkspaceListTransition } from "../components/workspace-list.slint";
 import { LineEdit, ToolbarIconButton } from "../components/controls.slint";
+import { WindowChrome, WindowDragArea } from "../window-chrome.slint";
 
 export struct FileRow {
     identity: string, name: string, detail: string, size: string, date: string, directory: bool,
@@ -278,6 +279,9 @@ export component FilesView inherits Rectangle {
                     // Tooltips extend below the toolbar; keep them above the
                     // list body, which is declared later in this layout.
                     z: 1;
+                    // The view's focus scope takes the first click, so the
+                    // window-wide drag band below never sees it here.
+                    if WindowChrome.controls-visible : WindowDragArea { width: parent.width; height: parent.height; }
                     WorkspaceSearchToolbar {
                         x: root.compact ? LayoutMetrics.compact-inset : LayoutMetrics.content-inset;
                         y: (parent.height - self.height) / 2;
@@ -437,6 +441,7 @@ export component FilesView inherits Rectangle {
         }
         if root.detail-visible : Rectangle {
             horizontal-stretch: 1; min-width: 0px; background: AppTheme.surface;
+            if WindowChrome.controls-visible : WindowDragArea { width: parent.width; height: WindowChrome.band-height; }
             VerticalBox {
                 width: parent.width; height: parent.height;
                 padding: root.compact ? 12px : 24px; spacing: 16px; cross-axis-alignment: stretch;

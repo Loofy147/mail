@@ -11,6 +11,7 @@ import { LayoutMetrics } from "../design-system.slint";
 import { ScrollFade } from "../components/scroll-fade.slint";
 import { CollapsibleWorkspaceSidebar, WorkspaceMiniHeading, WorkspacePaneResizeHandle, WorkspaceSearchToolbar } from "../components/workspace-layout.slint";
 import { WorkspaceListLoadingRow, WorkspaceListTransition } from "../components/workspace-list.slint";
+import { WindowControlsClearance } from "../window-chrome.slint";
 
 component FieldLabel inherits Text {
     in property <string> label;
@@ -514,10 +515,11 @@ export component ContactsView inherits Rectangle {
 
                     Rectangle {
                     height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
+                    detail-clearance := WindowControlsClearance { width: parent.width; height: parent.height; }
                     HorizontalBox {
                         padding-top: 0px;
-                        padding-left: root.compact ? 8px : 14px;
-                        padding-right: root.compact ? 8px : 14px;
+                        padding-left: max(root.compact ? 8px : 14px, detail-clearance.leading);
+                        padding-right: max(root.compact ? 8px : 14px, detail-clearance.trailing);
                         padding-bottom: 0px;
                         spacing: 6px;
                         cross-axis-alignment: center;

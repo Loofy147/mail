@@ -2123,11 +2123,7 @@ async fn store_headers(
             let ai_categorize = settings.ai_categorize;
             let (outgoing_learning_since, incoming_learning_since) =
                 repo::contacts::learning_boundaries(&tx, account_id, now_ms())?;
-            let account_emails = repo::sender_identities::list(&tx, account_id)?
-                .into_iter()
-                .filter(|identity| identity.is_verified())
-                .map(|identity| identity.email.to_ascii_lowercase())
-                .collect::<std::collections::HashSet<_>>();
+            let account_emails = repo::sender_identities::own_addresses(&tx, account_id)?;
             let mut thread_ids: Vec<i64> = Vec::new();
             let mut fresh_ids: Vec<i64> = Vec::new();
             // Threads already enqueued for a desktop notification this batch, so

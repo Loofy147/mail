@@ -2017,6 +2017,8 @@ pub struct OutgoingAttachment {
 
 pub struct OutgoingMessage<'a> {
     pub from: Address,
+    /// Reply-To from the sender identity, when it differs from `from`.
+    pub reply_to: Option<Address>,
     pub to: &'a [Address],
     pub cc: &'a [Address],
     pub bcc: &'a [Address],
@@ -2183,6 +2185,15 @@ fn build_message_with_attachments<'a>(
         ))
         .subject(out.subject)
         .text_body(out.body_text);
+    if let Some(reply_to) = &out.reply_to {
+        builder = builder.reply_to(mail_builder::headers::address::Address::new_address(
+            reply_to
+                .name
+                .as_deref()
+                .filter(|name| !name.trim().is_empty()),
+            reply_to.email.as_str(),
+        ));
+    }
 
     if let Some(html) = out.body_html
         && !html.trim().is_empty()
@@ -2736,6 +2747,7 @@ mod tests {
                 name: Some("Me".into()),
                 email: "me@example.com".into(),
             },
+            reply_to: None,
             to: &[],
             cc: &[],
             bcc: &[],
@@ -2764,6 +2776,19 @@ mod tests {
         let (_, raw) = build_message(&outgoing("plain", None)).unwrap();
         let s = String::from_utf8_lossy(&raw);
         assert!(!s.contains("text/html"));
+        assert!(!s.contains("Reply-To:"));
+    }
+
+    #[test]
+    fn identity_reply_to_is_written_as_a_header() {
+        let mut message = outgoing("plain", None);
+        message.reply_to = Some(Address {
+            name: None,
+            email: "desk@example.com".into(),
+        });
+        let (_, raw) = build_message(&message).unwrap();
+        let s = String::from_utf8_lossy(&raw);
+        assert!(s.contains("Reply-To: <desk@example.com>"), "raw:\n{s}");
     }
 
     #[test]

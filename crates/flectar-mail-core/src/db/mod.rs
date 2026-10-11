@@ -11,7 +11,7 @@ pub mod snapshot;
 
 use crate::{
     error::{CoreError, Result},
-    models::normalized_workspace_list_pane_width,
+    models::{StartupPresentation, normalized_window_frame, normalized_workspace_list_pane_width},
 };
 use rusqlite::config::DbConfig;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
@@ -194,13 +194,29 @@ fn open_connection(path: &Path, kind: StoreKind) -> Result<Connection> {
     Ok(conn)
 }
 
-/// Best-effort read of the list-pane width for the first rendered frame.
+/// Best-effort read of the presentation state needed for the first frame.
 ///
 /// Normal startup remains responsible for opening, migrating, and validating
 /// the complete settings blob. This deliberately performs one zero-wait,
 /// read-only query so presentation state can be applied before the window is
 /// shown without putting database startup or mailbox loading on that path.
-pub(crate) fn startup_workspace_list_pane_width(path: &Path) -> Option<i64> {
+pub(crate) fn startup_presentation(path: &Path) -> StartupPresentation {
+    let Some(value) = startup_settings_value(path) else {
+        return StartupPresentation::default();
+    };
+    StartupPresentation {
+        workspace_list_pane_width: value
+            .get("workspaceListPaneWidth")
+            .and_then(serde_json::Value::as_i64)
+            .map(normalized_workspace_list_pane_width),
+        window_frame: value
+            .get("windowFrame")
+            .and_then(serde_json::Value::as_str)
+            .map(|frame| normalized_window_frame(frame).to_owned()),
+    }
+}
+
+fn startup_settings_value(path: &Path) -> Option<serde_json::Value> {
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
     conn.busy_timeout(std::time::Duration::ZERO).ok()?;
     conn.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)
@@ -216,11 +232,7 @@ pub(crate) fn startup_workspace_list_pane_width(path: &Path) -> Option<i64> {
         )
         .optional()
         .ok()??;
-    let value = serde_json::from_str::<serde_json::Value>(&json).ok()?;
-    value
-        .get("workspaceListPaneWidth")
-        .and_then(serde_json::Value::as_i64)
-        .map(normalized_workspace_list_pane_width)
+    serde_json::from_str::<serde_json::Value>(&json).ok()
 }
 
 fn sqlite_sidecar(path: &Path, suffix: &str) -> PathBuf {
@@ -721,7 +733,7 @@ mod connection_profile_tests {
 
 #[cfg(test)]
 mod startup_preference_tests {
-    use super::startup_workspace_list_pane_width;
+    use super::startup_presentation;
     use crate::models::MIN_WORKSPACE_LIST_PANE_WIDTH;
     use rusqlite::Connection;
 
@@ -738,14 +750,17 @@ mod startup_preference_tests {
         .unwrap();
         drop(conn);
 
-        assert_eq!(startup_workspace_list_pane_width(&path), Some(672));
+        assert_eq!(
+            startup_presentation(&path).workspace_list_pane_width,
+            Some(672)
+        );
     }
 
     #[test]
     fn startup_width_is_bounded_and_missing_state_is_non_fatal() {
         let temp = tempfile::tempdir().unwrap();
         let missing = temp.path().join("missing.db");
-        assert_eq!(startup_workspace_list_pane_width(&missing), None);
+        assert_eq!(startup_presentation(&missing), Default::default());
 
         let path = temp.path().join("mail.db");
         let conn = Connection::open(&path).unwrap();
@@ -758,8 +773,35 @@ mod startup_preference_tests {
         drop(conn);
 
         assert_eq!(
-            startup_workspace_list_pane_width(&path),
+            startup_presentation(&path).workspace_list_pane_width,
             Some(MIN_WORKSPACE_LIST_PANE_WIDTH)
+        );
+    }
+
+    #[test]
+    fn startup_window_frame_is_normalized() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("mail.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO app_settings (key, value)
+             VALUES ('settings', '{\"windowFrame\": \"integrated\"}');",
+        )
+        .unwrap();
+        assert_eq!(
+            startup_presentation(&path).window_frame.as_deref(),
+            Some("integrated")
+        );
+
+        conn.execute(
+            "UPDATE app_settings SET value = '{\"windowFrame\": \"future\"}'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            startup_presentation(&path).window_frame.as_deref(),
+            Some("system")
         );
     }
 }

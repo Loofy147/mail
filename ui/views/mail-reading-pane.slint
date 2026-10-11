@@ -14,6 +14,7 @@ import { RenderingInfoDialog } from "../dialogs/rendering-info-dialog.slint";
 import { TypeScale } from "../typography.slint";
 import { AppTheme, LayoutMetrics, MailIconPalette, MotionSettings } from "../design-system.slint";
 import { MessageColors } from "../message-colors.slint";
+import { WindowControlsClearance } from "../window-chrome.slint";
 
 component ReaderControl inherits ToolbarIconButton {
     tooltip-above: true;
@@ -386,6 +387,17 @@ export component MailReadingPane inherits Rectangle {
         { id: "spam", title: @tr("Move to spam"), icon: @image-url("../icons/lucide/outline/alert.svg") },
         { id: root.trash_view ? "delete_permanently" : "trash", title: root.trash_view ? @tr("Delete permanently…") : @tr("Move to trash"), icon: @image-url("../icons/lucide/outline/trash.svg"), destructive: true },
     ];
+    // The reader toolbar drops actions that the More menu also offers when
+    // integrated window controls or a narrow pane leave too little room.
+    private property <length> toolbar-room: 1000px;
+    private property <length> toolbar-button: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
+    private property <bool> show-navigation: root.toolbar-room >= 10 * root.toolbar-button + 9 * 6px;
+    // Compact pages never show navigation or spam, so read is the only
+    // secondary action there.
+    private property <int> secondary-button-count: root.compact ? 7 : 8;
+    private property <bool> show-secondary-actions: root.toolbar-room
+        >= root.secondary-button-count * root.toolbar-button + (root.secondary-button-count - 1) * 6px;
+    private property <bool> show-primary-actions: root.toolbar-room >= 6 * root.toolbar-button + 5 * 6px;
     in-out property <bool> text_mode: false;
     in-out property <bool> source_mode: false;
     in-out property <bool> rendering_info_open: false;
@@ -589,16 +601,26 @@ export component MailReadingPane inherits Rectangle {
                     padding: 0px;
                     spacing: 0px;
 
-                    Rectangle {
+                    reader-toolbar := Rectangle {
                         // Desktop actions share the product rail/sidebar/list
                         // centerline at y=32. Compact actions use the same
                         // centered 44px touch geometry as the other pages.
                         height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
                         background: root.surface-raised;
+                        private property <length> inset: root.compact ? 8px : 14px;
+                        // Width left for buttons once integrated window
+                        // controls are accounted for. Copied on change so the
+                        // collapsing buttons do not feed back into the layout.
+                        private property <length> room-now: self.width
+                            - max(self.inset, toolbar-clearance.leading)
+                            - max(self.inset, toolbar-clearance.trailing);
+                        changed room-now => { root.toolbar-room = self.room-now; }
+                        init => { root.toolbar-room = self.room-now; }
+                        toolbar-clearance := WindowControlsClearance { width: parent.width; height: parent.height; }
                         HorizontalBox {
                             padding-top: 0px;
-                            padding-left: root.compact ? 8px : 14px;
-                            padding-right: root.compact ? 8px : 14px;
+                            padding-left: max(parent.inset, toolbar-clearance.leading);
+                            padding-right: max(parent.inset, toolbar-clearance.trailing);
                             padding-bottom: 0px;
                             spacing: 6px;
                             cross-axis-alignment: center;
@@ -613,7 +635,7 @@ export component MailReadingPane inherits Rectangle {
                                 accessible-id: "message-back-button";
                                 clicked => { root.close_preview(); }
                             }
-                            if !root.compact : ToolbarIconButton {
+                            if !root.compact && root.show-navigation : ToolbarIconButton {
                                 interactive: root.previous-email-id >= 0;
                                 icon: @image-url("../icons/lucide/outline/chevron-left.svg");
                                 icon-color: root.secondary-text;
@@ -623,7 +645,7 @@ export component MailReadingPane inherits Rectangle {
                                 accessible-id: "previous-message-button";
                                 clicked => { root.select_email(root.previous-email-id); }
                             }
-                            if !root.compact : ToolbarIconButton {
+                            if !root.compact && root.show-navigation : ToolbarIconButton {
                                 interactive: root.next-email-id >= 0;
                                 icon: @image-url("../icons/lucide/outline/chevron-right.svg");
                                 icon-color: root.secondary-text;
@@ -634,7 +656,7 @@ export component MailReadingPane inherits Rectangle {
                                 clicked => { root.select_email(root.next-email-id); }
                             }
                             Rectangle { horizontal-stretch: 1; }
-                            ToolbarIconButton {
+                            if root.show-primary-actions : ToolbarIconButton {
                                 visible: !root.selected_is_draft;
                                 interactive: root.has_selected;
                                 compact: root.compact;
@@ -656,7 +678,7 @@ export component MailReadingPane inherits Rectangle {
                                 tooltip-text: root.selected_starred ? @tr("Remove star") : @tr("Star message");
                                 clicked => { root.message_action(root.selected_starred ? "unstar" : "star"); }
                             }
-                            ToolbarIconButton {
+                            if root.show-secondary-actions : ToolbarIconButton {
                                 visible: !root.selected_is_draft;
                                 interactive: root.has_selected;
                                 compact: root.compact;
@@ -667,7 +689,7 @@ export component MailReadingPane inherits Rectangle {
                                 tooltip-text: root.selected_unread ? @tr("Mark as read") : @tr("Mark as unread");
                                 clicked => { root.message_action(root.selected_unread ? "mark_read" : "mark_unread"); }
                             }
-                            if !root.compact && !root.selected_is_draft : ToolbarIconButton {
+                            if !root.compact && !root.selected_is_draft && root.show-secondary-actions : ToolbarIconButton {
                                 interactive: root.has_selected;
                                 icon: @image-url("../icons/lucide/outline/alert.svg");
                                 icon-color: root.secondary-text;
@@ -676,7 +698,7 @@ export component MailReadingPane inherits Rectangle {
                                 tooltip-text: @tr("Move to spam");
                                 clicked => { root.message_action("spam"); }
                             }
-                            ToolbarIconButton {
+                            if root.show-primary-actions : ToolbarIconButton {
                                 interactive: root.has_selected;
                                 compact: root.compact;
                                 icon: @image-url("../icons/lucide/outline/trash.svg");

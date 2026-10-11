@@ -159,15 +159,27 @@ pub(crate) fn initialize_step<T>(
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub(crate) fn select_backend(mode: RendererMode) -> Result<bool, Box<dyn std::error::Error>> {
+pub(crate) fn select_backend(
+    mode: RendererMode,
+    window_frame: crate::window_chrome::WindowFrame,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let winit = || {
+        let selector = slint::BackendSelector::new().backend_name("winit".into());
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
+        let selector = selector.with_winit_window_attributes_hook(
+            crate::window_chrome::window_attributes(window_frame),
+        );
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        let _ = window_frame;
+        selector
+    };
     #[cfg(feature = "gpu-renderer")]
     if mode == RendererMode::Gpu {
         let mut settings = slint::wgpu_29::WGPUSettings::default();
         // Normal Vello uses compute/storage buffers, unavailable in WebGL2 limits.
         settings.device_required_limits = slint::wgpu_29::wgpu::Limits::default();
         initialize_step(true, || {
-            slint::BackendSelector::new()
-                .backend_name("winit".into())
+            winit()
                 .renderer_name("femtovg-wgpu".into())
                 .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(settings))
                 .select()
@@ -178,10 +190,7 @@ pub(crate) fn select_backend(mode: RendererMode) -> Result<bool, Box<dyn std::er
         eprintln!("GPU renderer is unavailable in this build; using CPU");
     }
     // Explicit selection wins over SLINT_BACKEND, including in GPU-capable builds.
-    slint::BackendSelector::new()
-        .backend_name("winit".into())
-        .renderer_name("software".into())
-        .select()?;
+    winit().renderer_name("software".into()).select()?;
     Ok(false)
 }
 

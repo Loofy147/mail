@@ -189,6 +189,14 @@ pub(super) fn register(
                 state.messages = page.messages;
                 state.labels = page.labels;
                 state.next_cursor = page.next_cursor;
+                // A restored tab reopens its conversation if it is still in
+                // the first page, and otherwise shows an empty reader rather
+                // than an unrelated first row.
+                if let Some(id) = state.pending_selection.take() {
+                    let found = state.messages.iter().any(|row| row.id == id);
+                    state.selected_id = found.then_some(id);
+                    state.preview_closed = !found;
+                }
                 drop(state);
                 if let Err(error) = render_current(&app, &page_state, &page_runtime) {
                     app.set_render_status(UiMessage::detail("Mail refresh failed: {}", error));

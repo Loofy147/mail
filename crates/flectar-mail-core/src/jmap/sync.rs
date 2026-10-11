@@ -6,7 +6,7 @@ use crate::db::repo::messages::NewMessage;
 use crate::error::{CoreError, Result};
 use crate::events::CoreEvent;
 use crate::jmap::client::{self, ConnectedClient};
-use crate::models::{AccountConfig, Address, MailProtocol, now_ms, roles};
+use crate::models::{AccountConfig, Address, MailProtocol, SenderDeliveryStatus, now_ms, roles};
 use crate::sync::engine::{
     PriorityFetchCmd, SyncCmd, SyncCtx, configured_sync_interval, set_state, set_state_error,
 };
@@ -39,6 +39,20 @@ pub(crate) fn spawn(
     ]
 }
 
+const IDENTITY_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+async fn sync_sender_identities(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    c: &ConnectedClient,
+) -> Result<()> {
+    let identities = crate::sender_identities::jmap_sender_identities(config, c).await?;
+    let account_id = config.id;
+    ctx.db
+        .write(move |conn| repo::sender_identities::replace(conn, account_id, &identities))
+        .await
+}
+
 async fn connect(ctx: &SyncCtx, config: &AccountConfig) -> Result<ConnectedClient> {
     let secret =
         credentials::load_async(ctx.credentials.clone(), config.id, Slot::Password).await?;
@@ -53,6 +67,7 @@ async fn actor(
 ) {
     let mut waiters = Vec::new();
     let mut retry = 1u64;
+    let mut identities_synced_at: Option<std::time::Instant> = None;
     loop {
         while let Ok(cmd) = rx.try_recv() {
             match cmd {
@@ -69,6 +84,18 @@ async fn actor(
         let outcome = async {
             let connected = connect(&ctx, &config).await?;
             persist_session(&ctx, config.id, &connected).await?;
+            if identities_synced_at.is_none_or(|at| at.elapsed() >= IDENTITY_REFRESH_INTERVAL) {
+                // Identities change rarely and only gate the From picker, so
+                // a failure here must not block mail synchronization.
+                match sync_sender_identities(&ctx, &config, &connected).await {
+                    Ok(()) => identities_synced_at = Some(std::time::Instant::now()),
+                    Err(error) => tracing::warn!(
+                        account_id = config.id,
+                        %error,
+                        "JMAP identity refresh failed; keeping cached identities"
+                    ),
+                }
+            }
             set_state(&ctx, config.id, "syncing").await;
             sync_mailboxes(&ctx, config.id, &connected).await?;
             sync_emails(&ctx, &config, &connected).await?;
@@ -192,7 +219,7 @@ fn role(value: Role) -> Option<&'static str> {
 }
 
 async fn sync_mailboxes(ctx: &SyncCtx, local_account: i64, c: &ConnectedClient) -> Result<()> {
-    let mut request = c.client.build();
+    let mut request = c.request();
     // Counters (totalEmails, unreadThreads, ...) are computed locally; asking
     // for them makes the server count every mailbox of a large account.
     request.get_mailbox().account_id(&c.account_id).properties([
@@ -369,7 +396,7 @@ async fn query_ids(config: &AccountConfig, c: &ConnectedClient) -> Result<Vec<St
         loop {
             let position = i32::try_from(ids.len())
                 .map_err(|_| CoreError::Jmap("Email/query result set is too large".into()))?;
-            let mut request = c.client.build();
+            let mut request = c.request();
             let query = request
                 .query_email()
                 .account_id(&c.account_id)
@@ -428,7 +455,7 @@ async fn changes(
     let mut destroyed = Vec::new();
     for _ in 0..MAX_CHANGE_PAGES {
         let previous_state = state.clone();
-        let mut response = match c.client.email_changes(state.clone(), Some(PAGE)).await {
+        let mut response = match c.email_changes(state.clone(), PAGE).await {
             Ok(response) => response,
             Err(jmap_client::Error::Method(method))
                 if method.p_type == MethodErrorType::CannotCalculateChanges =>
@@ -461,7 +488,7 @@ async fn changes(
 }
 
 async fn current_email_state(c: &ConnectedClient) -> Result<String> {
-    let mut request = c.client.build();
+    let mut request = c.request();
     request
         .get_email()
         .account_id(&c.account_id)
@@ -576,7 +603,7 @@ async fn sync_emails(ctx: &SyncCtx, config: &AccountConfig, c: &ConnectedClient)
 }
 
 async fn fetch_headers(c: &ConnectedClient, ids: &[String]) -> Result<(Vec<Email>, Vec<String>)> {
-    let mut request = c.client.build();
+    let mut request = c.request();
     request
         .get_email()
         .account_id(&c.account_id)
@@ -623,11 +650,7 @@ async fn persist_emails(ctx: &SyncCtx, config: &AccountConfig, emails: Vec<Email
             let settings = repo::settings::get(&tx)?;
             let (outgoing_learning_since, incoming_learning_since) =
                 repo::contacts::learning_boundaries(&tx, account_id, now_ms())?;
-            let account_emails = repo::sender_identities::list(&tx, account_id)?
-                .into_iter()
-                .filter(|identity| identity.is_verified())
-                .map(|identity| identity.email.to_ascii_lowercase())
-                .collect::<HashSet<_>>();
+            let account_emails = repo::sender_identities::own_addresses(&tx, account_id)?;
             let mut changed_threads = HashSet::new();
             let mut stale_paths = Vec::new();
 
@@ -1183,7 +1206,7 @@ async fn execute_action(
                 .core_capabilities()
                 .map_or(1, |caps| caps.max_objects_in_set().clamp(1, 500));
             for batch in ids.chunks(batch_size) {
-                let mut request = c.client.build();
+                let mut request = c.request();
                 request
                     .set_email()
                     .account_id(&c.account_id)
@@ -1224,7 +1247,7 @@ async fn execute_action(
             apply_message_mutation(
                 ctx,
                 action.message_id,
-                c.client.email_set_keyword(remote_id, keyword, set).await,
+                c.email_set_keyword(remote_id, keyword, set).await,
             )
             .await
         }
@@ -1238,8 +1261,7 @@ async fn execute_action(
             apply_message_mutation(
                 ctx,
                 action.message_id,
-                c.client
-                    .email_set_keyword(remote_id, keyword, action.kind == "add_label")
+                c.email_set_keyword(remote_id, keyword, action.kind == "add_label")
                     .await,
             )
             .await
@@ -1270,7 +1292,7 @@ async fn execute_action(
             apply_message_mutation(
                 ctx,
                 action.message_id,
-                c.client.email_set_mailboxes(remote_id, mailbox_ids).await,
+                c.email_set_mailboxes(remote_id, mailbox_ids).await,
             )
             .await
         }
@@ -1297,7 +1319,7 @@ async fn query_mailbox_ids(c: &ConnectedClient, mailbox_id: &str) -> Result<Vec<
         loop {
             let position = i32::try_from(ids.len())
                 .map_err(|_| CoreError::Jmap("Trash contains too many messages".into()))?;
-            let mut request = c.client.build();
+            let mut request = c.request();
             request
                 .query_email()
                 .account_id(&c.account_id)
@@ -1384,7 +1406,7 @@ async fn apply_message_mutation<T>(
 }
 
 async fn destroy_email_if_present(c: &ConnectedClient, remote_id: &str) -> Result<()> {
-    match c.client.email_destroy(remote_id).await {
+    match c.email_destroy(remote_id).await {
         Ok(()) => Ok(()),
         Err(jmap_client::Error::Set(error)) if error.type_ == SetErrorType::NotFound => Ok(()),
         Err(error) => Err(client::map_error(error)),
@@ -1400,18 +1422,7 @@ async fn query_draft_by_message_id(
         jmap_client::email::query::Filter::in_mailbox(draft_mailbox),
         jmap_client::email::query::Filter::header("Message-ID", Some(format!("<{message_id}>"))),
     ]);
-    let matches =
-        c.client
-            .email_query(
-                Some(filter),
-                None::<
-                    Vec<
-                        jmap_client::core::query::Comparator<jmap_client::email::query::Comparator>,
-                    >,
-                >,
-            )
-            .await
-            .map_err(client::map_error)?;
+    let matches = c.email_query(filter).await.map_err(client::map_error)?;
     match matches.ids() {
         [] => Ok(None),
         [id] => Ok(Some(id.clone())),
@@ -1477,10 +1488,13 @@ async fn build_draft_message(
     c: &ConnectedClient,
     draft_id: i64,
 ) -> Result<(String, Vec<u8>)> {
-    let (detail, bcc, mut references, in_reply_to, stored_message_id, attachments) = ctx
+    let (detail, reply_to, bcc, mut references, in_reply_to, stored_message_id, attachments) = ctx
         .db
         .read(move |conn| {
             let detail = repo::messages::detail(conn, draft_id)?;
+            let reply_to =
+                repo::sender_identities::get_verified(conn, detail.account_id, &detail.from.email)?
+                    .and_then(|identity| identity.reply_to());
             let (bcc_json, stored_message_id): (String, Option<String>) = conn.query_row(
                 "SELECT bcc_json,message_id FROM messages WHERE id=?1 AND is_draft=1",
                 params![draft_id],
@@ -1519,6 +1533,7 @@ async fn build_draft_message(
             let bcc = serde_json::from_str::<Vec<Address>>(&bcc_json)?;
             Ok((
                 detail,
+                reply_to,
                 bcc,
                 references,
                 in_reply_to,
@@ -1598,6 +1613,7 @@ async fn build_draft_message(
         .unwrap_or("localhost");
     let outgoing = crate::mime::OutgoingMessage {
         from: detail.from.clone(),
+        reply_to,
         to: &detail.to,
         cc: &detail.cc,
         bcc: &bcc,
@@ -1691,7 +1707,7 @@ async fn save_draft_action(
     if !action_is_inflight(ctx, action.id).await? {
         return Ok(());
     }
-    let mut request = c.client.build();
+    let mut request = c.request();
     let import = request
         .import_email()
         .account_id(&c.account_id)
@@ -1800,19 +1816,9 @@ async fn send_action(
     // A lost response must not cause a duplicate submission on retry.
     let already_submitted = submission_accepted
         || !c
-            .client
-            .email_submission_query(
-                Some(jmap_client::email_submission::query::Filter::email_ids([
-                    remote_email.clone(),
-                ])),
-                None::<
-                    Vec<
-                        jmap_client::core::query::Comparator<
-                            jmap_client::email_submission::query::Comparator,
-                        >,
-                    >,
-                >,
-            )
+            .email_submission_query(jmap_client::email_submission::query::Filter::email_ids([
+                remote_email.clone(),
+            ]))
             .await
             .map_err(client::map_error)?
             .ids()
@@ -1822,19 +1828,25 @@ async fn send_action(
             .db
             .read(move |conn| Ok(repo::messages::detail(conn, draft_id)?.from.email))
             .await?;
-        let mut identity_request = c.client.build();
+        let mut identity_request = c.request();
         identity_request.get_identity().account_id(&c.account_id);
         let identities = identity_request
             .send_get_identity()
             .await
             .map_err(client::map_error)?
             .take_list();
+        // RFC 8621 §6: an exact identity is more specific than `*@domain`.
         let identity_id = identities
             .iter()
-            .find(|identity| {
+            .filter(|identity| {
                 identity
                     .email()
                     .is_some_and(|email| identity_matches(email, &sender_email))
+            })
+            .min_by_key(|identity| {
+                identity
+                    .email()
+                    .is_some_and(|email| email.starts_with("*@"))
             })
             .and_then(|identity| identity.id())
             .ok_or_else(|| {
@@ -1850,7 +1862,50 @@ async fn send_action(
             .send_set_email_submission()
             .await
             .map_err(map_submission_error)?;
-        response.created(&create_id).map_err(map_submission_error)?;
+        let created = response.created(&create_id);
+        let sender_refused = matches!(
+            &created,
+            Err(jmap_client::Error::Set(error))
+                if matches!(
+                    error.error(),
+                    jmap_client::core::set::SetErrorType::ForbiddenFrom
+                        | jmap_client::core::set::SetErrorType::ForbiddenMailFrom
+                )
+        );
+        let delivery = if created.is_ok() {
+            SenderDeliveryStatus::Confirmed
+        } else if sender_refused {
+            SenderDeliveryStatus::Rejected
+        } else {
+            SenderDeliveryStatus::Unknown
+        };
+        if delivery != SenderDeliveryStatus::Unknown {
+            let account_id = config.id;
+            let email = sender_email.clone();
+            let server_reply = created.as_ref().err().map(ToString::to_string);
+            // Best effort: never turn an accepted submission into a retry.
+            if let Err(error) = ctx
+                .db
+                .write(move |conn| {
+                    repo::sender_identities::record_delivery(
+                        conn,
+                        account_id,
+                        &email,
+                        delivery,
+                        server_reply.as_deref(),
+                    )
+                })
+                .await
+            {
+                tracing::warn!(account_id, %error, "could not record sender delivery outcome");
+            }
+        }
+        if sender_refused {
+            return Err(CoreError::Jmap(format!(
+                "the server refused to send as {sender_email}; add the address as a sending identity on the server, then refresh sender identities"
+            )));
+        }
+        created.map_err(map_submission_error)?;
     }
     if !submission_accepted {
         mark_submission_accepted(ctx, action).await?;
@@ -1925,7 +1980,6 @@ async fn ensure_role_mailbox(
         return Ok(remote);
     }
     let mailbox = c
-        .client
         .mailbox_create(name, None::<String>, jmap_role)
         .await
         .map_err(client::map_error)?;
@@ -1949,7 +2003,7 @@ fn submission_request<'a>(
     identity_id: String,
     sent_mailbox: String,
 ) -> (jmap_client::core::request::Request<'a>, String) {
-    let mut request = c.client.build();
+    let mut request = c.request();
     let set = request.set_email_submission().account_id(&c.account_id);
     let create_id = set
         .create()
@@ -1970,7 +2024,7 @@ async fn ensure_submitted_email_state(
     remote_email: &str,
     sent_mailbox: &str,
 ) -> Result<()> {
-    let mut request = c.client.build();
+    let mut request = c.request();
     request
         .set_email()
         .account_id(&c.account_id)

@@ -215,13 +215,24 @@ fn is_permanent(error: &CoreError) -> bool {
             })
         }
         // All SMTP 5xx replies are permanent failures of the current request.
-        CoreError::Smtp(message) => message.split(|c: char| !c.is_ascii_digit()).any(|token| {
-            token.len() == 3
-                && token.starts_with('5')
-                && token.bytes().all(|byte| byte.is_ascii_digit())
-        }),
+        CoreError::Smtp(message) => has_permanent_smtp_reply(message),
         _ => false,
     }
+}
+
+/// Whether an SMTP error carries a 5xx reply code. A code stands alone, as in
+/// lettre's `permanent error (550)` or a raw `550 5.7.1 ...` reply, which
+/// keeps the `host:587:` prefix of every SMTP error from reading as one.
+fn has_permanent_smtp_reply(message: &str) -> bool {
+    let bytes = message.as_bytes();
+    bytes.windows(3).enumerate().any(|(start, code)| {
+        let before = start.checked_sub(1).map(|index| bytes[index]);
+        let after = bytes.get(start + 3).copied();
+        code[0] == b'5'
+            && code.iter().all(u8::is_ascii_digit)
+            && before.is_none_or(|byte| byte.is_ascii_whitespace() || byte == b'(')
+            && after.is_none_or(|byte| byte.is_ascii_whitespace() || matches!(byte, b')' | b'-'))
+    })
 }
 
 fn is_connection_failure(msg: &str) -> bool {
@@ -676,21 +687,22 @@ async fn send_action(
 
     let (refs, in_reply_to) = references;
     let account_id = config.id;
-    let from = ctx
+    let identity = ctx
         .db
         .read({
             let requested = detail.from.email.clone();
             move |conn| {
-                repo::sender_identities::get_verified(conn, account_id, &requested)?
-                    .map(|identity| identity.address())
-                    .ok_or_else(|| {
+                repo::sender_identities::get_verified(conn, account_id, &requested)?.ok_or_else(
+                    || {
                         CoreError::Other(format!(
                             "{requested} is not an authorized sender identity for this account"
                         ))
-                    })
+                    },
+                )
             }
         })
         .await?;
+    let from = identity.address();
     let domain = from
         .email
         .split('@')
@@ -756,6 +768,7 @@ async fn send_action(
 
     let out = crate::mime::OutgoingMessage {
         from: from.clone(),
+        reply_to: identity.reply_to(),
         to: &detail.to,
         cc: &detail.cc,
         bcc: &bcc,
@@ -837,7 +850,7 @@ async fn send_action(
         recipients = recipients.len(),
         "smtp send: dispatching",
     );
-    match smtp::send_raw(config, &auth, &from.email, &recipients, &raw).await {
+    let submitted = match smtp::send_raw(config, &auth, &from.email, &recipients, &raw).await {
         Err(CoreError::Auth(_)) if config.auth_kind == AuthKind::Oauth2 => {
             // AUTH rejection happens before MAIL FROM/DATA, so it is safe to
             // invalidate an unexpectedly stale provider token and retry the
@@ -850,10 +863,49 @@ async fn send_action(
             ctx.tokens.invalidate(config.id).await;
             let retry_auth =
                 smtp::SmtpAuth::XOAuth2(ctx.tokens.access_token(config.id, config.provider).await?);
-            smtp::send_raw(config, &retry_auth, &from.email, &recipients, &raw).await?;
+            smtp::send_raw(config, &retry_auth, &from.email, &recipients, &raw).await
+        }
+        result => result,
+    };
+    // Plain SMTP cannot list permitted From addresses, so the submission
+    // outcome is the evidence shown next to the identity in settings.
+    let (delivery, error) = match submitted {
+        Ok(()) => (SenderDeliveryStatus::Confirmed, None),
+        // A temporary refusal (4xx) is retried and says nothing lasting about
+        // whether the server accepts this sender.
+        Err(CoreError::Smtp(message))
+            if crate::sender_identities::is_sender_rejection(&message)
+                && has_permanent_smtp_reply(&message) =>
+        {
+            let error = CoreError::Smtp(format!(
+                "the server refused to send as {}; ask your provider to allow this address or choose another sender ({message})",
+                from.email
+            ));
+            (SenderDeliveryStatus::Rejected, Some((message, error)))
         }
         Err(error) => return Err(error),
-        Ok(()) => {}
+    };
+    let sender_email = from.email.clone();
+    let server_reply = error.as_ref().map(|(message, _)| message.clone());
+    // Best effort: after an accepted submission, failing here must not make
+    // the durable action retry and deliver the message twice.
+    if let Err(record_error) = ctx
+        .db
+        .write(move |conn| {
+            repo::sender_identities::record_delivery(
+                conn,
+                account_id,
+                &sender_email,
+                delivery,
+                server_reply.as_deref(),
+            )
+        })
+        .await
+    {
+        tracing::warn!(account_id, error = %record_error, "could not record sender delivery outcome");
+    }
+    if let Some((_, error)) = error {
+        return Err(error);
     }
     tracing::info!(account_id = config.id, "smtp send: accepted by server");
 
@@ -998,6 +1050,32 @@ mod tests {
         assert!(!is_permanent(&CoreError::Smtp(
             "451 temporary failure".into()
         )));
+    }
+
+    #[test]
+    fn smtp_permanence_reads_reply_codes_not_ports() {
+        for permanent in [
+            "smtp.example.com:587: permanent error (553): 5.7.1 sender rejected",
+            "SMTP STARTTLS failed: 554 5.7.0 TLS not available",
+            "the server refused to send as a@example.com (smtp.example.com:465: permanent error (550): denied)",
+            "550-5.7.1 multi-line rejection",
+        ] {
+            assert!(
+                is_permanent(&CoreError::Smtp(permanent.into())),
+                "{permanent}"
+            );
+        }
+        for transient in [
+            "smtp.example.com:587: Connection error: timed out",
+            "smtp.example.com:587: transient error (451): 4.7.1 try again later",
+            "smtp.example.com:587: transient error (450): 4.1.8 Sender address rejected: Domain not found",
+            "smtp.example.com:5587: network error",
+        ] {
+            assert!(
+                !is_permanent(&CoreError::Smtp(transient.into())),
+                "{transient}"
+            );
+        }
     }
 
     fn optimistic_move(

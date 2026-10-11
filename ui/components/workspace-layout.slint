@@ -3,6 +3,7 @@ import { AppTheme, LayoutMetrics, MotionSettings } from "../design-system.slint"
 import { TypeScale } from "../typography.slint";
 import { LineEdit, ToolbarIconButton } from "controls.slint";
 import { FocusVisibleScope } from "focus-visible-scope.slint";
+import { WindowControlsClearance } from "../window-chrome.slint";
 
 export struct WorkspaceSearchFilter {
     title: string,
@@ -224,10 +225,13 @@ export component WorkspaceTitleRow inherits Rectangle {
     height: LayoutMetrics.touch-target;
     background: transparent;
 
+    // Window controls may cover this row's corners.
+    clearance := WindowControlsClearance { width: parent.width; height: parent.height; }
+
     HorizontalBox {
         padding-top: 0px;
-        padding-left: root.horizontal-inset;
-        padding-right: root.horizontal-inset;
+        padding-left: max(root.horizontal-inset, clearance.leading);
+        padding-right: max(root.horizontal-inset, clearance.trailing);
         padding-bottom: 0px;
         spacing: root.item-spacing;
         cross-axis-alignment: center;
@@ -287,8 +291,20 @@ export component WorkspaceSearchToolbar inherits Rectangle {
     height: LayoutMetrics.control-height;
     background: transparent;
 
+    // Typing replaces the field's binding, so programmatic changes (such as
+    // switching tabs) are copied in explicitly.
+    changed text => {
+        if search-edit.text != root.text {
+            search-edit.text = root.text;
+        }
+    }
+
+    clearance := WindowControlsClearance { width: parent.width; height: parent.height; }
+
     HorizontalBox {
         padding: 0px;
+        padding-left: clearance.leading;
+        padding-right: clearance.trailing;
         spacing: 6px;
 
         ToolbarIconButton {
@@ -308,7 +324,7 @@ export component WorkspaceSearchToolbar inherits Rectangle {
             height: LayoutMetrics.control-height;
             horizontal-stretch: 1;
 
-            LineEdit {
+            search-edit := LineEdit {
                 width: parent.width;
                 height: parent.height;
                 text: root.text;

@@ -683,7 +683,9 @@ impl GmailApi {
     /// Re-check the exact identity at provider I/O time. A cached alias may
     /// have been revoked after the composer opened; Gmail must remain the
     /// authority on whether the From address is still usable.
-    async fn validate_sender_identity(&self, email: &str) -> Result<()> {
+    /// Confirm `email` is a usable SendAs address right now and return its
+    /// configured Reply-To, which Gmail only applies itself in its web UI.
+    async fn validate_sender_identity(&self, email: &str) -> Result<Option<Address>> {
         let value = self
             .get_json(&format!("{GMAIL_API}/settings/sendAs/{}", urlencode(email)))
             .await
@@ -704,7 +706,22 @@ impl GmailApi {
                 "{email} is not a verified Gmail sender identity"
             )));
         }
-        Ok(())
+        Ok(value
+            .get("replyToAddress")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|reply_to| {
+                !reply_to.is_empty()
+                    && !reply_to.eq_ignore_ascii_case(email)
+                    && !reply_to
+                        .chars()
+                        .any(|c| c.is_control() || c.is_whitespace())
+                    && reply_to.contains('@')
+            })
+            .map(|reply_to| Address {
+                name: None,
+                email: reply_to.to_owned(),
+            }))
     }
 }
 
@@ -1510,11 +1527,7 @@ async fn store_resources(
             let settings = repo::settings::get(&tx)?;
             let (outgoing_learning_since, incoming_learning_since) =
                 repo::contacts::learning_boundaries(&tx, account_id, now_ms())?;
-            let mut account_emails = repo::sender_identities::list(&tx, account_id)?
-                .into_iter()
-                .filter(|identity| identity.is_verified())
-                .map(|identity| identity.email.to_ascii_lowercase())
-                .collect::<HashSet<_>>();
+            let mut account_emails = repo::sender_identities::own_addresses(&tx, account_id)?;
             account_emails.insert(account_email);
             let mut mappings = HashMap::<String, LabelMapping>::new();
             {
@@ -2642,7 +2655,7 @@ async fn prepare_draft(
         })
         .await?;
 
-    api.validate_sender_identity(&detail.from.email).await?;
+    let reply_to = api.validate_sender_identity(&detail.from.email).await?;
 
     let staged: Vec<(String, String, Option<String>)> = ctx
         .db
@@ -2740,6 +2753,7 @@ async fn prepare_draft(
         .to_owned();
     let outgoing = crate::mime::OutgoingMessage {
         from,
+        reply_to,
         to: &detail.to,
         cc: &detail.cc,
         bcc: &bcc,

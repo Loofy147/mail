@@ -1390,8 +1390,13 @@ mod interaction_tests {
         };
         let closed_frame = draw_after(Duration::from_secs(1));
         assert!(model.row_count() > 1_000);
-        const CATEGORY_HEADER_CENTER_Y: f32 = 169.;
-        const ACCOUNT_HEADER_CENTER_Y: f32 = 232.;
+        // Desktop workspaces sit below the 44px top bar; the compact drawer
+        // starts at the top of the window.
+        const TOP_BAR_HEIGHT: f32 = 44.;
+        const COMPACT_CATEGORY_HEADER_CENTER_Y: f32 = 169.;
+        const COMPACT_ACCOUNT_HEADER_CENTER_Y: f32 = 232.;
+        const CATEGORY_HEADER_CENTER_Y: f32 = COMPACT_CATEGORY_HEADER_CENTER_Y + TOP_BAR_HEIGHT;
+        const ACCOUNT_HEADER_CENTER_Y: f32 = COMPACT_ACCOUNT_HEADER_CENTER_Y + TOP_BAR_HEIGHT;
         dispatch_click(140., CATEGORY_HEADER_CENTER_Y);
         assert!(!collapsed.borrow().contains("categories"));
         assert!(
@@ -1476,11 +1481,11 @@ mod interaction_tests {
         app.window().set_size(slint::PhysicalSize::new(390, 844));
         draw();
         click(31., 29.); // Open the compact folder drawer.
-        click(140., CATEGORY_HEADER_CENTER_Y);
+        click(140., COMPACT_CATEGORY_HEADER_CENTER_Y);
         assert!(collapsed.borrow().contains("categories"));
         click(340., 200.); // Close the drawer through its backdrop.
         click(31., 29.);
-        click(140., ACCOUNT_HEADER_CENTER_Y);
+        click(140., COMPACT_ACCOUNT_HEADER_CENTER_Y);
         assert!(collapsed.borrow().contains("account:1"));
         // Contacts uses the same retained update machinery and shared row controls.
         app.window().set_size(slint::PhysicalSize::new(1320, 800));
@@ -1523,11 +1528,11 @@ mod interaction_tests {
             *selected_for_click.borrow_mut() = scope.to_string()
         });
         draw();
-        const CONTACT_FAVORITES_CENTER_Y: f32 = 182.;
+        const CONTACT_FAVORITES_CENTER_Y: f32 = 182. + TOP_BAR_HEIGHT;
         // The account disclosure follows the unified heading/section, three
         // unified scopes, and the accounts heading. Keep the click centered
         // in the 45 px Account 1 row rather than on the heading above it.
-        const CONTACT_ACCOUNT_SECTION_CENTER_Y: f32 = 303.;
+        const CONTACT_ACCOUNT_SECTION_CENTER_Y: f32 = 303. + TOP_BAR_HEIGHT;
         click(140., CONTACT_FAVORITES_CENTER_Y);
         assert_eq!(*selected_scope.borrow(), "Favorites");
         click(140., CONTACT_ACCOUNT_SECTION_CENTER_Y);
@@ -1580,7 +1585,7 @@ mod interaction_tests {
             calendar::apply_calendar(&weak.unwrap(), &state, today);
         });
         draw();
-        click(82., 372.);
+        click(82., 372. + TOP_BAR_HEIGHT); // The first calendar's visibility toggle.
         assert!(!calendar.borrow().sources[0].enabled);
         for delta_y in [-10_000., 1_000_000.] {
             app.window().dispatch_event(WindowEvent::PointerScrolled {
@@ -1601,7 +1606,7 @@ mod interaction_tests {
         app.set_active_view("calendar".into());
         draw();
         assert!(!calendar.borrow().source_rows.row_data(0).unwrap().enabled);
-        click(82., 372.);
+        click(82., 372. + TOP_BAR_HEIGHT); // The first calendar's visibility toggle.
         assert!(calendar.borrow().sources[0].enabled);
         app.hide().unwrap();
     }

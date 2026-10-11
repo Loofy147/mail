@@ -5,6 +5,8 @@ import { AttachmentPreviewDialog } from "dialogs/attachment-preview-dialog.slint
 export { MailAttachments, MailAttachment } from "models.slint";
 export { ZoomApi } from "components/zoom-controls.slint";
 export { RendererSettings } from "renderer-settings.slint";
+export { WindowChrome } from "window-chrome.slint";
+import { WindowChrome, WindowControls, WindowDragArea } from "window-chrome.slint";
 // Bundled once at compile time and used throughout the application chrome.
 // Rust registers the separate Noto Emoji face before constructing this window.
 import "../resources/fonts/google-sans-flex/GoogleSansFlex-VariableFont_GRAD,ROND,opsz,slnt,wdth,wght.ttf";
@@ -21,7 +23,9 @@ export { MailListNavigation, MailNavigationTarget } from "models.slint";
 export { ThreadMessageRow, StorageUsageRow } from "models.slint";
 export { CalendarAgendaNavigation } from "components/calendar-agenda.slint";
 import { FunctionalCalendarView } from "components/calendar.slint";
-import { CompactProductNav, ProductRail } from "components/product-rail.slint";
+import { CompactProductNav, ProductRail, WindowTopBar } from "components/workspace-navigation.slint";
+export { TabsUi, TabRow } from "components/workspace-navigation.slint";
+import { TabsUi } from "components/workspace-navigation.slint";
 import { WorkspaceFrame } from "components/workspace-layout.slint";
 import { CalendarEventDialog } from "dialogs/calendar-event-dialog.slint";
 import { ComposeDialog } from "dialogs/compose-dialog.slint";
@@ -195,6 +199,10 @@ export global I18n {
         if (key == "Avatar preference updated for this session.") { return @tr("Avatar preference updated for this session."); }
         if (key == "Avatar preference saved.") { return @tr("Avatar preference saved."); }
         if (key == "Could not save avatar preference: {}") { return @tr("Could not save avatar preference: {}", argument); }
+        if (key == "Window frame updated for this session.") { return @tr("Window frame updated for this session."); }
+        if (key == "Window frame preference saved.") { return @tr("Window frame preference saved."); }
+        if (key == "Could not save window frame preference: {}") { return @tr("Could not save window frame preference: {}", argument); }
+        if (key == "At most {} tabs can be open. Close a tab to open another.") { return @tr("At most {} tabs can be open. Close a tab to open another.", argument); }
         if (key == "Mail grouping is active for this session.") { return @tr("Mail grouping is active for this session."); }
         if (key == "Mail grouping preference saved.") { return @tr("Mail grouping preference saved."); }
         if (key == "Could not save mail grouping preference: {}") { return @tr("Could not save mail grouping preference: {}", argument); }
@@ -482,6 +490,10 @@ export global I18n {
 export component AppWindow inherits Window {
     title: @tr("Flectar Mail");
     icon: @image-url("../resources/app-icon/flectar-mail-masked.png");
+    // Windows keeps its native frame and macOS its traffic lights in the
+    // integrated frame; only Linux removes the window manager's decorations.
+    no-frame: WindowChrome.integrated && WindowChrome.platform == "linux";
+    resize-border-width: root.client-frame ? 6px : 0px;
     default-font-family: "Google Sans Flex";
     preferred-width: 1320px;
     preferred-height: 800px;
@@ -943,6 +955,20 @@ export component AppWindow inherits Window {
     // This content-driven breakpoint is the smallest width that can hold the
     // rail, folders, message list, and a useful reading pane simultaneously.
     private property <bool> compact-layout: root.width - root.safe-area-insets.left - root.safe-area-insets.right < 980px;
+    // In the integrated frame the window controls sit over the top corners
+    // and toolbars reserve room for them, so content keeps the full window.
+    // Desktop windows with accounts show the tabs in a top bar above the
+    // product rail; in the integrated frame it also holds the window
+    // controls. Compact layouts navigate from the bottom bar.
+    private property <bool> top-bar: !root.compact-layout && root.connected_accounts.length > 0;
+    changed top-bar => { root.sync-window-chrome(); }
+    private property <length> content-x: root.safe-area-insets.left;
+    private property <length> content-y: root.safe-area-insets.top + (root.top-bar ? WindowChrome.band-height : 0px);
+    private property <length> content-width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
+    private property <length> content-height: root.height - root.content-y - root.safe-area-insets.bottom;
+    // Linux draws the whole frame, so it also provides the resize border and
+    // window outline that the window manager would otherwise draw.
+    private property <bool> client-frame: root.no-frame && !root.maximized && !root.full-screen;
     private property <bool> compact-primary-nav-visible: root.compact-layout
         && !root.compose_open && !root.calendar_editor_open
         && !(root.active_view == "mail" && root.mail-compact-page == "message")
@@ -1111,13 +1137,46 @@ export component AppWindow inherits Window {
             : ColorScheme.unknown;
     }
 
+    changed width => { root.sync-window-chrome(); }
+    changed full-screen => { root.sync-window-chrome(); }
+    changed compact-layout => { root.sync-window-chrome(); }
+    private property <length> chrome-band: WindowChrome.band-height;
+    private property <length> chrome-trailing: WindowChrome.trailing-width;
+    changed chrome-band => { WindowChrome.geometry-changed(); }
+    changed chrome-trailing => { WindowChrome.geometry-changed(); }
+
+    function sync-window-chrome() {
+        WindowChrome.window-width = root.width;
+        WindowChrome.full-screen = root.full-screen;
+        WindowChrome.compact = root.compact-layout;
+        WindowChrome.top-bar = root.top-bar;
+        TabsUi.enabled = root.top-bar;
+    }
+
+    // Seeds WindowChrome once; the handlers above keep it current. A child
+    // element runs this so AppWindow's own init stays free for tooling.
+    Rectangle {
+        width: 0px;
+        height: 0px;
+        init => { root.sync-window-chrome(); }
+    }
+
+    // Toolbar rows sit above this band; wherever they have no interactive
+    // content, input falls through to it and moves the window.
+    if WindowChrome.controls-visible : WindowDragArea {
+        x: root.content-x;
+        y: root.safe-area-insets.top;
+        width: root.content-width;
+        height: WindowChrome.band-height;
+    }
+
     // Account discovery is asynchronous. Paint a small initial view while
     // neither the cached mailbox nor the onboarding decision is available.
     if !root.startup_ready && !root.startup_failed && root.connected_accounts.length == 0 : Rectangle {
-        x: root.safe-area-insets.left;
-        y: root.safe-area-insets.top;
-        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        x: root.content-x;
+        y: root.content-y;
+        width: root.content-width;
+        height: root.content-height;
         background: root.page-bg;
         accessible-role: groupbox;
         accessible-label: I18n.loading-local-data();
@@ -1154,10 +1213,10 @@ export component AppWindow inherits Window {
         // Do not construct the mailbox on a fresh profile. `visible: false`
         // retains the entire tree, and constructing it before the account
         // query touches code and assets that onboarding never needs.
-        x: root.safe-area-insets.left;
-        y: root.safe-area-insets.top;
-        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        x: root.content-x;
+        y: root.content-y;
+        width: root.content-width;
+        height: root.content-height;
         background: root.page-bg;
 
         product-rail := ProductRail {
@@ -1865,10 +1924,10 @@ export component AppWindow inherits Window {
     }
 
     if root.trash-delete-open : ConfirmationDialog {
-        x: root.safe-area-insets.left;
-        y: root.safe-area-insets.top;
-        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        x: root.content-x;
+        y: root.content-y;
+        width: root.content-width;
+        height: root.content-height;
         z: 16000;
         open <=> root.trash-delete-open;
         title: root.trash-delete-kind == "empty" ? @tr("Empty Trash?") : @tr("Delete permanently?");
@@ -1897,10 +1956,10 @@ export component AppWindow inherits Window {
     }
 
     if root.folder-dialog-open : FolderDialog {
-        x: root.safe-area-insets.left;
-        y: root.safe-area-insets.top;
-        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        x: root.content-x;
+        y: root.content-y;
+        width: root.content-width;
+        height: root.content-height;
         z: 15000;
         mode: root.folder-dialog-mode;
         item-kind: root.folder-dialog-item-kind;
@@ -1951,10 +2010,10 @@ export component AppWindow inherits Window {
     // Slint conditional elements are instantiated lazily. The comparatively
     // large onboarding form is unnecessary on normal launches with an account.
     if root.startup_ready && root.connected_accounts.length == 0 : OnboardingView {
-        x: root.safe-area-insets.left;
-        y: root.safe-area-insets.top;
-        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        x: root.content-x;
+        y: root.content-y;
+        width: root.content-width;
+        height: root.content-height;
         startup-ready: root.startup_ready;
         account-setup-in-progress: root.account_setup_in_progress;
         oauth-in-progress: root.oauth_in_progress;
@@ -2026,10 +2085,10 @@ export component AppWindow inherits Window {
     }
 
     if root.startup_failed : Rectangle {
-        x: root.safe-area-insets.left;
-        y: root.safe-area-insets.top;
-        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        x: root.content-x;
+        y: root.content-y;
+        width: root.content-width;
+        height: root.content-height;
         background: root.page-bg;
         z: 30000;
 
@@ -2070,7 +2129,7 @@ export component AppWindow inherits Window {
                 }
                 Rectangle { vertical-stretch: 1; }
                 Button {
-                    height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom < 420px ? 44px : 48px;
+                    height: root.content-height < 420px ? 44px : 48px;
                     text: @tr("Retry");
                     primary: true;
                     clicked => {
@@ -2078,7 +2137,7 @@ export component AppWindow inherits Window {
                     }
                 }
                 Button {
-                    height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom < 420px ? 44px : 48px;
+                    height: root.content-height < 420px ? 44px : 48px;
                     text: @tr("Copy diagnostics");
                     clicked => {
                         diagnostic-copy.text = root.diagnostics_text;
@@ -2097,12 +2156,58 @@ export component AppWindow inherits Window {
         }
     }
     AttachmentPreviewDialog {
-        x: root.safe-area-insets.left; y: root.safe-area-insets.top;
-        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        x: root.content-x; y: root.content-y;
+        width: root.content-width;
+        height: root.content-height;
         compact: root.compact-layout;
     }
 
     OpenPgpReader { width: parent.width; height: parent.height; }
 
+    // Keep the startup shell movable while its input is blocked.
+    if WindowChrome.controls-visible && !root.startup_ready : WindowDragArea {
+        x: root.content-x;
+        y: root.safe-area-insets.top;
+        width: root.content-width;
+        height: WindowChrome.band-height;
+        z: 20001;
+    }
+
+    // Above every layer, including startup and modal overlays, so the window
+    // can always be minimized, maximized and closed.
+    if root.top-bar : WindowTopBar {
+        x: root.content-x;
+        y: root.safe-area-insets.top;
+        width: root.content-width;
+        height: WindowChrome.band-height;
+        z: 40000;
+        // The active tab follows the open conversation or mailbox.
+        live-title: root.active_view != "mail" ? ""
+            : root.has_selected && root.selected_subject != "" ? root.selected_subject
+            : root.selected_scope_title;
+        background-color: root.sidebar-bg;
+        divider-color: root.border;
+        title-color: root.title-color;
+        accent-color: root.accent;
+        active-tab-background: AppTheme.surface;
+        hover-background: AppTheme.muted-control-bg;
+        muted-color: root.muted-text;
+    }
+
+    if WindowChrome.controls-visible : WindowControls {
+        x: root.content-x;
+        y: root.safe-area-insets.top;
+        width: root.content-width;
+        height: WindowChrome.band-height;
+        z: 50000;
+        maximized: root.maximized;
+        foreground: root.title-color;
+        background-color: AppTheme.surface;
+    }
+
+    if root.client-frame : Rectangle {
+        z: 50001;
+        border-width: 1px;
+        border-color: AppTheme.control-border;
+    }
 }

@@ -3,7 +3,11 @@ use super::*;
 use flectar_mail_core::{
     Core,
     mail_security::{MailSecurity, OpenedMessage},
-    models::{AccountConfig, SenderIdentity, Settings, Signature, SignatureDefaults},
+    models::{
+        AccountConfig, SenderIdentity, SenderIdentitySource, Settings, Signature,
+        SignatureDefaults,
+    },
+    sender_identities::{ManualIdentityPolicy, manual_identity_policy},
 };
 use slint::SharedString;
 use std::{cell::Cell, future::Future};
@@ -137,12 +141,51 @@ fn identity_label(identity: &SenderIdentity) -> String {
     }
 }
 
+/// Concrete addresses that may be offered as From. Wildcard identities are
+/// authorizations shown in settings, not addresses.
 fn verified_identities(identities: &[SenderIdentity]) -> Vec<SenderIdentity> {
     identities
         .iter()
-        .filter(|identity| identity.is_verified())
+        .filter(|identity| identity.is_selectable())
         .cloned()
         .collect()
+}
+
+fn identity_rows(identities: &[SenderIdentity]) -> Vec<SenderIdentityRow> {
+    identities
+        .iter()
+        .map(|identity| SenderIdentityRow {
+            email: identity.email.clone().into(),
+            name: identity
+                .display_name
+                .as_deref()
+                .filter(|name| !name.trim().eq_ignore_ascii_case(&identity.email))
+                .unwrap_or_default()
+                .into(),
+            reply_to: identity.reply_to_email.clone().unwrap_or_default().into(),
+            primary: identity.is_primary,
+            manual: identity.source == SenderIdentitySource::Manual,
+            pending: !identity.is_verified(),
+            wildcard: identity.is_wildcard(),
+            delivery: identity.delivery_status.as_str().into(),
+            error: identity.delivery_error.clone().unwrap_or_default().into(),
+        })
+        .collect()
+}
+
+fn policy_name(config: &AccountConfig) -> &'static str {
+    match manual_identity_policy(config) {
+        ManualIdentityPolicy::Any => "any",
+        ManualIdentityPolicy::WithinWildcard => "wildcard",
+        ManualIdentityPolicy::Never => "never",
+    }
+}
+
+fn clear_sender_form(ui: &AccountMailPreferences<'_>) {
+    ui.set_sender_form_email("".into());
+    ui.set_sender_form_name("".into());
+    ui.set_sender_form_reply_to("".into());
+    ui.set_sender_form_editing(false);
 }
 
 fn project_identities(
@@ -167,6 +210,8 @@ fn project_identities(
             .collect::<Vec<_>>(),
     )));
     ui.set_sender_identities(ModelRc::new(VecModel::from(choices)));
+    ui.set_sender_identity_rows(ModelRc::new(VecModel::from(identity_rows(identities))));
+    ui.set_sender_identity_policy(policy_name(config).into());
     let configured = config.settings.default_sender_email.as_deref();
     let index = configured
         .and_then(|email| {
@@ -182,27 +227,31 @@ fn project_identities(
         .or_else(|| verified.iter().position(|identity| identity.is_primary))
         .unwrap_or(0);
     ui.set_default_sender_index(i32::try_from(index).unwrap_or(0));
-    let pending = identities
-        .iter()
-        .filter(|identity| !identity.is_verified())
-        .count();
     let status = if let Some(warning) = refresh_warning {
         format!("Using cached identities: {warning}")
-    } else if pending > 0 {
-        format!(
-            "{pending} sender {} awaiting provider verification and cannot be selected.",
-            if pending == 1 {
-                "identity is"
-            } else {
-                "identities are"
-            }
-        )
-    } else if verified.len() > 1 {
-        format!("{} verified sender identities available.", verified.len())
     } else {
-        "Only the authenticated account address is available.".to_owned()
+        String::new()
     };
     ui.set_sender_identity_status(status.into());
+}
+
+/// Re-read identities after a local edit without another provider refresh.
+async fn local_identities(
+    core: &Core,
+    account_id: i64,
+) -> Result<(AccountConfig, Vec<SenderIdentity>), String> {
+    let identities = core
+        .list_sender_identities(account_id)
+        .await
+        .map_err(|error| error.to_string())?;
+    let config = core
+        .list_account_configs()
+        .await
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|config| config.id == account_id)
+        .ok_or_else(|| "the account is no longer connected".to_owned())?;
+    Ok((config, identities))
 }
 
 async fn refreshed_preferences(
@@ -288,6 +337,9 @@ pub(super) fn register(
         ui.set_sender_identity_names(ModelRc::default());
         ui.set_default_sender_index(0);
         ui.set_sender_identity_status("".into());
+        ui.set_sender_identity_rows(ModelRc::default());
+        ui.set_sender_identity_policy("never".into());
+        clear_sender_form(&ui);
         ui.invoke_edit_signature(-1);
         ui.set_fingerprint("".into());
         ui.set_recipient_keys("".into());
@@ -322,6 +374,7 @@ pub(super) fn register(
                             ui.set_status("".into());
                             ui.set_key_inventory("".into());
                             project(&app, &settings, config.id);
+                            clear_sender_form(&ui);
                             project_identities(&app, config, &identities, warning.as_deref());
                             ui.invoke_edit_signature(-1);
                             let p = &config.settings.security;
@@ -403,6 +456,116 @@ pub(super) fn register(
                     .map_err(|error| error.to_string())
             },
             |app, result| status(&app, result, "Default sender identity saved."),
+        );
+    });
+    let weak = app.as_weak();
+    let state_save_sender = state.clone();
+    let work = tasks.clone();
+    ui.on_save_sender_identity(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let ui = app.global::<AccountMailPreferences>();
+        if ui.get_busy() || ui.get_account_id() <= 0 {
+            return;
+        }
+        let account_id = i64::from(ui.get_account_id());
+        let Some(core) = core(&state_save_sender) else {
+            return;
+        };
+        let email = ui.get_sender_form_email().to_string();
+        let optional = |value: SharedString| {
+            let value = value.trim().to_owned();
+            (!value.is_empty()).then_some(value)
+        };
+        let name = optional(ui.get_sender_form_name());
+        let reply_to = optional(ui.get_sender_form_reply_to());
+        let editing = ui.get_sender_form_editing();
+        work.spawn(
+            &app,
+            true,
+            async move {
+                core.save_sender_identity(account_id, email, name, reply_to)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                local_identities(&core, account_id).await
+            },
+            move |app, result| {
+                let ui = app.global::<AccountMailPreferences>();
+                match result {
+                    Ok((config, identities)) => {
+                        clear_sender_form(&ui);
+                        project_identities(&app, &config, &identities, None);
+                        ui.set_status(
+                            if editing {
+                                "Sender address saved."
+                            } else {
+                                "Sender address added. It can now be chosen in the composer."
+                            }
+                            .into(),
+                        );
+                    }
+                    Err(error) => ui.set_status(error.into()),
+                }
+            },
+        );
+    });
+    let weak = app.as_weak();
+    ui.on_edit_sender_identity(move |email| {
+        let Some(app) = weak.upgrade() else { return };
+        let ui = app.global::<AccountMailPreferences>();
+        let Some(row) = ui
+            .get_sender_identity_rows()
+            .iter()
+            .find(|row| row.manual && row.email == email)
+        else {
+            return;
+        };
+        ui.set_sender_form_email(row.email);
+        ui.set_sender_form_name(row.name);
+        ui.set_sender_form_reply_to(row.reply_to);
+        ui.set_sender_form_editing(true);
+    });
+    let weak = app.as_weak();
+    ui.on_clear_sender_form(move || {
+        if let Some(app) = weak.upgrade() {
+            clear_sender_form(&app.global::<AccountMailPreferences>());
+        }
+    });
+    let weak = app.as_weak();
+    let state_remove_sender = state.clone();
+    let work = tasks.clone();
+    ui.on_remove_sender_identity(move |email| {
+        let Some(app) = weak.upgrade() else { return };
+        let ui = app.global::<AccountMailPreferences>();
+        if ui.get_busy() || ui.get_account_id() <= 0 {
+            return;
+        }
+        let account_id = i64::from(ui.get_account_id());
+        let Some(core) = core(&state_remove_sender) else {
+            return;
+        };
+        let email = email.to_string();
+        work.spawn(
+            &app,
+            true,
+            async move {
+                core.remove_sender_identity(account_id, email)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                local_identities(&core, account_id).await
+            },
+            move |app, result| {
+                let ui = app.global::<AccountMailPreferences>();
+                match result {
+                    Ok((config, identities)) => {
+                        if ui.get_sender_form_editing() {
+                            clear_sender_form(&ui);
+                        }
+                        project_identities(&app, &config, &identities, None);
+                        ui.set_status("Sender address removed.".into());
+                    }
+                    Err(error) => ui.set_status(error.into()),
+                }
+            },
         );
     });
     let weak = app.as_weak();
@@ -918,7 +1081,31 @@ fn register_composer(
                         else {
                             return;
                         };
-                        let identities = verified_identities(&identities);
+                        let requested = ui.get_composer_sender_email().to_string();
+                        let identities = {
+                            let all = identities;
+                            let mut selectable = verified_identities(&all);
+                            // A reply to an address under a server wildcard
+                            // (`*@domain`) answers from that exact address.
+                            if !requested.is_empty()
+                                && !selectable
+                                    .iter()
+                                    .any(|identity| identity.email.eq_ignore_ascii_case(&requested))
+                                && let Some(wildcard) = all.iter().find(|identity| {
+                                    identity.is_verified()
+                                        && identity.is_wildcard()
+                                        && identity.authorizes(&requested)
+                                })
+                            {
+                                selectable.push(SenderIdentity {
+                                    email: requested.clone(),
+                                    is_primary: false,
+                                    is_provider_default: false,
+                                    ..wildcard.clone()
+                                });
+                            }
+                            selectable
+                        };
                         let sender_choices = identities
                             .iter()
                             .map(|identity| SenderIdentityChoice {
@@ -935,7 +1122,6 @@ fn register_composer(
                         ui.set_composer_sender_identities(ModelRc::new(VecModel::from(
                             sender_choices,
                         )));
-                        let requested = ui.get_composer_sender_email().to_string();
                         let default_email = config.settings.default_sender_email.as_deref();
                         let sender_index = (!requested.is_empty())
                             .then(|| {

@@ -141,12 +141,12 @@ fn validate_folder_leaf(value: &str) -> Result<String> {
 pub use crate::db::repo::notifications::{NotificationOutboxItem, RoutedTab};
 pub use crate::db::snapshot::DatabaseSnapshotManifest;
 
-/// Read the pane width needed to lay out the first application frame.
+/// Read the presentation state needed to lay out the first application frame.
 ///
 /// This is a best-effort presentation bootstrap. Normal core startup remains
 /// authoritative for loading and validating the complete settings model.
-pub fn startup_workspace_list_pane_width(paths: &Paths) -> Option<i64> {
-    db::startup_workspace_list_pane_width(&paths.db_file())
+pub fn startup_presentation(paths: &Paths) -> models::StartupPresentation {
+    db::startup_presentation(&paths.db_file())
 }
 
 fn normalize_account_email(value: &str) -> Option<String> {
@@ -2462,6 +2462,7 @@ impl Core {
         }];
         let out = crate::mime::OutgoingMessage {
             from,
+            reply_to: None,
             to: &recipients,
             cc: &[],
             bcc: &[],
@@ -2802,7 +2803,6 @@ impl Core {
             let parent_remote = parent.as_ref().and_then(|folder| folder.jmap_id.clone());
             let parent_local_id = parent.as_ref().map(|folder| folder.id);
             let mailbox = connected
-                .client
                 .mailbox_create(&name, parent_remote, jmap_client::mailbox::Role::None)
                 .await
                 .map_err(jmap::client::map_error)?;
@@ -2927,7 +2927,6 @@ impl Core {
                 .as_deref()
                 .ok_or_else(|| CoreError::NotFound(format!("remote folder {folder_id}")))?;
             connected
-                .client
                 .mailbox_rename(remote_id, &name)
                 .await
                 .map_err(jmap::client::map_error)?;
@@ -3005,7 +3004,6 @@ impl Core {
                     CoreError::NotFound(format!("remote folder {}", candidate.id))
                 })?;
                 connected
-                    .client
                     .mailbox_destroy(remote_id, true)
                     .await
                     .map_err(jmap::client::map_error)?;

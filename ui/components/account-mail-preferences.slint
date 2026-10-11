@@ -8,6 +8,18 @@ import { SettingsSelectRow, SettingsSwitchRow } from "settings-components.slint"
 
 export struct SignatureChoice { id: string, name: string, text: string }
 export struct SenderIdentityChoice { email: string, label: string }
+export struct SenderIdentityRow {
+    email: string,
+    name: string,
+    reply-to: string,
+    primary: bool,
+    manual: bool,
+    pending: bool,
+    wildcard: bool,
+    // "unknown" | "confirmed" | "rejected"
+    delivery: string,
+    error: string,
+}
 export global AccountMailPreferences {
     in-out property <int> account-id: -1;
     in-out property <string> account-label;
@@ -32,6 +44,14 @@ export global AccountMailPreferences {
     in-out property <[string]> sender-identity-names;
     in-out property <int> default-sender-index: 0;
     in-out property <string> sender-identity-status;
+    in-out property <[SenderIdentityRow]> sender-identity-rows;
+    // "any": the server judges at send time; "wildcard": only addresses inside
+    // a server *@domain identity; "never": the provider is authoritative.
+    in-out property <string> sender-identity-policy: "never";
+    in-out property <string> sender-form-email;
+    in-out property <string> sender-form-name;
+    in-out property <string> sender-form-reply-to;
+    in-out property <bool> sender-form-editing: false;
     callback load(int);
     callback edit-signature(int);
     callback save-signature;
@@ -39,6 +59,10 @@ export global AccountMailPreferences {
     callback save-defaults;
     callback refresh-sender-identities;
     callback save-default-sender;
+    callback save-sender-identity;
+    callback edit-sender-identity(string);
+    callback remove-sender-identity(string);
+    callback clear-sender-form;
     callback save-security;
     callback key-action(string);
     callback composer-reset;
@@ -71,6 +95,27 @@ export component AccountMailPreferencesPanel inherits Rectangle {
     border-width: 1px;
     border-color: AppTheme.input-border;
     vertical-stretch: 0;
+    pure function identity-detail(identity: SenderIdentityRow) -> string {
+        if identity.wildcard {
+            return @tr("Server allows any address at this domain");
+        }
+        if identity.pending {
+            return @tr("Awaiting verification by the provider; cannot be selected yet");
+        }
+        if identity.delivery == "rejected" {
+            return identity.error != "" ? @tr("The server refused the last message from this address: {}", identity.error) : @tr("The server refused the last message from this address");
+        }
+        if identity.primary {
+            return identity.reply-to != "" ? @tr("Sign-in address · replies go to {}", identity.reply-to) : @tr("Sign-in address");
+        }
+        if identity.manual {
+            if identity.delivery == "confirmed" {
+                return identity.reply-to != "" ? @tr("Added by you · accepted by the server · replies go to {}", identity.reply-to) : @tr("Added by you · accepted by the server");
+            }
+            return identity.reply-to != "" ? @tr("Added by you · not used yet · replies go to {}", identity.reply-to) : @tr("Added by you · not used yet");
+        }
+        return identity.reply-to != "" ? @tr("Provided by the server · replies go to {}", identity.reply-to) : @tr("Provided by the server");
+    }
     content := VerticalBox {
         padding: 20px; spacing: 12px; alignment: start;
         Text { min-height: self.preferred-height; vertical-stretch: 0; text: @tr("Sender identities, signatures & OpenPGP"); color: AppTheme.heading; font-size: TypeScale.subtitle; font-weight: 700; }
@@ -101,6 +146,37 @@ export component AccountMailPreferencesPanel inherits Rectangle {
                     Button { text: @tr("Refresh sender identities"); enabled: !AccountMailPreferences.busy; clicked => { AccountMailPreferences.refresh-sender-identities(); } }
                 }
                 if AccountMailPreferences.sender-identity-status != "" : Text { min-height: self.preferred-height; vertical-stretch: 0; text: AccountMailPreferences.sender-identity-status; color: AppTheme.secondary; wrap: word-wrap; }
+                for identity in AccountMailPreferences.sender-identity-rows : VerticalBox {
+                    padding: 0px; spacing: 4px;
+                    Text { min-height: self.preferred-height; vertical-stretch: 0; text: identity.name != "" ? identity.name + "  <" + identity.email + ">" : identity.email; color: AppTheme.heading; overflow: elide; }
+                    Text { min-height: self.preferred-height; vertical-stretch: 0; text: root.identity-detail(identity); color: identity.delivery == "rejected" ? AppTheme.destructive : AppTheme.secondary; wrap: word-wrap; }
+                    if identity.manual : HorizontalBox {
+                        padding: 0px;
+                        alignment: start;
+                        Button { text: @tr("Edit"); enabled: !AccountMailPreferences.busy; clicked => { AccountMailPreferences.edit-sender-identity(identity.email); } }
+                        Button { text: @tr("Remove"); destructive: true; enabled: !AccountMailPreferences.busy; clicked => { AccountMailPreferences.remove-sender-identity(identity.email); } }
+                    }
+                }
+                if AccountMailPreferences.sender-identity-policy == "never" : Text { min-height: self.preferred-height; vertical-stretch: 0; text: @tr("Gmail decides which addresses you can send from. Add an address in Gmail settings under Accounts › Send mail as, then refresh sender identities."); color: AppTheme.secondary; wrap: word-wrap; }
+                if AccountMailPreferences.sender-identity-policy != "never" : VerticalBox {
+                    padding: 0px; spacing: 8px;
+                    Text { min-height: self.preferred-height; vertical-stretch: 0; text: AccountMailPreferences.sender-form-editing ? @tr("Edit sender address") : @tr("Add a sender address"); color: AppTheme.heading; font-weight: 600; }
+                    Text {
+                        min-height: self.preferred-height; vertical-stretch: 0; color: AppTheme.secondary; wrap: word-wrap;
+                        text: AccountMailPreferences.sender-identity-policy == "wildcard"
+                            ? @tr("Your server lets you send from any address at the domains shown as wildcards. Add the addresses you want to choose from.")
+                            : @tr("Add an alias or another address your mail server lets you send from. The server decides when you send; Flectar shows whether it accepted the last message.");
+                    }
+                    LineEdit { text <=> AccountMailPreferences.sender-form-email; input-label: @tr("Email address"); placeholder-text: @tr("alias@example.com"); read-only: AccountMailPreferences.sender-form-editing; enabled: !AccountMailPreferences.busy; }
+                    LineEdit { text <=> AccountMailPreferences.sender-form-name; input-label: @tr("Sender name"); placeholder-text: @tr("Name shown to recipients (optional)"); enabled: !AccountMailPreferences.busy; }
+                    LineEdit { text <=> AccountMailPreferences.sender-form-reply-to; input-label: @tr("Reply-to address"); placeholder-text: @tr("Where replies should go (optional)"); enabled: !AccountMailPreferences.busy; }
+                    HorizontalBox {
+                        padding: 0px;
+                        alignment: start;
+                        Button { text: AccountMailPreferences.sender-form-editing ? @tr("Save sender address") : @tr("Add sender address"); primary: true; enabled: !AccountMailPreferences.busy && AccountMailPreferences.sender-form-email != ""; clicked => { AccountMailPreferences.save-sender-identity(); } }
+                        if AccountMailPreferences.sender-form-editing : Button { text: @tr("Cancel"); enabled: !AccountMailPreferences.busy; clicked => { AccountMailPreferences.clear-sender-form(); } }
+                    }
+                }
                 Rectangle { height: 1px; background: AppTheme.input-border; }
                 SettingsSelectRow {
                     compact: root.compact; title: @tr("Edit signature"); description: @tr("Saved separately for each account.");

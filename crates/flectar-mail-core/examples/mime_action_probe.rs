@@ -89,6 +89,7 @@ fn main() {
             _ => {
                 let message = mime::OutgoingMessage {
                     from: from.clone(),
+                    reply_to: None,
                     to: &recipients,
                     cc: &[],
                     bcc: &[],

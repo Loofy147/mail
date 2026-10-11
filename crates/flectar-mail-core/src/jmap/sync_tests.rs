@@ -166,60 +166,83 @@ async fn server(
             }
             let mut body = vec![0; length];
             stream.read_exact(&mut body).await.unwrap();
+            let mut status = "200 OK";
             let response = if get {
-                session.clone()
+                session.to_string()
             } else {
                 let request: Value = serde_json::from_slice(&body).unwrap();
-                let mut responses = Vec::new();
-                for call in request["methodCalls"].as_array().unwrap() {
-                    let method = call[0].as_str().unwrap();
-                    let args = &call[1];
-                    let call_id = &call[2];
-                    let payload = match method {
-                        "Email/changes" => {
-                            let changes = changes.as_ref().unwrap();
-                            json!({
-                                "accountId": "mail-account", "oldState": "state-0",
-                                "newState": "state-1", "hasMoreChanges": false,
-                                "created": changes["created"], "updated": changes["updated"],
-                                "destroyed": changes["destroyed"]
-                            })
-                        }
-                        "Email/query" => json!({
-                            "accountId": "mail-account", "queryState": "query-0",
-                            "canCalculateChanges": false, "position": 0,
-                            "ids": emails.iter().map(|email| &email["id"]).collect::<Vec<_>>(),
-                            "total": emails.len()
-                        }),
-                        "Email/get" => {
-                            let ids = args["ids"].as_array().unwrap();
-                            if fail_on.as_ref().is_some_and(|(id, fail)| {
-                                ids.iter().any(|requested| requested == id)
-                                    && fail.load(Ordering::SeqCst)
-                            }) {
-                                responses.push(json!(["error", {"type": "serverFail"}, call_id]));
-                                continue;
+                // Like Fastmail, reject any capability the session does not
+                // advertise (RFC 8620 §3.6.1).
+                let unknown = request["using"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .find(|capability| session["capabilities"].get(*capability).is_none());
+                if let Some(capability) = unknown {
+                    status = "400 Bad Request";
+                    json!({
+                        "type": "urn:ietf:params:jmap:error:unknownCapability",
+                        "status": 400,
+                        "detail": format!("unknown capability {capability}")
+                    })
+                    .to_string()
+                } else {
+                    let mut responses = Vec::new();
+                    for call in request["methodCalls"].as_array().unwrap() {
+                        let method = call[0].as_str().unwrap();
+                        let args = &call[1];
+                        let call_id = &call[2];
+                        let payload = match method {
+                            "Email/changes" => {
+                                let changes = changes.as_ref().unwrap();
+                                json!({
+                                    "accountId": "mail-account", "oldState": "state-0",
+                                    "newState": "state-1", "hasMoreChanges": false,
+                                    "created": changes["created"], "updated": changes["updated"],
+                                    "destroyed": changes["destroyed"]
+                                })
                             }
-                            let mut list = Vec::new();
-                            let mut not_found = Vec::new();
-                            for id in ids {
-                                match emails.iter().find(|email| &email["id"] == id) {
-                                    Some(email) => list.push(email),
-                                    None => not_found.push(id),
+                            "Email/query" => json!({
+                                "accountId": "mail-account", "queryState": "query-0",
+                                "canCalculateChanges": false, "position": 0,
+                                "ids": emails.iter().map(|email| &email["id"]).collect::<Vec<_>>(),
+                                "total": emails.len()
+                            }),
+                            "Email/get" => {
+                                let ids = args["ids"].as_array().unwrap();
+                                if fail_on.as_ref().is_some_and(|(id, fail)| {
+                                    ids.iter().any(|requested| requested == id)
+                                        && fail.load(Ordering::SeqCst)
+                                }) {
+                                    responses
+                                        .push(json!(["error", {"type": "serverFail"}, call_id]));
+                                    continue;
                                 }
+                                let mut list = Vec::new();
+                                let mut not_found = Vec::new();
+                                for id in ids {
+                                    match emails.iter().find(|email| &email["id"] == id) {
+                                        Some(email) => list.push(email),
+                                        None => not_found.push(id),
+                                    }
+                                }
+                                let state = if changes.is_some() {
+                                    "state-1"
+                                } else {
+                                    "state-0"
+                                };
+                                json!({"accountId": "mail-account", "state": state, "list": list, "notFound": not_found})
                             }
-                            let state = if changes.is_some() { "state-1" } else { "state-0" };
-                            json!({"accountId": "mail-account", "state": state, "list": list, "notFound": not_found})
-                        }
-                        other => panic!("unexpected method {other}"),
-                    };
-                    responses.push(json!([method, payload, call_id]));
+                            other => panic!("unexpected method {other}"),
+                        };
+                        responses.push(json!([method, payload, call_id]));
+                    }
+                    json!({"methodResponses": responses, "sessionState": "session-0"}).to_string()
                 }
-                json!({"methodResponses": responses, "sessionState": "session-0"})
-            }
-            .to_string();
+            };
             let http = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 response.len(),
                 response
             );
@@ -461,4 +484,24 @@ async fn destroyed_only_sync_removes_empty_conversation() {
         })
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn requests_declare_only_advertised_capabilities() {
+    let (connected, task) = server(Vec::new(), None, None).await;
+    let request = connected.request();
+    let using = request
+        .using
+        .iter()
+        .map(|capability| capability.as_ref())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        using,
+        [
+            client::CORE_CAPABILITY,
+            client::MAIL_CAPABILITY,
+            client::SUBMISSION_CAPABILITY
+        ]
+    );
+    task.abort();
 }

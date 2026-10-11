@@ -392,6 +392,70 @@ pub struct SenderIdentity {
     /// are recorded as `accepted` as well.
     pub verification_status: String,
     pub last_synced_at: i64,
+    pub source: SenderIdentitySource,
+    /// Outcome of the most recent submission from this address.
+    pub delivery_status: SenderDeliveryStatus,
+    /// Server reply that rejected the most recent submission, if any.
+    pub delivery_error: Option<String>,
+}
+
+/// Where a sender identity came from.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum SenderIdentitySource {
+    /// Mirrors the authenticated address or an authoritative provider
+    /// endpoint (Gmail SendAs, JMAP Identity/get). Refreshes replace it.
+    #[default]
+    Provider,
+    /// Declared by the user for a server that cannot list its permitted From
+    /// addresses (plain SMTP, Microsoft). Refreshes keep it.
+    Manual,
+}
+
+impl SenderIdentitySource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Provider => "provider",
+            Self::Manual => "manual",
+        }
+    }
+
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "manual" => Self::Manual,
+            _ => Self::Provider,
+        }
+    }
+}
+
+/// What the last real submission taught us about an address. SMTP has no
+/// standard query for permitted senders, so this is the only evidence for
+/// manual identities.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum SenderDeliveryStatus {
+    #[default]
+    Unknown,
+    Confirmed,
+    Rejected,
+}
+
+impl SenderDeliveryStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Confirmed => "confirmed",
+            Self::Rejected => "rejected",
+        }
+    }
+
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "confirmed" => Self::Confirmed,
+            "rejected" => Self::Rejected,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 impl SenderIdentity {
@@ -399,11 +463,53 @@ impl SenderIdentity {
         self.is_primary || self.verification_status == "accepted"
     }
 
+    /// RFC 8621 §6: an identity whose local part is exactly `*` permits any
+    /// address at its domain. It is an authorization, not a sendable address.
+    pub fn is_wildcard(&self) -> bool {
+        self.email
+            .split_once('@')
+            .is_some_and(|(local, _)| local == "*")
+    }
+
+    /// Whether the identity can be offered as a concrete From address.
+    pub fn is_selectable(&self) -> bool {
+        self.is_verified() && !self.is_wildcard()
+    }
+
+    /// Whether this identity authorizes `email` as a From address, either
+    /// exactly or through a wildcard domain.
+    pub fn authorizes(&self, email: &str) -> bool {
+        let email = email.trim();
+        if self.email.eq_ignore_ascii_case(email) {
+            return !self.is_wildcard();
+        }
+        let (Some((local, domain)), Some((candidate_local, candidate_domain))) =
+            (self.email.rsplit_once('@'), email.rsplit_once('@'))
+        else {
+            return false;
+        };
+        local == "*"
+            && !candidate_local.is_empty()
+            && candidate_local != "*"
+            && domain.eq_ignore_ascii_case(candidate_domain)
+    }
+
     pub fn address(&self) -> Address {
         Address {
             name: self.display_name.clone(),
             email: self.email.clone(),
         }
+    }
+
+    pub fn reply_to(&self) -> Option<Address> {
+        self.reply_to_email
+            .as_deref()
+            .map(str::trim)
+            .filter(|email| !email.is_empty() && !email.eq_ignore_ascii_case(&self.email))
+            .map(|email| Address {
+                name: None,
+                email: email.to_owned(),
+            })
     }
 }
 
@@ -1205,6 +1311,10 @@ pub struct Settings {
     /// The established layout width remains the default and hard minimum.
     #[serde(default = "default_workspace_list_pane_width")]
     pub workspace_list_pane_width: i64,
+    /// Desktop window frame: "system" keeps the platform title bar, while
+    /// "integrated" draws the title bar and window controls in the app.
+    #[serde(default = "default_window_frame")]
+    pub window_frame: String,
     /// Render mailbox and folder icons with a single neutral color instead of
     /// the default semantic palette.
     #[serde(default)]
@@ -1457,6 +1567,26 @@ fn default_workspace_list_pane_width() -> i64 {
 pub fn normalized_workspace_list_pane_width(width: i64) -> i64 {
     width.clamp(MIN_WORKSPACE_LIST_PANE_WIDTH, MAX_WORKSPACE_LIST_PANE_WIDTH)
 }
+
+fn default_window_frame() -> String {
+    "system".into()
+}
+
+/// Unknown values, including those written by newer versions, fall back to
+/// the platform frame so a window can never start without any controls.
+pub fn normalized_window_frame(frame: &str) -> &'static str {
+    match frame {
+        "integrated" => "integrated",
+        _ => "system",
+    }
+}
+
+/// Presentation preferences read before the main window is first shown.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct StartupPresentation {
+    pub workspace_list_pane_width: Option<i64>,
+    pub window_frame: Option<String>,
+}
 fn default_theme_preset() -> String {
     "default".into()
 }
@@ -1472,6 +1602,7 @@ impl Default for Settings {
             group_mail_by_date: true,
             workspace_layout: default_workspace_layout(),
             workspace_list_pane_width: default_workspace_list_pane_width(),
+            window_frame: default_window_frame(),
             monochrome_sidebar_icons: false,
             language: "system".into(),
             calendar_week_start: default_calendar_week_start(),

@@ -14,6 +14,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/009_contact_learning_clean_start.sql"),
     include_str!("migrations/010_folder_hierarchy.sql"),
     include_str!("migrations/011_pending_body_page.sql"),
+    include_str!("migrations/012_sender_identity_sources.sql"),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
@@ -278,6 +279,17 @@ mod tests {
                 true,
                 "accepted".into(),
             )
+        );
+        let (source, delivery): (String, String) = conn
+            .query_row(
+                "SELECT source,delivery_status FROM sender_identities WHERE account_id=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (source.as_str(), delivery.as_str()),
+            ("provider", "unknown")
         );
     }
 

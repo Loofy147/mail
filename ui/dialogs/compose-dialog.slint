@@ -1,5 +1,6 @@
 import { AccountRow, ComposeAttachment, ComposeContact, ComposeEditorTile, EmailTemplateRow } from "../models.slint";
 import { EmailComposer } from "../components/email-composer.slint";
+import { WindowChrome } from "../window-chrome.slint";
 
 // Window-level placement and application callbacks stay here; the reusable
 // EmailComposer owns recipient fields, rich-text controls, attachments, and
@@ -90,11 +91,14 @@ export component ComposeDialog inherits Rectangle {
     // clicks and keyboard focus cannot leak into the message list behind it.
     if !root.compact : TouchArea { }
 
+    // The desktop panel stays below integrated window controls.
+    private property <length> controls-inset: WindowChrome.controls-visible ? WindowChrome.band-height : 0px;
+
     composer := EmailComposer {
         x: root.compact ? 0px : (parent.width - self.width) / 2;
-        y: root.compact ? 0px : (parent.height - self.height) / 2;
+        y: root.compact ? 0px : root.controls-inset + (parent.height - root.controls-inset - self.height) / 2;
         width: root.compact ? parent.width : min(820px, parent.width - 64px);
-        height: root.compact ? parent.height : min(700px, parent.height - 64px);
+        height: root.compact ? parent.height : min(700px, parent.height - root.controls-inset - 64px);
         compact: root.compact;
         attachment-picker-supported: root.attachment-picker-supported;
         open: root.compose_open;

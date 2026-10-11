@@ -541,6 +541,7 @@ pub(super) fn register_data_management_callbacks(
                     "soundEnabled": settings.sound_enabled,
                     "syncIntervalMinutes": settings.sync_interval_minutes,
                     "closeToTray": settings.close_to_tray,
+                    "windowFrame": settings.window_frame,
                     "showAccountMarkers": settings.show_account_badges,
                     "accountColors": account_colors,
                     "mailProfiles": mail_profiles
@@ -726,6 +727,13 @@ pub(super) fn register_data_management_callbacks(
                     .and_then(|value| value.as_bool())
                 {
                     settings.show_avatars = enabled;
+                }
+                if let Some(frame) = preferences
+                    .get("windowFrame")
+                    .and_then(|value| value.as_str())
+                    && matches!(frame, "system" | "integrated")
+                {
+                    settings.window_frame = frame.to_owned();
                 }
                 if let Some(layout) = preferences
                     .get("workspaceLayout")
@@ -922,6 +930,10 @@ pub(super) fn register_data_management_callbacks(
                     .set_preference(settings.message_appearance.as_str().into());
                 app.set_show_avatars(settings.show_avatars);
                 app.set_show_account_markers(settings.show_account_badges);
+                crate::window_chrome::apply_preference(
+                    &app,
+                    crate::window_chrome::WindowFrame::parse(&settings.window_frame),
+                );
                 app.set_workspace_layout(settings.workspace_layout.clone().into());
                 app.set_workspace_list_pane_width(
                     normalized_workspace_list_pane_width(settings.workspace_list_pane_width)
@@ -1045,6 +1057,11 @@ pub(super) fn register_data_management_callbacks(
                     app.set_mark_read_on_open(true);
                     app.set_remote_images_enabled(false);
                     app.set_close_to_tray(false);
+                    crate::window_chrome::apply_preference(
+                        &app,
+                        crate::window_chrome::WindowFrame::System,
+                    );
+                    app.global::<TabsUi>().invoke_reset();
                     app.invoke_cancel_storage_usage();
                     app.set_storage_loaded(false);
                     app.set_storage_usage(ModelRc::default());

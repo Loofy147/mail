@@ -724,6 +724,10 @@ pub(crate) fn apply_settings(app: &AppWindow, settings: &Settings) {
     app.set_contact_suggest_all_accounts(settings.contact_suggest_all_accounts);
     app.set_suggest_learned_contacts(settings.suggest_learned_contacts);
     app.set_close_to_tray(settings.close_to_tray && !cfg!(feature = "flatpak"));
+    crate::window_chrome::apply_preference(
+        app,
+        crate::window_chrome::WindowFrame::parse(&settings.window_frame),
+    );
     app.set_monochrome_sidebar_icons(settings.monochrome_sidebar_icons);
     app.set_show_avatars(settings.show_avatars);
     app.set_group_mail_by_date(settings.group_mail_by_date);

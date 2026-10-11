@@ -5,6 +5,7 @@ import { IconButton } from "controls.slint";
 import { ModeButton, RecipientRow } from "composer-controls.slint";
 import { ComposerContactMenu } from "composer-contact-menu.slint";
 import { TypeScale } from "../typography.slint";
+import { WindowControlsClearance } from "../window-chrome.slint";
 
 export component ComposerHeader inherits Rectangle {
     in property <bool> compact: false;
@@ -20,6 +21,9 @@ export component ComposerHeader inherits Rectangle {
             height: 52px;
             background: root.raised-color;
 
+            // The full-window compact composer can sit under the window controls.
+            header-clearance := WindowControlsClearance { width: parent.width; height: parent.height; }
+
             Rectangle {
                 x: 0px;
                 y: parent.height - 1px;
@@ -29,8 +33,8 @@ export component ComposerHeader inherits Rectangle {
             }
 
             Text {
-                x: 18px;
-                width: parent.width - 120px;
+                x: max(18px, header-clearance.leading);
+                width: parent.width - self.x - 102px - header-clearance.trailing;
                 height: parent.height;
                 text: root.mode == "reply" ? @tr("Reply")
                     : root.mode == "reply_all" ? @tr("Reply all")
@@ -44,7 +48,7 @@ export component ComposerHeader inherits Rectangle {
             }
 
             IconButton {
-                x: parent.width - (root.compact ? 52px : 42px);
+                x: parent.width - (root.compact ? 52px : 42px) - header-clearance.trailing;
                 y: root.compact ? 4px : 10px;
                 width: root.compact ? 44px : 32px;
                 height: root.compact ? 44px : 32px;

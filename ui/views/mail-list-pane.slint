@@ -10,6 +10,7 @@ import { LayoutMetrics, MotionSettings } from "../design-system.slint";
 import { ScrollFade } from "../components/scroll-fade.slint";
 import { WorkspaceSearchToolbar } from "../components/workspace-layout.slint";
 import { WorkspaceListLoadingRow, WorkspaceListTransition } from "../components/workspace-list.slint";
+import { TabsUi } from "../components/workspace-navigation.slint";
 
 component MailListLabelChip inherits Rectangle {
     in property <string> name;
@@ -844,7 +845,14 @@ export component MailListPane inherits Rectangle {
                                             height: parent.height;
                                             mouse-cursor: pointer;
                                             pointer-event(event) => {
-                                                if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                                                // Middle-click and Ctrl/Command-click open the
+                                                // conversation in a background tab, as in a browser.
+                                                if (TabsUi.enabled && event.kind == PointerEventKind.down
+                                                    && (event.button == PointerEventButton.middle
+                                                        || (event.button == PointerEventButton.left
+                                                            && (event.modifiers.control || event.modifiers.meta)))) {
+                                                    TabsUi.open-conversation(mail-data.id, event.modifiers.shift);
+                                                } else if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
                                                     if root.compact {
                                                         mail-row.touch-start-x = row-hit.mouse-x / 1px;
                                                         mail-row.touch-start-y = row-hit.mouse-y / 1px;
@@ -902,6 +910,8 @@ export component MailListPane inherits Rectangle {
                                         }
 
                                         Menu {
+                                            if TabsUi.enabled : MenuItem { title: @tr("Open in new tab"); activated => { TabsUi.open-conversation(mail-data.id, true); } }
+                                            if TabsUi.enabled : MenuSeparator {}
                                             MenuItem { title: mail-data.starred ? @tr("Remove star") : @tr("Star message"); activated => { root.message_action_for_email(mail-data.id, mail-data.starred ? "unstar" : "star"); } }
                                             MenuItem { title: mail-data.unread ? @tr("Mark as read") : @tr("Mark as unread"); activated => { root.message_action_for_email(mail-data.id, mail-data.unread ? "mark_read" : "mark_unread"); } }
                                             MenuItem { title: @tr("Archive"); activated => { root.message_action_for_email(mail-data.id, "archive"); } }

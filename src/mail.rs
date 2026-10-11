@@ -953,6 +953,15 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    pub async fn set_window_frame(&self, frame: &str) -> Result<(), String> {
+        let mut settings = self.load_settings().await?;
+        settings.window_frame = frame.to_owned();
+        self.core
+            .set_settings(settings)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
     pub async fn reorder_account(
         &self,
         source_id: i64,

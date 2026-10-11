@@ -1,7 +1,7 @@
 //! Native window and system-tray lifecycle wiring.
 //!
 //! Window close behavior, tray actions, and persistence of the close-to-tray
-//! preference form one lifecycle boundary. Keeping that boundary here makes
+//! and window-frame preferences form one lifecycle boundary. Keeping that boundary here makes
 //! the application composition root independent of platform window policy.
 
 use super::*;
@@ -94,6 +94,34 @@ pub(super) fn register_window_preference_callbacks(
             return;
         };
         app.set_settings_open(!app.get_settings_open());
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_frame = Rc::clone(state);
+    let runtime_for_frame = Rc::clone(runtime);
+    app.global::<WindowChrome>().on_choose(move |integrated| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let frame = if integrated {
+            window_chrome::WindowFrame::Integrated
+        } else {
+            window_chrome::WindowFrame::System
+        };
+        window_chrome::apply_preference(&app, frame);
+        let Some(core) = state_for_frame.borrow().core.clone() else {
+            app.set_sync_status(UiMessage::plain(
+                "Window frame updated for this session.",
+            ));
+            return;
+        };
+        match runtime_for_frame.block_on(core.set_window_frame(frame.key())) {
+            Ok(()) => app.set_sync_status(UiMessage::plain("Window frame preference saved.")),
+            Err(error) => app.set_sync_status(UiMessage::detail(
+                "Could not save window frame preference: {}",
+                error,
+            )),
+        }
     });
 
     let app_weak = app.as_weak();

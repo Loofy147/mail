@@ -85,6 +85,7 @@ fn main() {
             name: None,
             email: "sender@example.test".into(),
         },
+        reply_to: None,
         to: &to,
         cc: &[],
         bcc: &[],
