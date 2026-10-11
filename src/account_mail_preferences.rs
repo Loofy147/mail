@@ -279,6 +279,21 @@ async fn refreshed_preferences(
     Ok((settings, configs, identities, warning))
 }
 
+/// The composer reads saved identities so opening it never waits on the
+/// network. Account sync keeps them current and submission re-validates the
+/// chosen From address.
+async fn cached_preferences(
+    core: &Core,
+    account_id: i64,
+) -> Result<(Settings, Vec<AccountConfig>, Vec<SenderIdentity>), String> {
+    let identities = core
+        .list_sender_identities(account_id)
+        .await
+        .map_err(|error| error.to_string())?;
+    let (settings, configs) = preferences(core).await?;
+    Ok((settings, configs, identities))
+}
+
 pub(super) fn register(
     app: &AppWindow,
     state: &Rc<RefCell<InboxState>>,
@@ -1067,14 +1082,14 @@ fn register_composer(
         work.spawn(
             &app,
             false,
-            async move { refreshed_preferences(&core, i64::from(account_id)).await },
+            async move { cached_preferences(&core, i64::from(account_id)).await },
             move |app, result| {
                 if generation.get() != expected || app.get_compose_account_id() != account_id {
                     return;
                 }
                 let ui = app.global::<AccountMailPreferences>();
                 match result {
-                    Ok((settings, configs, identities, warning)) => {
+                    Ok((settings, configs, identities)) => {
                         let Some(config) = configs
                             .iter()
                             .find(|config| config.id == i64::from(account_id))
@@ -1166,13 +1181,6 @@ fn register_composer(
                             }
                             .into(),
                         );
-                        if let Some(warning) = warning {
-                            app.set_compose_notice(UiMessage::detail(
-                                "Could not refresh sender identities; using cached values: {}",
-                                warning,
-                            ));
-                            app.set_compose_notice_is_error(false);
-                        }
                         if app.get_compose_mode() == "draft" {
                             *managed.borrow_mut() = None;
                             ui.set_composer_signature_index(0);

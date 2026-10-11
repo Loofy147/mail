@@ -188,7 +188,7 @@ msgstr "История переписки доступна"
 msgid "New address-book entry"
 msgstr "Новая запись в адресной книге"
 
-#: ui/app.slint:121 ui/app.slint:843 ui/components/composer-fields.slint:66
+#: ui/app.slint:121 ui/app.slint:842 ui/components/composer-fields.slint:66
 #: ui/dialogs/compose-dialog.slint:37
 msgid "No connected account"
 msgstr "Нет подключённой учётной записи"
@@ -1158,109 +1158,103 @@ msgid "Choose a verified sender identity for this message."
 msgstr "Выберите подтверждённые данные отправителя для этого письма."
 
 #: ui/app.slint:435
-msgid "Could not refresh sender identities; using cached values: {}"
-msgstr ""
-"Не удалось обновить данные отправителей; используются кешированные значения: "
-"{}"
-
-#: ui/app.slint:436
 msgid "Connect an account before saving or sending mail."
 msgstr "Подключите учётную запись перед сохранением или отправкой почты."
 
-#: ui/app.slint:437
+#: ui/app.slint:436
 msgid "Message queued for delivery (action {})."
 msgstr "Сообщение поставлено в очередь на отправку (действие {})."
 
-#: ui/app.slint:438
+#: ui/app.slint:437
 msgid "Sending message…"
 msgstr "Отправка сообщения…"
 
-#: ui/app.slint:439
+#: ui/app.slint:438
 msgid "Message sent."
 msgstr "Сообщение отправлено."
 
-#: ui/app.slint:440
+#: ui/app.slint:439
 msgid "Message was not sent: {} Your draft is preserved."
 msgstr "Сообщение не отправлено: {} Ваш черновик сохранён."
 
-#: ui/app.slint:441
+#: ui/app.slint:440
 msgid "Draft saved locally (#{})."
 msgstr "Черновик сохранён локально (#{})."
 
-#: ui/app.slint:442
+#: ui/app.slint:441
 msgid "Compose failed: {}"
 msgstr "Создание письма не удалось: {}"
 
-#: ui/app.slint:443
+#: ui/app.slint:442
 msgid "Connect an account before managing email templates."
 msgstr "Подключите учётную запись перед управлением шаблонами писем."
 
-#: ui/app.slint:444
+#: ui/app.slint:443
 msgid "Could not load email templates: {}"
 msgstr "Не удалось загрузить шаблоны писем: {}"
 
-#: ui/app.slint:445
+#: ui/app.slint:444
 msgid "Enter a template name."
 msgstr "Введите имя шаблона."
 
-#: ui/app.slint:446
+#: ui/app.slint:445
 msgid "Add a subject or message to the template."
 msgstr "Добавьте тему или сообщение в шаблон."
 
-#: ui/app.slint:447
+#: ui/app.slint:446
 msgid "Email template saved."
 msgstr "Шаблон письма сохранён."
 
-#: ui/app.slint:448
+#: ui/app.slint:447
 msgid "Could not save email template: {}"
 msgstr "Не удалось сохранить шаблон письма: {}"
 
-#: ui/app.slint:449
+#: ui/app.slint:448
 msgid "Email template deleted."
 msgstr "Шаблон письма удалён."
 
-#: ui/app.slint:450
+#: ui/app.slint:449
 msgid "Could not delete email template: {}"
 msgstr "Не удалось удалить шаблон письма: {}"
 
-#: ui/app.slint:451
+#: ui/app.slint:450
 msgid "Email template is no longer available."
 msgstr "Шаблон письма больше недоступен."
 
-#: ui/app.slint:452
+#: ui/app.slint:451
 msgid "Email template inserted."
 msgstr "Шаблон письма вставлен."
 
-#: ui/app.slint:453
+#: ui/app.slint:452
 msgid "Email template inserted, but its usage could not be saved: {}"
 msgstr ""
 "Шаблон письма вставлен, но сведения о его использовании не сохранены: {}"
 
-#: ui/app.slint:454
+#: ui/app.slint:453
 msgid "IMAP port must be between 1 and 65535."
 msgstr "Порт IMAP должен быть в диапазоне от 1 до 65535."
 
-#: ui/app.slint:455
+#: ui/app.slint:454
 msgid "SMTP port must be between 1 and 65535."
 msgstr "Порт SMTP должен быть в диапазоне от 1 до 65535."
 
-#: ui/app.slint:456
+#: ui/app.slint:455
 msgid "Local mail data is unavailable. Retry startup."
 msgstr "Локальные данные почты недоступны. Повторите запуск."
 
-#: ui/app.slint:457
+#: ui/app.slint:456
 msgid "Discovering JMAP and checking capabilities…"
 msgstr "Обнаружение JMAP и проверка возможностей…"
 
-#: ui/app.slint:458
+#: ui/app.slint:457
 msgid "Certificate imported. Connect to verify the server."
 msgstr "Сертификат импортирован. Подключитесь для проверки сервера."
 
-#: ui/app.slint:459
+#: ui/app.slint:458
 msgid "Could not load account preferences: {}"
 msgstr "Не удалось загрузить настройки учётной записи: {}"
 
-#: ui/app.slint:460
+#: ui/app.slint:459
 msgid ""
 "Your edited signature was preserved. Choose No signature to keep it as "
 "message text before inserting another."
@@ -1268,19 +1262,19 @@ msgstr ""
 "Ваша изменённая подпись сохранена. Выберите «Без подписи», чтобы оставить её "
 "как текст сообщения перед вставкой другой."
 
-#: ui/app.slint:461
+#: ui/app.slint:460
 msgid "Certificate import failed: {}"
 msgstr "Импорт сертификата не удался: {}"
 
-#: ui/app.slint:462
+#: ui/app.slint:461
 msgid "Paste the PEM certificate into the certificate field."
 msgstr "Вставьте сертификат PEM в поле сертификата."
 
-#: ui/app.slint:463
+#: ui/app.slint:462
 msgid "Testing IMAP and SMTP connections…"
 msgstr "Проверка подключений IMAP и SMTP…"
 
-#: ui/app.slint:468
+#: ui/app.slint:467
 msgid ""
 "Another browser authorization is already in progress; finish it or choose "
 "Cancel."
@@ -1288,147 +1282,147 @@ msgstr ""
 "Другая авторизация в браузере уже выполняется; завершите её или выберите "
 "«Отмена»."
 
-#: ui/app.slint:469 ui/dialogs/settings-dialog.slint:1642
+#: ui/app.slint:468 ui/dialogs/settings-dialog.slint:1642
 #: ui/dialogs/settings-dialog.slint:1685 ui/views/onboarding-view.slint:152
 msgid "Add app keys in Sign-in settings to enable this provider."
 msgstr ""
 "Добавьте ключи приложения в настройках входа, чтобы включить этого "
 "провайдера."
 
-#: ui/app.slint:470
+#: ui/app.slint:469
 msgid "Choose Gmail or Outlook OAuth."
 msgstr "Выберите OAuth Gmail или Outlook."
 
-#: ui/app.slint:471
+#: ui/app.slint:470
 msgid "Complete sign-in in your browser, or choose Cancel here."
 msgstr "Завершите вход в браузере или выберите «Отмена» здесь."
 
-#: ui/app.slint:472
+#: ui/app.slint:471
 msgid "Cancelling browser sign-in…"
 msgstr "Отмена входа через браузер…"
 
-#: ui/app.slint:473
+#: ui/app.slint:472
 msgid "Finishing browser sign-in…"
 msgstr "Завершение входа через браузер…"
 
-#: ui/app.slint:474
+#: ui/app.slint:473
 msgid "Could not use that browser address: {}"
 msgstr "Не удалось использовать этот адрес браузера: {}"
 
-#: ui/app.slint:475
+#: ui/app.slint:474
 msgid "Calendar core is unavailable."
 msgstr "Ядро календаря недоступно."
 
-#: ui/app.slint:476
+#: ui/app.slint:475
 msgid "Account no longer exists."
 msgstr "Учётная запись больше не существует."
 
-#: ui/app.slint:477
+#: ui/app.slint:476
 msgid "Authorize calendar access in your browser."
 msgstr "Авторизуйте доступ к календарю в браузере."
 
-#: ui/app.slint:478
+#: ui/app.slint:477
 msgid "OAuth app keys saved."
 msgstr "Ключи приложения OAuth сохранены."
 
-#: ui/app.slint:479
+#: ui/app.slint:478
 msgid "{} OAuth settings saved."
 msgstr "Настройки OAuth {} сохранены."
 
-#: ui/app.slint:480
+#: ui/app.slint:479
 msgid "OAuth settings failed: {}"
 msgstr "Настройки OAuth не удались: {}"
 
-#: ui/app.slint:481
+#: ui/app.slint:480
 msgid "Mail refresh failed: {}"
 msgstr "Обновление почты не удалось: {}"
 
-#: ui/app.slint:482
+#: ui/app.slint:481
 msgid "Mail filter failed: {}"
 msgstr "Фильтрация почты не удалась: {}"
 
-#: ui/app.slint:483
+#: ui/app.slint:482
 msgid "Mail pagination failed: {}"
 msgstr "Постраничная навигация по почте не удалась: {}"
 
-#: ui/app.slint:484
+#: ui/app.slint:483
 msgid "Could not mark message as read: {}"
 msgstr "Не удалось отметить сообщение как прочитанное: {}"
 
-#: ui/app.slint:485 ui/views/mail-reading-pane.slint:223
+#: ui/app.slint:484 ui/views/mail-reading-pane.slint:223
 #: ui/views/mail-reading-pane.slint:1162
 msgid "Loading message…"
 msgstr "Загрузка сообщения…"
 
-#: ui/app.slint:491 ui/components/workspace-navigation.slint:551
+#: ui/app.slint:490 ui/components/workspace-navigation.slint:551
 #: ui/tray.slint:9 ui/tray.slint:10
 msgid "Flectar Mail"
 msgstr "Flectar Mail"
 
-#: ui/app.slint:1061 ui/app.slint:1074
+#: ui/app.slint:1060 ui/app.slint:1073
 msgid "Global Labels (local only)"
 msgstr "Глобальные метки (только локально)"
 
-#: ui/app.slint:1933
+#: ui/app.slint:1932
 msgid "Empty Trash?"
 msgstr "Очистить корзину?"
 
-#: ui/app.slint:1933 ui/views/files-view.slint:538
+#: ui/app.slint:1932 ui/views/files-view.slint:538
 msgid "Delete permanently?"
 msgstr "Удалить безвозвратно?"
 
-#: ui/app.slint:1937
+#: ui/app.slint:1936
 msgid ""
 "Permanently delete all messages in Trash across every connected account?"
 msgstr ""
 "Безвозвратно удалить все письма из корзины во всех подключённых учётных "
 "записях?"
 
-#: ui/app.slint:1938
+#: ui/app.slint:1937
 msgid "Permanently delete all messages in this account’s Trash?"
 msgstr "Безвозвратно удалить все письма из корзины этой учётной записи?"
 
-#: ui/app.slint:1940
+#: ui/app.slint:1939
 msgid "Permanently delete the selected conversations from Trash?"
 msgstr "Безвозвратно удалить выбранные переписки из корзины?"
 
-#: ui/app.slint:1941
+#: ui/app.slint:1940
 msgid "Permanently delete this conversation from Trash?"
 msgstr "Безвозвратно удалить эту переписку из корзины?"
 
-#: ui/app.slint:1942 ui/components/calendar.slint:926
+#: ui/app.slint:1941 ui/components/calendar.slint:926
 msgid "This action cannot be undone."
 msgstr "Это действие нельзя отменить."
 
-#: ui/app.slint:1943
+#: ui/app.slint:1942
 msgid "Empty Trash"
 msgstr "Очистить корзину"
 
-#: ui/app.slint:1943 ui/views/files-view.slint:620
+#: ui/app.slint:1942 ui/views/files-view.slint:620
 msgid "Delete permanently"
 msgstr "Удалить безвозвратно"
 
-#: ui/app.slint:2106
+#: ui/app.slint:2105
 msgid "Mailbox startup failed"
 msgstr "Запуск почтового ящика не удался"
 
-#: ui/app.slint:2112
+#: ui/app.slint:2111
 msgid "Flectar Mail could not open local storage"
 msgstr "Flectar Mail не смог открыть локальное хранилище"
 
-#: ui/app.slint:2125
+#: ui/app.slint:2124
 msgid "Diagnostic ID: {}"
 msgstr "Идентификатор диагностики: {}"
 
-#: ui/app.slint:2128
+#: ui/app.slint:2127
 msgid "Diagnostic ID {}"
 msgstr "Идентификатор диагностики {}"
 
-#: ui/app.slint:2133
+#: ui/app.slint:2132
 msgid "Retry"
 msgstr "Повторить"
 
-#: ui/app.slint:2141 ui/components/copyable-diagnostic.slint:38
+#: ui/app.slint:2140 ui/components/copyable-diagnostic.slint:38
 msgid "Copy diagnostics"
 msgstr "Копировать диагностику"
 
@@ -5597,3 +5591,8 @@ msgstr "Восстановить"
 #: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Maximize"
 msgstr "Развернуть"
+
+#~ msgid "Could not refresh sender identities; using cached values: {}"
+#~ msgstr ""
+#~ "Не удалось обновить данные отправителей; используются кешированные "
+#~ "значения: {}"
