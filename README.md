@@ -8,7 +8,7 @@
   </p>
   <div align="center">
     <h3>Email, made fast again</h3>
-    <p>Built from the ground up for speed. Flectar Mail delivers native performance, instant startup, and as little as 100 MB of RAM.</p>
+    <p>Built from the ground up for speed. Flectar Mail delivers native performance, instant startup, and as little as 90 MB of RAM.</p>
   </div>
   <p>
     <a href="https://flectar.com">Website</a> ·
@@ -30,7 +30,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-  <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail unified inbox and message view">
+  <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail on macOS showing the unified inbox and message view">
 </picture>
 
 Flectar Mail is a lightweight, native home for your email, calendars, and
@@ -41,7 +41,7 @@ fraction of the memory of a typical web-based mail client.
 
 - **Fast from the first click.** A native interface and local-first data path
   get you to your inbox without waiting on a browser runtime.
-- **As little as 100 MB of RAM.** Flectar Mail is deliberately designed to keep
+- **As little as 90 MB of RAM.** Flectar Mail is deliberately designed to keep
   memory use low, even with a full-featured inbox at your fingertips.
 - **Everything in one place.** Move between mail, calendars, and contacts
   without stitching together separate apps.
@@ -85,7 +85,7 @@ S/MIME and mobile OpenPGP are not currently supported.
 > Some messages, especially those with complex or unusual markup and CSS, may
 > not render correctly yet.
 
-To keep the client fully native and memory usage around 100 MB, Flectar Mail
+To keep the client fully native and memory usage around 90 MB, Flectar Mail
 renders email HTML with [Blitz](https://github.com/DioxusLabs/blitz), a Rust
 HTML/CSS renderer from the Dioxus team, instead of embedding a browser or
 WebView.
@@ -159,24 +159,151 @@ layout, arrow keys highlight messages and **Enter** opens them; **Escape** or
   <img src="resources/screenshots/desktop-thread-light.png" alt="Flectar Mail conversation with incoming and replied messages">
 </picture>
 
-### Light
+### 🗂️ Tabs
 
-| Full workspace | Minimal workspace |
-| --- | --- |
-| ![Flectar Mail full desktop workspace in light mode](resources/screenshots/desktop-light.png) | ![Flectar Mail minimal desktop workspace in light mode](resources/screenshots/desktop-minimal-light.png) |
+Keep several places open at once with browser-style tabs. Each tab remembers
+its own location: a mailbox, search, or open conversation, or the calendar,
+contacts, or files. Middle-click or Ctrl/⌘-click a message to open it in a
+background tab (add Shift to switch to it), or choose **Open in new tab** from
+its menu. Drag tabs to reorder them, middle-click a tab to close it, and pick
+up where you left off the next time you open Flectar Mail.
 
-### Dark
+**Ctrl/⌘+T** opens a new tab and **Ctrl/⌘+W** closes the current one.
+**Ctrl+Tab** and **Ctrl+Shift+Tab** cycle through tabs, **Ctrl/⌘+1–8** jump to
+a tab, and **Ctrl/⌘+9** jumps to the last.
 
-| Full workspace | Minimal workspace |
-| --- | --- |
-| ![Flectar Mail full desktop workspace in dark mode](resources/screenshots/desktop-dark.png) | ![Flectar Mail minimal desktop workspace in dark mode](resources/screenshots/desktop-minimal-dark.png) |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-tabs-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-tabs-light.png">
+  <img src="resources/screenshots/desktop-tabs-light.png" alt="Flectar Mail with tabs for several conversations, the calendar, contacts, and files">
+</picture>
+
+### Full and minimal workspaces
+
+<table>
+  <thead>
+    <tr>
+      <th width="50%">Full workspace</th>
+      <th width="50%">Minimal workspace</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td width="50%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
+          <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail full desktop workspace" width="100%">
+        </picture>
+      </td>
+      <td width="50%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-minimal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-minimal-light.png">
+          <img src="resources/screenshots/desktop-minimal-light.png" alt="Flectar Mail minimal desktop workspace" width="100%">
+        </picture>
+      </td>
+    </tr>
+  </tbody>
+</table>
 
 ### Color palettes
 
-| Teal | Green | Purple | Custom |
-| --- | --- | --- | --- |
-| ![Flectar Mail teal palette in light mode](resources/screenshots/desktop-teal-light.png) | ![Flectar Mail green palette in light mode](resources/screenshots/desktop-green-light.png) | ![Flectar Mail purple palette in light mode](resources/screenshots/desktop-purple-light.png) | ![Flectar Mail custom palette in light mode](resources/screenshots/desktop-light.png) |
-| ![Flectar Mail teal palette in dark mode](resources/screenshots/desktop-teal-dark.png) | ![Flectar Mail green palette in dark mode](resources/screenshots/desktop-green-dark.png) | ![Flectar Mail purple palette in dark mode](resources/screenshots/desktop-purple-dark.png) | ![Flectar Mail custom palette in dark mode](resources/screenshots/desktop-dark.png) |
+<table>
+  <thead>
+    <tr>
+      <th width="25%">Teal</th>
+      <th width="25%">Green</th>
+      <th width="25%">Purple</th>
+      <th width="25%">Custom</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td width="25%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-teal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-teal-light.png">
+          <img src="resources/screenshots/desktop-teal-light.png" alt="Flectar Mail teal palette" width="100%">
+        </picture>
+      </td>
+      <td width="25%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-green-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-green-light.png">
+          <img src="resources/screenshots/desktop-green-light.png" alt="Flectar Mail green palette" width="100%">
+        </picture>
+      </td>
+      <td width="25%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-purple-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-purple-light.png">
+          <img src="resources/screenshots/desktop-purple-light.png" alt="Flectar Mail purple palette" width="100%">
+        </picture>
+      </td>
+      <td width="25%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
+          <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail custom palette" width="100%">
+        </picture>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+### 🪟 Frameless window
+
+Turn on **Frameless window** in Settings → General → Interface to replace the
+system title bar with window controls in the toolbar. Each platform keeps its
+own behavior: macOS keeps the native traffic lights, Windows keeps Snap Layouts
+and the system menu, and Linux follows the button order and title-bar actions
+configured for GNOME or KDE.
+
+<table>
+  <tbody>
+    <tr>
+      <th width="50%">macOS</th>
+      <th width="50%">Windows</th>
+    </tr>
+    <tr>
+      <td width="50%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/macos-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/macos-light.png">
+          <img src="resources/screenshots/frameless/macos-light.png" alt="Flectar Mail frameless window on macOS" width="100%">
+        </picture>
+      </td>
+      <td width="50%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/windows-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/windows-light.png">
+          <img src="resources/screenshots/frameless/windows-light.png" alt="Flectar Mail frameless window on Windows" width="100%">
+        </picture>
+      </td>
+    </tr>
+    <tr>
+      <th width="50%">Linux (GNOME)</th>
+      <th width="50%">Linux (KDE)</th>
+    </tr>
+    <tr>
+      <td width="50%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-gnome-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-gnome-light.png">
+          <img src="resources/screenshots/frameless/linux-gnome-light.png" alt="Flectar Mail frameless window on GNOME" width="100%">
+        </picture>
+      </td>
+      <td width="50%">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-kde-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-kde-light.png">
+          <img src="resources/screenshots/frameless/linux-kde-light.png" alt="Flectar Mail frameless window on KDE Plasma" width="100%">
+        </picture>
+      </td>
+    </tr>
+  </tbody>
+</table>
 
 ### 📅 Calendar, contacts, and files
 
