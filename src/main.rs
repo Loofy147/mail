@@ -35,6 +35,8 @@ mod reader_validation;
 mod screenshot_frameless;
 #[cfg(test)]
 mod screenshot_fixture;
+#[cfg(test)]
+mod screenshot_traffic_lights;
 mod remote;
 mod renderer;
 mod renderer_input_controller;

@@ -5,9 +5,8 @@
 //! application window loads the same prepared Cloudflare fixture as the normal
 //! screenshots and is rendered offscreen, so the images
 //! follow the shipping layout. macOS keeps AppKit's native traffic lights,
-//! which an offscreen renderer cannot draw; they are painted in the standard
-//! macOS colours at macOS 26's size and spacing, where the application moves
-//! them to.
+//! which an offscreen renderer cannot draw; `screenshot_traffic_lights` paints
+//! them at macOS 26's size and spacing, where the application moves them to.
 use super::*;
 use slint::Rgb8Pixel;
 use slint::platform::{
@@ -26,100 +25,20 @@ impl Platform for Headless {
     }
 }
 
-/// The standard macOS window-control colours: each light's fill and the
-/// slightly darker rim AppKit draws around it.
-struct TrafficLight {
-    fill: [u8; 3],
-    rim: [u8; 3],
-}
-
-const TRAFFIC_LIGHTS: [TrafficLight; 3] = [
-    TrafficLight {
-        fill: [0xff, 0x5f, 0x57],
-        rim: [0xe0, 0x44, 0x3e],
-    },
-    TrafficLight {
-        fill: [0xfe, 0xbc, 0x2e],
-        rim: [0xde, 0xa1, 0x23],
-    },
-    TrafficLight {
-        fill: [0x28, 0xc8, 0x40],
-        rim: [0x1a, 0xab, 0x29],
-    },
-];
-
-/// Paint one antialiased light of `diameter` (physical pixels) with a
-/// hairline rim.
-fn paint_traffic_light(
-    pixels: &mut [Rgb8Pixel],
-    width: usize,
-    center: (f32, f32),
-    diameter: f32,
-    light: &TrafficLight,
-) {
-    let radius = diameter / 2.0;
-    let rim_width = 0.5 * SCALE;
-    let (cx, cy) = center;
-    let x0 = (cx - radius - 1.0).floor().max(0.0) as usize;
-    let y0 = (cy - radius - 1.0).floor().max(0.0) as usize;
-    let x1 = (cx + radius + 1.0).ceil() as usize;
-    let y1 = (cy + radius + 1.0).ceil() as usize;
-    const SAMPLES: usize = 4;
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let mut inside = 0.0;
-            let mut rim = 0.0;
-            for sy in 0..SAMPLES {
-                for sx in 0..SAMPLES {
-                    let px = x as f32 + (sx as f32 + 0.5) / SAMPLES as f32 - cx;
-                    let py = y as f32 + (sy as f32 + 0.5) / SAMPLES as f32 - cy;
-                    let distance = (px * px + py * py).sqrt();
-                    if distance <= radius {
-                        inside += 1.0;
-                        if distance > radius - rim_width {
-                            rim += 1.0;
-                        }
-                    }
-                }
-            }
-            if inside == 0.0 {
-                continue;
-            }
-            let coverage = inside / (SAMPLES * SAMPLES) as f32;
-            let rim = rim / inside;
-            let shade = |channel: usize| {
-                let fill = f32::from(light.fill[channel]);
-                fill + (f32::from(light.rim[channel]) - fill) * rim
-            };
-            let pixel = &mut pixels[y * width + x];
-            let blend = |base: u8, color: f32| {
-                (f32::from(base) * (1.0 - coverage) + color * coverage).round() as u8
-            };
-            pixel.r = blend(pixel.r, shade(0));
-            pixel.g = blend(pixel.g, shade(1));
-            pixel.b = blend(pixel.b, shade(2));
-        }
-    }
-}
-
 /// Paint the lights where the application places the native buttons, using
 /// the macOS 26 metrics `WindowChrome` defaults to.
-fn paint_traffic_lights(app: &AppWindow, pixels: &mut [Rgb8Pixel], width: usize) {
+fn paint_traffic_lights(app: &AppWindow, image: &mut image::RgbImage) {
     let chrome = app.global::<WindowChrome>();
-    let x = chrome.get_traffic_light_x();
-    let spacing = chrome.get_traffic_light_spacing();
-    let size = chrome.get_traffic_light_size();
-    let center_y = chrome.get_band_height() / 2.0;
-    for (index, light) in TRAFFIC_LIGHTS.iter().enumerate() {
-        let center_x = x + index as f32 * spacing + size / 2.0;
-        paint_traffic_light(
-            pixels,
-            width,
-            (center_x * SCALE, center_y * SCALE),
-            size * SCALE,
-            light,
-        );
-    }
+    screenshot_traffic_lights::paint(
+        image,
+        SCALE,
+        &screenshot_traffic_lights::Metrics {
+            x: chrome.get_traffic_light_x(),
+            spacing: chrome.get_traffic_light_spacing(),
+            size: chrome.get_traffic_light_size(),
+            center_y: chrome.get_band_height() / 2.0,
+        },
+    );
 }
 
 #[test]
@@ -191,19 +110,13 @@ fn frameless_screenshots() {
         window.draw_if_needed(|r| {
             r.render(&mut pixels, physical_width as usize);
         });
+        let bytes: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b]).collect();
+        let mut image = image::RgbImage::from_raw(physical_width, physical_height, bytes).unwrap();
         let chrome = app.global::<WindowChrome>();
         if chrome.get_platform() == "macos" && chrome.get_controls_visible() {
-            paint_traffic_lights(&app, &mut pixels, physical_width as usize);
+            paint_traffic_lights(&app, &mut image);
         }
-        let bytes: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b]).collect();
-        image::save_buffer(
-            out.join(format!("{name}.png")),
-            &bytes,
-            physical_width,
-            physical_height,
-            image::ColorType::Rgb8,
-        )
-        .unwrap();
+        image.save(out.join(format!("{name}.png"))).unwrap();
     };
     let chrome = app.global::<WindowChrome>();
     let controls = |names: &[&str]| {
