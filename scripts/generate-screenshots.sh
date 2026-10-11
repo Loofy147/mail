@@ -294,3 +294,13 @@ render_selected tablet-agenda-light 768 1024 light default default calendar fals
 render_selected tablet-agenda-dark 768 1024 dark default default calendar false false "" agenda
 render_selected mobile-agenda-light 390 844 light default default calendar false false "" agenda
 render_selected mobile-agenda-dark 390 844 dark default default calendar false false "" agenda
+
+# The integrated window frame is rendered from the real application window
+# by an ignored test, because each platform's window controls are chosen at
+# runtime rather than in the static Slint preview.
+if [[ -z "${SCREENSHOT_ONLY:-}" || ",${SCREENSHOT_ONLY}," == *",frameless,"* ]]; then
+  echo "Rendering frameless/*.png"
+  rm -f "$output_dir"/frameless/*.png
+  FLECTAR_FRAMELESS_SCREENSHOTS="$output_dir/frameless" cargo test --quiet --locked \
+    -p flectar-mail --lib screenshot_frameless::frameless_screenshots -- --ignored --exact
+fi
