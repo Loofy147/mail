@@ -453,6 +453,8 @@ fn system_store(account_id: i64, slot: Slot, secret: &str) -> Result<()> {
                     tracing::warn!(slot = slot.as_str(), %error, "could not remove stale credential chunks");
                 }
             }
+            // Other platforms compile a fallback after this block.
+            #[allow(clippy::needless_return)]
             return Ok(());
         }
 
