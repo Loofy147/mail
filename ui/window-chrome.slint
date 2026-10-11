@@ -47,13 +47,17 @@ export global WindowChrome {
     // Leading controls sit in the window's top-left corner, above the
     // product rail, centred on the toolbar row like the trailing controls.
     out property <length> leading-width: !root.controls-visible ? 0px
-        : root.platform == "macos" ? root.traffic-light-x + 2 * root.traffic-light-spacing + 14px + 10px
+        // The gap after the traffic lights matches their inset from the
+        // window edge, so the cluster sits evenly before the tabs.
+        : root.platform == "macos" ? 2 * root.traffic-light-x + 2 * root.traffic-light-spacing + root.traffic-light-size
         : root.platform == "linux" ? root.linux-cluster-width(root.leading-controls.length)
         : 0px;
-    // Rust moves the macOS traffic lights here; AppKit keeps their size and
-    // spacing (14pt buttons, 20pt apart).
+    // Rust moves the macOS traffic lights here, keeping AppKit's own button
+    // pitch and size, and reports both: 14pt buttons 20pt apart before
+    // macOS 26, 14pt buttons 23pt apart from macOS 26 Tahoe.
     out property <length> traffic-light-x: 20px;
-    out property <length> traffic-light-spacing: 20px;
+    in property <length> traffic-light-spacing: 23px;
+    in property <length> traffic-light-size: 14px;
 
     pure function linux-cluster-width(count: int) -> length {
         // 8px from the window edge and 8px before the toolbar content.

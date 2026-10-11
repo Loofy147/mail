@@ -1819,7 +1819,7 @@ msgstr "Exportar mensaje descifrado"
 
 #: ui/components/account-mail-preferences.slint:264
 #: ui/dialogs/settings-dialog.slint:2572 ui/views/files-view.slint:454
-#: ui/views/files-view.slint:655 ui/window-chrome.slint:197
+#: ui/views/files-view.slint:655 ui/window-chrome.slint:201
 msgid "Close"
 msgstr "Cerrar"
 
@@ -5609,14 +5609,14 @@ msgstr ""
 "Déjalo vacío para detectar /.well-known/jmap a partir de tu dominio de "
 "correo."
 
-#: ui/window-chrome.slint:196 ui/window-chrome.slint:233
+#: ui/window-chrome.slint:200 ui/window-chrome.slint:237
 msgid "Minimize"
 msgstr "Minimizar"
 
-#: ui/window-chrome.slint:198 ui/window-chrome.slint:235
+#: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Restore"
 msgstr "Restaurar"
 
-#: ui/window-chrome.slint:198 ui/window-chrome.slint:235
+#: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Maximize"
 msgstr "Maximizar"

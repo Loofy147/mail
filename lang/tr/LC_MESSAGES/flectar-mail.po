@@ -1781,7 +1781,7 @@ msgstr "Şifresi çözülmüş iletiyi dışa aktar"
 
 #: ui/components/account-mail-preferences.slint:264
 #: ui/dialogs/settings-dialog.slint:2572 ui/views/files-view.slint:454
-#: ui/views/files-view.slint:655 ui/window-chrome.slint:197
+#: ui/views/files-view.slint:655 ui/window-chrome.slint:201
 msgid "Close"
 msgstr "Kapat"
 
@@ -5537,14 +5537,14 @@ msgstr "Sunucu adresi (isteğe bağlı)"
 msgid "Leave blank to discover /.well-known/jmap from your email domain."
 msgstr "E-posta etki alanınızdan /.well-known/jmap keşfi için boş bırakın."
 
-#: ui/window-chrome.slint:196 ui/window-chrome.slint:233
+#: ui/window-chrome.slint:200 ui/window-chrome.slint:237
 msgid "Minimize"
 msgstr "Simge durumuna küçült"
 
-#: ui/window-chrome.slint:198 ui/window-chrome.slint:235
+#: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Restore"
 msgstr "Önceki boyuta getir"
 
-#: ui/window-chrome.slint:198 ui/window-chrome.slint:235
+#: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Maximize"
 msgstr "Ekranı kapla"

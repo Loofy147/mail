@@ -96,12 +96,10 @@ fn apply(app: &AppWindow) {
     let chrome = app.global::<WindowChrome>();
     let band_height = f64::from(chrome.get_band_height());
     let traffic_light_x = f64::from(chrome.get_traffic_light_x());
-    let traffic_light_spacing = f64::from(chrome.get_traffic_light_spacing());
-    app.window()
+    let native_metrics = app
+        .window()
         .with_winit_window(|window: &winit::window::Window| {
-            let Some(ns_window) = ns_window(window) else {
-                return;
-            };
+            let ns_window = ns_window(window)?;
             let mut mask = ns_window.styleMask();
             mask.set(NSWindowStyleMask::FullSizeContentView, integrated);
             ns_window.setStyleMask(mask);
@@ -114,16 +112,19 @@ fn apply(app: &AppWindow) {
             ns_window.setMovable(!integrated);
             // Full screen shows AppKit's own title bar; leave it alone.
             if integrated && !mask.contains(NSWindowStyleMask::FullScreen) {
-                place_traffic_lights(
-                    &ns_window,
-                    band_height,
-                    traffic_light_x,
-                    traffic_light_spacing,
-                );
+                place_traffic_lights(&ns_window, band_height, traffic_light_x)
             } else {
                 restore_traffic_lights(&ns_window);
+                None
             }
-        });
+        })
+        .flatten();
+    // Toolbars reserve room from the system's own metrics, which differ
+    // between macOS releases (14pt buttons 23pt apart on macOS 26).
+    if let Some((pitch, size)) = native_metrics {
+        chrome.set_traffic_light_spacing(pitch as f32);
+        chrome.set_traffic_light_size(size as f32);
+    }
 }
 
 fn ns_window(window: &winit::window::Window) -> Option<objc2::rc::Retained<NSWindow>> {
@@ -136,34 +137,38 @@ fn ns_window(window: &winit::window::Window) -> Option<objc2::rc::Retained<NSWin
     view.window()
 }
 
-/// Centre the traffic lights vertically in the toolbar row. The buttons live
-/// in AppKit's title-bar container, which is resized to the row height and
-/// kept at the top of the window.
-fn place_traffic_lights(ns_window: &NSWindow, band_height: f64, x: f64, spacing: f64) {
-    let Some(buttons) = traffic_lights(ns_window) else {
-        return;
-    };
-    let Some(container) = title_bar_container(&buttons[0]) else {
-        return;
-    };
-    if NATIVE_LAYOUT.get().is_none() {
-        NATIVE_LAYOUT.set(Some(NativeLayout {
+/// Centre the traffic lights vertically in the toolbar row, with the close
+/// button at `x`. The buttons live in AppKit's title-bar container, which is
+/// resized to the row height and kept at the top of the window. The group
+/// moves as a whole: AppKit's own size and spacing are kept, as they change
+/// between macOS releases. Returns the native button pitch and width.
+fn place_traffic_lights(ns_window: &NSWindow, band_height: f64, x: f64) -> Option<(f64, f64)> {
+    let buttons = traffic_lights(ns_window)?;
+    let container = title_bar_container(&buttons[0])?;
+    let native = NATIVE_LAYOUT.get().unwrap_or_else(|| {
+        let native = NativeLayout {
             container: container.frame(),
             buttons: buttons.each_ref().map(|button| button.frame().origin),
-        }));
-    }
+        };
+        NATIVE_LAYOUT.set(Some(native));
+        native
+    });
     let mut frame = container.frame();
     frame.size.height = band_height;
     frame.origin.y = ns_window.frame().size.height - band_height;
     container.setFrame(frame);
-    for (index, button) in buttons.iter().enumerate() {
+    for (button, origin) in buttons.iter().zip(native.buttons) {
         let size = button.frame().size;
         button.setFrameOrigin(NSPoint::new(
-            x + index as f64 * spacing,
+            x + origin.x - native.buttons[0].x,
             // The container is not flipped: y grows upwards.
             ((band_height - size.height) / 2.0).round(),
         ));
     }
+    Some((
+        native.buttons[1].x - native.buttons[0].x,
+        buttons[0].frame().size.width,
+    ))
 }
 
 fn restore_traffic_lights(ns_window: &NSWindow) {

@@ -1769,8 +1769,8 @@ msgstr ""
 #: ui/components/account-mail-preferences.slint:264 ui/dialogs/settings-dialog.slint:2572
 #: ui/components/account-mail-preferences.slint:264 ui/dialogs/settings-dialog.slint:2572 ui/views/files-view.slint:454
 #: ui/components/account-mail-preferences.slint:264 ui/dialogs/settings-dialog.slint:2572 ui/views/files-view.slint:454 ui/views/files-view.slint:655
-#: ui/components/account-mail-preferences.slint:264 ui/dialogs/settings-dialog.slint:2572 ui/views/files-view.slint:454 ui/views/files-view.slint:655 ui/window-chrome.slint:197
-#: ui/components/account-mail-preferences.slint:264 ui/dialogs/settings-dialog.slint:2572 ui/views/files-view.slint:454 ui/views/files-view.slint:655 ui/window-chrome.slint:197
+#: ui/components/account-mail-preferences.slint:264 ui/dialogs/settings-dialog.slint:2572 ui/views/files-view.slint:454 ui/views/files-view.slint:655 ui/window-chrome.slint:201
+#: ui/components/account-mail-preferences.slint:264 ui/dialogs/settings-dialog.slint:2572 ui/views/files-view.slint:454 ui/views/files-view.slint:655 ui/window-chrome.slint:201
 msgid "Close"
 msgstr ""
 
@@ -5512,14 +5512,14 @@ msgstr ""
 msgid "Leave blank to discover /.well-known/jmap from your email domain."
 msgstr ""
 
-#: ui/window-chrome.slint:196 ui/window-chrome.slint:233
+#: ui/window-chrome.slint:200 ui/window-chrome.slint:237
 msgid "Minimize"
 msgstr ""
 
-#: ui/window-chrome.slint:198 ui/window-chrome.slint:235
+#: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Restore"
 msgstr ""
 
-#: ui/window-chrome.slint:198 ui/window-chrome.slint:235
+#: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Maximize"
 msgstr ""

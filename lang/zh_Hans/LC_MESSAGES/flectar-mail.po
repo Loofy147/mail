@@ -1756,7 +1756,7 @@ msgstr "导出解密后的邮件"
 
 #: ui/components/account-mail-preferences.slint:264
 #: ui/dialogs/settings-dialog.slint:2572 ui/views/files-view.slint:454
-#: ui/views/files-view.slint:655 ui/window-chrome.slint:197
+#: ui/views/files-view.slint:655 ui/window-chrome.slint:201
 msgid "Close"
 msgstr "关闭"
 
@@ -5436,14 +5436,14 @@ msgstr "服务器地址（可选）"
 msgid "Leave blank to discover /.well-known/jmap from your email domain."
 msgstr "留空则从您的邮件域名自动发现 /.well-known/jmap。"
 
-#: ui/window-chrome.slint:196 ui/window-chrome.slint:233
+#: ui/window-chrome.slint:200 ui/window-chrome.slint:237
 msgid "Minimize"
 msgstr "最小化"
 
-#: ui/window-chrome.slint:198 ui/window-chrome.slint:235
+#: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Restore"
 msgstr "还原"
 
-#: ui/window-chrome.slint:198 ui/window-chrome.slint:235
+#: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Maximize"
 msgstr "最大化"
