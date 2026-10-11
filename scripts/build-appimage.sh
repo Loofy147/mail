@@ -82,12 +82,31 @@ download_tool \
   'https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage' \
   "$appimagetool"
 
+# Winit opens libxkbcommon-x11 with dlopen(), so linuxdeploy cannot discover
+# it from the executable. Hosts without it (Ubuntu without Qt, minimal X11
+# sessions such as the AppImageHub test runner) panic before the first window.
+# It is not on the AppImage excludelist; bundle it with its xkbcommon/xcb-xkb
+# dependencies, like the deb and rpm packages declare it.
+xkbcommon_x11_dir="$(pkg-config --variable=libdir xkbcommon-x11)"
+xkbcommon_x11="$xkbcommon_x11_dir/libxkbcommon-x11.so.0"
+if [[ ! -f "$xkbcommon_x11" ]]; then
+  printf 'libxkbcommon-x11.so.0 was not found; install libxkbcommon-x11-dev.\n' >&2
+  exit 1
+fi
+
 # Deploy ordinary ELF dependencies. Winit uses the host Wayland/X11 client
 # libraries through its normal backend discovery rather than a toolkit plugin.
 VERSION="$app_version" APPIMAGE_EXTRACT_AND_RUN="${APPIMAGE_EXTRACT_AND_RUN:-1}" \
   "$linuxdeploy" \
   --appdir "$app_dir" \
-  --executable "$app_dir/usr/bin/flectar-mail"
+  --executable "$app_dir/usr/bin/flectar-mail" \
+  --library "$xkbcommon_x11"
+for library in libxkbcommon-x11.so.0 libxkbcommon.so.0; do
+  if [[ ! -e "$app_dir/usr/lib/$library" ]]; then
+    printf 'linuxdeploy did not bundle %s.\n' "$library" >&2
+    exit 1
+  fi
+done
 
 # Preserve the allocator tuning and stable process name from our launcher.
 cp "$project_dir/resources/AppRun" "$app_dir/AppRun"
