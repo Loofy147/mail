@@ -20,21 +20,28 @@ use pulldown_cmark::{Options, Parser, html};
 use std::sync::Arc;
 
 #[cfg(test)]
-#[derive(Clone, Copy)]
+#[derive(serde::Deserialize)]
 pub struct EmailFixture {
     pub id: i32,
-    pub account: &'static str,
-    pub folder: &'static str,
-    pub sender: &'static str,
-    pub address: &'static str,
-    pub initials: &'static str,
-    pub subject: &'static str,
-    pub preview: &'static str,
-    pub time: &'static str,
-    pub to: &'static str,
-    pub label: &'static str,
+    pub account: String,
+    pub folder: String,
+    pub sender: String,
+    pub address: String,
+    pub initials: String,
+    pub subject: String,
+    pub preview: String,
+    pub time: String,
+    #[serde(default)]
+    pub to: String,
+    #[serde(rename = "label_summary")]
+    pub label: String,
     pub unread: bool,
-    pub html: &'static str,
+    pub starred: bool,
+    pub has_attachments: bool,
+    #[serde(default)]
+    pub has_replied: bool,
+    #[serde(skip)]
+    pub html: String,
 }
 
 /// Owned view data used by the Slint shell.
@@ -85,7 +92,7 @@ impl MailMessage {
             folder: email.folder.to_owned(),
             sender: email.sender.to_owned(),
             address: email.address.to_owned(),
-            domain: domain_from_address(email.address).unwrap_or_default(),
+            domain: domain_from_address(&email.address).unwrap_or_default(),
             initials: email.initials.to_owned(),
             subject: email.subject.to_owned(),
             preview: email.preview.to_owned(),
@@ -95,11 +102,11 @@ impl MailMessage {
             to: email.to.to_owned(),
             label: email.label.to_owned(),
             unread: email.unread,
-            starred: false,
-            has_attachments: false,
+            starred: email.starred,
+            has_attachments: email.has_attachments,
             message_count: 1,
             attachments: Vec::new(),
-            has_replied: false,
+            has_replied: email.has_replied,
             is_outgoing: false,
             labels: Vec::new(),
             html: Some(email.html.to_owned()),
@@ -2456,264 +2463,26 @@ pub fn fixture_messages() -> Vec<MailMessage> {
 
 #[cfg(test)]
 pub fn fixtures() -> Vec<EmailFixture> {
-    let mut messages = vec![
-        EmailFixture {
-            id: 1,
-            account: "Northstar Work",
-            folder: "Inbox",
-            sender: "Maya Chen",
-            address: "maya@northstar.design",
-            initials: "MC",
-            subject: "A calmer way to plan the week",
-            preview: "The latest direction for the product launch…",
-            time: "9:41 AM",
-            to: "alex@flectar.example",
-            label: "IMPORTANT",
-            unread: true,
-            html: r##"<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body { margin: 0; background: #f5f6fb; color: #282b40; font-family: Arial, sans-serif; }
-    .card { margin: 26px; padding: 30px; background: #ffffff; border-radius: 18px; }
-    .eyebrow { color: #6a60dc; font-size: 12px; font-weight: bold; letter-spacing: 1px; }
-    h1 { margin: 14px 0 12px; color: #25283a; font-size: 28px; }
-    p { font-size: 15px; line-height: 1.6; }
-    .callout { margin: 24px 0; padding: 18px; background: #f0efff; border-left: 4px solid #6a60dc; border-radius: 8px; }
-    .button { display: inline-block; margin-top: 8px; padding: 12px 18px; background: #5b52d6; color: #ffffff; border-radius: 8px; font-weight: bold; }
-    .muted { color: #898da0; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="eyebrow">NORTHSTAR DESIGN · WEEKLY NOTE</div>
-    <h1>A calmer way to plan the week</h1>
-    <p>Hi Alex,</p>
-    <p>We turned the launch plan into three small moments: see what matters, make one decision, and leave the rest for later. The new flow feels much closer to how people actually work.</p>
-    <div class="callout"><b>Our focus this week</b><br>Ship the quiet version first. Let the interface make space for the work.</div>
-    <p>If this direction feels right, I’ll package the prototype for the team tomorrow.</p>
-    <span class="button">Open the launch plan</span>
-    <p class="muted">Maya · Northstar Design · This message was rendered natively.</p>
-  </div>
-</body>
-</html>"##,
-        },
-        EmailFixture {
-            id: 2,
-            account: "Northstar Work",
-            folder: "Inbox",
-            sender: "Jon Bell",
-            address: "jon@fieldnotes.fm",
-            initials: "JB",
-            subject: "Three links for the native UI rabbit hole",
-            preview: "Slint, Blitz, and a little time to experiment…",
-            time: "Yesterday",
-            to: "alex@flectar.example",
-            label: "PROJECTS",
-            unread: true,
-            html: r##"<!doctype html>
-<html><head><style>
-  body { margin:0; background:#fffdf8; color:#33302c; font-family: Georgia, serif; }
-  .note { margin:30px; padding:28px; border:1px solid #e8decf; border-radius:10px; }
-  h1 { font-size:25px; margin:0 0 18px; }
-  p, li { font-size:15px; line-height:1.55; }
-  a { color:#ba5f32; font-weight:bold; }
-  .quote { padding:16px 20px; margin:22px 0; background:#fff2e7; border-radius:8px; }
-</style></head><body><div class="note">
-  <h1>The native UI rabbit hole</h1>
-  <p>Hey Alex — this feels like the right kind of weird project.</p>
-  <div class="quote">“A mail client is the perfect stress test for a renderer: messy HTML, dense lists, and a lot of tiny interactions.”</div>
-  <ol><li><a href="https://slint.dev">Slint</a> for the application shell.</li><li><a href="https://github.com/DioxusLabs/blitz">Blitz</a> for HTML and CSS email bodies.</li><li>A tiny adapter so the two stay pleasantly decoupled.</li></ol>
-  <p>Let’s keep the first cut intentionally small: fixture inbox, selectable messages, and a real rendered body.</p>
-  <p>— Jon</p>
-</div></body></html>"##,
-        },
-        EmailFixture {
-            id: 3,
-            account: "Flectar",
-            folder: "Inbox",
-            sender: "Flectar Mail Updates",
-            address: "updates@flectar.example",
-            initials: "CO",
-            subject: "Your weekly mailbox digest",
-            preview: "14 conversations, 3 follow-ups, 1 quiet afternoon…",
-            time: "Mon",
-            to: "alex@flectar.example",
-            label: "DIGEST",
-            unread: false,
-            html: r##"<!doctype html>
-<html><head><style>
-  body { margin:0; background:#f4fbfa; color:#263c3b; font-family:Arial,sans-serif; }
-  .wrap { margin:24px; padding:26px; background:#fff; border-radius:16px; }
-  .badge { color:#138d82; font-size:12px; font-weight:bold; }
-  h1 { font-size:26px; margin:10px 0 20px; }
-  .grid { display:flex; gap:10px; margin:20px 0; }
-  .stat { flex:1; padding:16px; background:#e9f8f5; border-radius:10px; }
-  .number { font-size:25px; font-weight:bold; color:#138d82; }
-  .caption { color:#708885; font-size:12px; }
-  p { font-size:14px; line-height:1.6; }
-</style></head><body><div class="wrap">
-  <div class="badge">FLECTAR MAIL / WEEKLY DIGEST</div><h1>A little room to breathe</h1>
-  <div class="grid"><div class="stat"><div class="number">14</div><div class="caption">conversations</div></div><div class="stat"><div class="number">3</div><div class="caption">follow-ups</div></div><div class="stat"><div class="number">1</div><div class="caption">quiet afternoon</div></div></div>
-  <p>The mailbox is in good shape. Two threads are waiting on someone else, and the rest can wait until tomorrow.</p>
-  <p>Keep the momentum gentle,<br><b>Flectar Mail</b></p>
-</div></body></html>"##,
-        },
-        EmailFixture {
-            id: 4,
-            account: "Northstar Work",
-            folder: "Sent",
-            sender: "Ravi Patel",
-            address: "ravi@orbit.tools",
-            initials: "RP",
-            subject: "Re: the renderer boundary",
-            preview: "I think the split between chrome and content is right…",
-            time: "Sun",
-            to: "alex@flectar.example",
-            label: "REPLY",
-            unread: false,
-            html: r##"<!doctype html>
-<html><head><style>
-  body { margin:0; background:#f8f8f8; color:#303238; font-family:Arial,sans-serif; }
-  .message { margin:30px; padding:26px; background:#fff; border:1px solid #e1e1e1; border-radius:6px; }
-  h2 { margin:0 0 16px; font-size:21px; }
-  p { font-size:14px; line-height:1.6; }
-  code { padding:3px 6px; background:#f0f0f0; border-radius:4px; font-family:monospace; }
-  .signature { margin-top:24px; padding-top:16px; border-top:1px solid #e7e7e7; color:#777; font-size:12px; }
-</style></head><body><div class="message">
-  <h2>The renderer boundary</h2>
-  <p>Exactly. Slint should know about folders, messages, and actions. Blitz should receive a sanitized HTML document and return pixels. The hand-off can stay as small as <code>render(html) -&gt; Image</code>.</p>
-  <p>That keeps rich HTML isolated inside the native reading pane.</p>
-  <p>Good first milestone.</p><div class="signature">Ravi Patel<br>Orbit Tools</div>
-</div></body></html>"##,
-        },
-    ];
-
-    messages.extend([
-        EmailFixture {
-            id: 5,
-            account: "Personal",
-            folder: "Inbox",
-            sender: "Lena Ortiz",
-            address: "lena@papertrail.art",
-            initials: "LO",
-            subject: "Photos from the coast",
-            preview: "A few favorites from the weekend are attached…",
-            time: "Sat",
-            to: "alex@flectar.example",
-            label: "PERSONAL",
-            unread: true,
-            html: messages[1].html,
-        },
-        EmailFixture {
-            id: 6,
-            account: "Northstar Work",
-            folder: "Inbox",
-            sender: "Calendar Bot",
-            address: "calendar@northstar.design",
-            initials: "CB",
-            subject: "Tomorrow's launch review",
-            preview: "The launch review starts at 10:00 AM tomorrow…",
-            time: "Fri",
-            to: "alex@flectar.example",
-            label: "CALENDAR",
-            unread: false,
-            html: messages[0].html,
-        },
-        EmailFixture {
-            id: 7,
-            account: "Flectar",
-            folder: "Inbox",
-            sender: "Flectar Mail Updates",
-            address: "updates@flectar.example",
-            initials: "FM",
-            subject: "Your Flectar account is ready",
-            preview: "Your inbox is connected and ready for the next step…",
-            time: "Thu",
-            to: "alex@flectar.example",
-            label: "ACCOUNT",
-            unread: true,
-            html: messages[2].html,
-        },
-        EmailFixture {
-            id: 8,
-            account: "Northstar Work",
-            folder: "Archive",
-            sender: "Maya Chen",
-            address: "maya@northstar.design",
-            initials: "MC",
-            subject: "Re: A calmer way to plan the week",
-            preview: "The revised plan is in the shared folder…",
-            time: "Thu",
-            to: "alex@flectar.example",
-            label: "ARCHIVE",
-            unread: false,
-            html: messages[0].html,
-        },
-        EmailFixture {
-            id: 9,
-            account: "Personal",
-            folder: "Sent",
-            sender: "Lena Ortiz",
-            address: "lena@papertrail.art",
-            initials: "LO",
-            subject: "Re: Photos from the coast",
-            preview: "These are beautiful — thank you for sending them…",
-            time: "Wed",
-            to: "lena@papertrail.art",
-            label: "SENT",
-            unread: false,
-            html: messages[1].html,
-        },
-        EmailFixture {
-            id: 10,
-            account: "Flectar",
-            folder: "Archive",
-            sender: "Ravi Patel",
-            address: "ravi@orbit.tools",
-            initials: "RP",
-            subject: "Native renderer notes",
-            preview: "The CPU boundary keeps the rest of the app small…",
-            time: "Tue",
-            to: "alex@flectar.example",
-            label: "ARCHIVE",
-            unread: false,
-            html: messages[3].html,
-        },
-        EmailFixture {
-            id: 11,
-            account: "Northstar Work",
-            folder: "Inbox",
-            sender: "Jon Bell",
-            address: "jon@fieldnotes.fm",
-            initials: "JB",
-            subject: "A small plan for next week",
-            preview: "Three things we can finish without rushing them…",
-            time: "Mon",
-            to: "alex@flectar.example",
-            label: "PROJECTS",
-            unread: true,
-            html: messages[1].html,
-        },
-        EmailFixture {
-            id: 12,
-            account: "Personal",
-            folder: "Inbox",
-            sender: "Mina Park",
-            address: "mina@home.example",
-            initials: "MP",
-            subject: "Dinner next Thursday?",
-            preview: "Would Thursday evening work for everyone?",
-            time: "Sun",
-            to: "alex@flectar.example",
-            label: "PERSONAL",
-            unread: true,
-            html: messages[2].html,
-        },
-    ]);
-
-    messages
+    #[derive(serde::Deserialize)]
+    struct DemoData {
+        emails: Vec<EmailFixture>,
+        selected_to: String,
+    }
+    let mut data: DemoData =
+        serde_json::from_str(include_str!("../resources/screenshots/demo-data.json"))
+            .expect("valid shared screenshot fixture");
+    for email in &mut data.emails {
+        email.to.clone_from(&data.selected_to);
+        // Renderer tests need an HTML document; screenshot bodies use the
+        // shared demo-email.svg instead. Build test HTML from the same rows.
+        email.html = markdown_to_html(&format!(
+            "# {}\n\n{}\n\n[Open message](https://{}) · [Flectar Mail](https://flectar.com)",
+            email.subject,
+            email.preview,
+            domain_from_address(&email.address).unwrap_or_default()
+        ));
+    }
+    data.emails
 }
 
 #[cfg(test)]

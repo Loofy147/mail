@@ -2,10 +2,12 @@
 //!
 //! `scripts/generate-screenshots.sh` runs this ignored test with
 //! `FLECTAR_FRAMELESS_SCREENSHOTS` set to the output directory. The real
-//! application window is rendered offscreen with demo mail, so the images
+//! application window loads the same prepared Cloudflare fixture as the normal
+//! screenshots and is rendered offscreen, so the images
 //! follow the shipping layout. macOS keeps AppKit's native traffic lights,
-//! which an offscreen renderer cannot draw; they are painted in the macOS
-//! Tahoe style at the position the application moves them to.
+//! which an offscreen renderer cannot draw; they are painted in the standard
+//! macOS colours at macOS 26's size and spacing, where the application moves
+//! them to.
 use super::*;
 use slint::Rgb8Pixel;
 use slint::platform::{
@@ -24,15 +26,44 @@ impl Platform for Headless {
     }
 }
 
-/// Paint one traffic light with antialiasing: the fill, a soft highlight on
-/// the upper half for the Tahoe glass finish, and a hairline rim.
-fn paint_traffic_light(pixels: &mut [Rgb8Pixel], width: usize, center: (f32, f32), fill: [u8; 3]) {
-    let radius = 7.0 * SCALE;
+/// The standard macOS window-control colours: each light's fill and the
+/// slightly darker rim AppKit draws around it.
+struct TrafficLight {
+    fill: [u8; 3],
+    rim: [u8; 3],
+}
+
+const TRAFFIC_LIGHTS: [TrafficLight; 3] = [
+    TrafficLight {
+        fill: [0xff, 0x5f, 0x57],
+        rim: [0xe0, 0x44, 0x3e],
+    },
+    TrafficLight {
+        fill: [0xfe, 0xbc, 0x2e],
+        rim: [0xde, 0xa1, 0x23],
+    },
+    TrafficLight {
+        fill: [0x28, 0xc8, 0x40],
+        rim: [0x1a, 0xab, 0x29],
+    },
+];
+
+/// Paint one antialiased light of `diameter` (physical pixels) with a
+/// hairline rim.
+fn paint_traffic_light(
+    pixels: &mut [Rgb8Pixel],
+    width: usize,
+    center: (f32, f32),
+    diameter: f32,
+    light: &TrafficLight,
+) {
+    let radius = diameter / 2.0;
+    let rim_width = 0.5 * SCALE;
     let (cx, cy) = center;
-    let x0 = (cx - radius - 2.0).floor().max(0.0) as usize;
-    let y0 = (cy - radius - 2.0).floor().max(0.0) as usize;
-    let x1 = (cx + radius + 2.0).ceil() as usize;
-    let y1 = (cy + radius + 2.0).ceil() as usize;
+    let x0 = (cx - radius - 1.0).floor().max(0.0) as usize;
+    let y0 = (cy - radius - 1.0).floor().max(0.0) as usize;
+    let x1 = (cx + radius + 1.0).ceil() as usize;
+    let y1 = (cy + radius + 1.0).ceil() as usize;
     const SAMPLES: usize = 4;
     for y in y0..y1 {
         for x in x0..x1 {
@@ -45,7 +76,7 @@ fn paint_traffic_light(pixels: &mut [Rgb8Pixel], width: usize, center: (f32, f32
                     let distance = (px * px + py * py).sqrt();
                     if distance <= radius {
                         inside += 1.0;
-                        if distance > radius - 0.5 * SCALE {
+                        if distance > radius - rim_width {
                             rim += 1.0;
                         }
                     }
@@ -54,42 +85,39 @@ fn paint_traffic_light(pixels: &mut [Rgb8Pixel], width: usize, center: (f32, f32
             if inside == 0.0 {
                 continue;
             }
-            let total = (SAMPLES * SAMPLES) as f32;
-            let coverage = inside / total;
+            let coverage = inside / (SAMPLES * SAMPLES) as f32;
             let rim = rim / inside;
-            // Lighter towards the top, as the glass finish catches light.
-            let vertical = ((y as f32 - (cy - radius)) / (2.0 * radius)).clamp(0.0, 1.0);
-            let highlight = (1.0 - vertical) * 0.16;
-            let shade = |channel: u8| {
-                let lit = f32::from(channel) + (255.0 - f32::from(channel)) * highlight;
-                lit * (1.0 - rim * 0.18)
+            let shade = |channel: usize| {
+                let fill = f32::from(light.fill[channel]);
+                fill + (f32::from(light.rim[channel]) - fill) * rim
             };
             let pixel = &mut pixels[y * width + x];
-            let blend = |base: u8, top: f32| {
-                (f32::from(base) * (1.0 - coverage) + top * coverage).round() as u8
+            let blend = |base: u8, color: f32| {
+                (f32::from(base) * (1.0 - coverage) + color * coverage).round() as u8
             };
-            pixel.r = blend(pixel.r, shade(fill[0]));
-            pixel.g = blend(pixel.g, shade(fill[1]));
-            pixel.b = blend(pixel.b, shade(fill[2]));
+            pixel.r = blend(pixel.r, shade(0));
+            pixel.g = blend(pixel.g, shade(1));
+            pixel.b = blend(pixel.b, shade(2));
         }
     }
 }
 
+/// Paint the lights where the application places the native buttons, using
+/// the macOS 26 metrics `WindowChrome` defaults to.
 fn paint_traffic_lights(app: &AppWindow, pixels: &mut [Rgb8Pixel], width: usize) {
     let chrome = app.global::<WindowChrome>();
     let x = chrome.get_traffic_light_x();
     let spacing = chrome.get_traffic_light_spacing();
+    let size = chrome.get_traffic_light_size();
     let center_y = chrome.get_band_height() / 2.0;
-    for (index, fill) in [[0xff, 0x5f, 0x57], [0xfe, 0xbc, 0x2e], [0x28, 0xc8, 0x40]]
-        .into_iter()
-        .enumerate()
-    {
-        let center_x = x + index as f32 * spacing + 7.0;
+    for (index, light) in TRAFFIC_LIGHTS.iter().enumerate() {
+        let center_x = x + index as f32 * spacing + size / 2.0;
         paint_traffic_light(
             pixels,
             width,
             (center_x * SCALE, center_y * SCALE),
-            fill,
+            size * SCALE,
+            light,
         );
     }
 }
@@ -106,78 +134,17 @@ fn frameless_screenshots() {
     let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
     slint::platform::set_platform(Box::new(Headless(window.clone()))).unwrap();
     let app = AppWindow::new().unwrap();
-    app.window().dispatch_event(WindowEvent::ScaleFactorChanged {
-        scale_factor: SCALE,
-    });
-    app.set_startup_ready(true);
-    app.set_startup_hydrated(true);
-    app.set_connected_accounts(ModelRc::new(VecModel::from(vec![AccountRow {
-        id: 1,
-        name: "Northstar Work".into(),
-        email: "alex@northstar.example".into(),
-        ..Default::default()
-    }])));
-    app.set_active_view("mail".into());
+    app.window()
+        .dispatch_event(WindowEvent::ScaleFactorChanged {
+            scale_factor: SCALE,
+        });
+    screenshot_fixture::apply(&app);
     app.show().unwrap();
 
-    let runtime = Rc::new(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap(),
-    );
-    let dir = tempfile::tempdir().unwrap();
-    let (favicons, _) = bounded_ui_channel();
-    let (avatars, _) = bounded_ui_channel();
-    let mut state = InboxState::empty(
-        None,
-        UiSender::new(favicons, UiWake::new(app.as_weak(), |_| {})),
-        None,
-        UiSender::new(avatars, UiWake::new(app.as_weak(), |_| {})),
-        false,
-        false,
-        WarmStartCacheWriter::spawn(&runtime, dir.path().join("warm.json")),
-    );
-    state.messages = mail::fixture_messages();
-    for (index, message) in state.messages.iter_mut().enumerate() {
-        message.folder = "Inbox".into();
-        message.thread_id = Some(index as i64 + 1);
-        message.body_pending = false;
-        message.html = Some(format!(
-            "<body style='margin:0;padding:24px;font-family:sans-serif;line-height:1.5'>\
-             <h2 style='margin-top:0'>{}</h2><p>Hi Alex,</p>\
-             <p>{}</p><p>The new layout keeps the tabs and window controls in one bar \
-             above the product rail, so the rest of the window is content.</p>\
-             <p>Thanks,<br>{}</p></body>",
-            message.subject, message.preview, message.sender
-        ));
-    }
-    // The sidebar shows the connected demo account's folders.
-    let account = state.messages[0].account.clone();
-    let account_messages = state
-        .messages
-        .iter()
-        .filter(|message| message.account == account)
-        .cloned()
-        .collect::<Vec<_>>();
-    state.mailboxes = fixture_mailboxes(&account_messages);
-    let renderer = state.email_renderer.clone();
-    renderer
-        .borrow_mut()
-        .configure_resources(runtime.handle().clone(), false)
-        .unwrap();
-    app.set_emails(state.email_rows.clone().into());
-    app.set_mail_list_entries(Rc::clone(&state.mail_list_entries).into());
-    app.set_sidebar_rows(Rc::clone(&state.sidebar_rows).into());
-    let state = Rc::new(RefCell::new(state));
-    render_current(&app, &state, &runtime).unwrap();
-
     let subject = |index: usize| {
-        state
-            .borrow()
-            .messages
-            .get(index)
-            .map(|message| message.subject.clone())
+        app.get_emails()
+            .row_data(index)
+            .map(|row| row.subject)
             .unwrap_or_default()
     };
     app.global::<TabsUi>()
@@ -191,7 +158,7 @@ fn frameless_screenshots() {
             TabRow {
                 id: 2,
                 workspace: "mail".into(),
-                title: subject(1).into(),
+                title: subject(1),
                 active: false,
             },
             TabRow {
@@ -209,29 +176,16 @@ fn frameless_screenshots() {
         );
         app.window()
             .set_size(slint::PhysicalSize::new(physical_width, physical_height));
-        let mut pixels =
-            vec![Rgb8Pixel::default(); (physical_width * physical_height) as usize];
+        let mut pixels = vec![Rgb8Pixel::default(); (physical_width * physical_height) as usize];
         // Settle layout, transitions and the message frame for the theme.
         for _ in 0..3 {
             slint::platform::update_timers_and_animations();
             std::thread::sleep(std::time::Duration::from_millis(300));
             slint::platform::update_timers_and_animations();
-            renderer
-                .borrow_mut()
-                .set_appearance(message_appearance::EmailAppearance::from_app(&app));
             app.window().request_redraw();
             window.draw_if_needed(|r| {
                 r.render(&mut pixels, physical_width as usize);
             });
-            let (w, h) = email_viewport_size(&app);
-            if let Some(frame) = renderer
-                .borrow_mut()
-                .render_cpu_if_needed(w, h, SCALE)
-                .unwrap()
-            {
-                apply_cpu_frame(&app, frame);
-            }
-            sync_reader_metadata(&app, &renderer);
         }
         app.window().request_redraw();
         window.draw_if_needed(|r| {
@@ -306,7 +260,11 @@ fn frameless_screenshots() {
     for (mode, suffix) in themes {
         app.set_theme_mode(mode.into());
         app.set_settings_tab("General".into());
-        draw(&format!("settings-frameless-toggle-{suffix}"), WIDTH, HEIGHT);
+        draw(
+            &format!("settings-frameless-toggle-{suffix}"),
+            WIDTH,
+            HEIGHT,
+        );
         app.set_settings_tab("Services".into());
         draw(&format!("settings-services-{suffix}"), WIDTH, HEIGHT);
     }

@@ -2029,11 +2029,11 @@ mod tests {
     #[test]
     fn fixture_messages_prepare_as_retained_blitz_documents() {
         for email in fixtures() {
-            let prepared = prepare_email_html(email.html).expect("fixture should parse");
+            let prepared = prepare_email_html(&email.html).expect("fixture should parse");
             assert!(!prepared.plain_text.is_empty());
         }
 
-        let linked = prepare_email_html(fixtures()[1].html).expect("linked fixture should parse");
+        let linked = prepare_email_html(&fixtures()[1].html).expect("linked fixture should parse");
         assert_eq!(linked.links.len(), 2);
     }
 

@@ -33,6 +33,8 @@ mod reader_clipboard;
 mod reader_validation;
 #[cfg(test)]
 mod screenshot_frameless;
+#[cfg(test)]
+mod screenshot_fixture;
 mod remote;
 mod renderer;
 mod renderer_input_controller;
@@ -7417,28 +7419,37 @@ mod tests {
 
     #[test]
     fn unified_inbox_combines_only_incoming_messages() {
-        let messages = fixture_messages();
+        let mut messages = fixture_messages();
+        messages[1].folder = "Sent".into();
+        messages[2].folder = "Archive".into();
         let filtered = filtered_messages(&messages, "Unified Inbox", "", "All mail");
 
-        assert_eq!(filtered.len(), 8);
+        assert_eq!(filtered.len(), messages.len() - 2);
         assert!(filtered.iter().all(|email| email.folder == "Inbox"));
-        assert!(filtered.iter().any(|email| email.account == "Personal"));
+        assert!(
+            filtered
+                .iter()
+                .any(|email| email.account == "Flectar Support")
+        );
         assert!(filtered.iter().any(|email| email.account == "Flectar"));
     }
 
     #[test]
     fn folder_scope_and_search_can_be_combined() {
         let messages = fixture_messages();
-        let filtered =
-            filtered_messages(&messages, "Northstar Work / Inbox", "calendar", "All mail");
+        let filtered = filtered_messages(&messages, "Flectar / Inbox", "calendar", "All mail");
 
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].sender, "Calendar Bot");
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.iter().all(|email| email.sender == "Google Calendar"));
     }
 
     #[test]
     fn unified_folders_and_search_filters_are_applied() {
         let mut messages = fixture_messages();
+        for message in &mut messages {
+            message.starred = false;
+            message.has_attachments = false;
+        }
         messages[0].starred = true;
         messages[1].has_attachments = true;
 

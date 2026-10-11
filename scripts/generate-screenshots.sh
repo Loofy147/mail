@@ -53,7 +53,7 @@ mapfile -t sender_addresses < <(
 cargo run --quiet --example generate-screenshot-favicons -- \
   "$favicon_dir" "${sender_addresses[@]}"
 
-render() {
+prepare_data() {
   local output_name="$1"
   local width="$2"
   local height="$3"
@@ -65,15 +65,7 @@ render() {
   local show_account_markers="${9:-false}"
   local settings_tab="${10:-}"
   local calendar_mode="${11:-week}"
-  local style="fluent"
   local data_file="$temporary_dir/$output_name.json"
-  local email_tiles
-
-  if [[ "$theme" == "dark" ]]; then
-    style="fluent-dark"
-  fi
-
-  temporary_ui="$(mktemp "$repo_dir/ui/.screenshot-app.XXXXXX.slint")"
 
   jq \
     --arg theme "$theme" \
@@ -86,143 +78,22 @@ render() {
     --arg demo_email "$demo_email_png" \
     --argjson show_threads "$show_threads" \
     --argjson show_account_markers "$show_account_markers" \
-    '
-      def favicon_path(address):
-        ($favicon_dir + "/" + (address | split("@") | last | ascii_downcase) + ".png");
-      .theme_mode = $theme
-      | .["MotionSettings.enabled"] = false
-      | .workspace_layout = $workspace_layout
-      | .screenshot_theme_preset = $theme_preset
-      | .active_view = $active_view
-      | .startup_hydrated = true
-      | .calendar_view_mode = $calendar_mode
-      | .calendar_period_title = (if $calendar_mode == "agenda" then .calendar_month_title else .calendar_period_title end)
-      | .settings_open = ($settings_tab != "")
-      | .settings_tab = (if $settings_tab == "" then (.settings_tab // "General") else $settings_tab end)
-      | .text_mode = false
-      | .show_account_markers = $show_account_markers
-      | .storage_loading = false
-      | .storage_loaded = true
-      | .storage_total = "18.42 GB"
-      | .storage_error = ""
-      | .storage_usage = [
-          {"kind": "mail", "size": "9.84 GB", "fraction": 0.5342, "offset": 0, "color": "#3b82f6"},
-          {"kind": "attachments", "size": "5.21 GB", "fraction": 0.2828, "offset": 0.5342, "color": "#f59e0b"},
-          {"kind": "files", "size": "1.76 GB", "fraction": 0.0955, "offset": 0.817, "color": "#22c55e"},
-          {"kind": "databases", "size": "1.34 GB", "fraction": 0.0727, "offset": 0.9125, "color": "#a855f7"},
-          {"kind": "other", "size": "279.6 MB", "fraction": 0.0148, "offset": 0.9852, "color": "#94a3b8"}
-        ]
-      | .email_tiles |= map(.image = $demo_email)
-      | .selected_favicon = favicon_path(.selected_address)
-      | .selected_has_favicon = true
-      | .contacts |= map(.suggested = (.suggested // false))
-      | .connected_accounts |= map(
-          .mail_protocol = (.mail_protocol // "")
-          | .profile_id = (if .id == 2 then "support" else "work" end)
-          | .profile_name = (if .id == 2 then "Support" else "Work" end)
-          | .profile_color = (if .id == 2 then "#ea580c" else "#8b5cf6" end)
-          | .has_profile = true
-          | .has_account_color = false
-          | .jmap_url = (.jmap_url // "")
-          | .imap_security = (.imap_security // "auto")
-          | .smtp_security = (.smtp_security // "auto")
-          | .trusted_certificate_pem = (.trusted_certificate_pem // "")
-          | .mail_history = (.mail_history // "sixMonths")
-          | .caldav_url = (.caldav_url // "")
-          | .caldav_username = (.caldav_username // "")
-          | .carddav_connected = (.carddav_connected // false)
-          | .carddav_enabled = (.carddav_enabled // false)
-          | .carddav_status = (.carddav_status // "")
-          | .carddav_url = (.carddav_url // "")
-          | .carddav_username = (.carddav_username // "")
-        )
-      | .mail_profiles = [
-          {"id": "work", "name": "Work", "color": "#8b5cf6", "account_count": 1},
-          {"id": "support", "name": "Support", "color": "#ea580c", "account_count": 1}
-        ]
-      | .sidebar_rows |= map(
-          .show_row = true
-          | .reveal_row = false
-          | .mailbox.is_selectable = (if .mailbox.is_selectable == null then true else .mailbox.is_selectable end)
-          | .mailbox.can_create_children = (.mailbox.can_create_children // false)
-          | .mailbox.can_rename = (.mailbox.can_rename // false)
-          | .mailbox.can_delete = (.mailbox.can_delete // false)
-          | .label.account_id = (.label.account_id // -1)
-          | .label.account_name = (.label.account_name // "")
-          | .label.display_name = (.label.display_name // .label.name // "")
-          | .label.depth = (.label.depth // 0)
-          | .label.has_children = (.label.has_children // false)
-          | .label.expanded = (if .label.expanded == null then true else .label.expanded end)
-          | .label.can_create_children = (.label.can_create_children // false)
-          | .label.is_global = (.label.is_global // false)
-        )
-      | .mail_labels |= map(
-          .account_id = (.account_id // -1)
-          | .account_name = (.account_name // "")
-          | .display_name = (.display_name // .name // "")
-          | .depth = (.depth // 0)
-          | .has_children = (.has_children // false)
-          | .expanded = (if .expanded == null then true else .expanded end)
-          | .can_create_children = (.can_create_children // false)
-          | .is_global = (.is_global // false)
-        )
-      | .mail_label_results |= map(
-          .account_id = (.account_id // -1)
-          | .account_name = (.account_name // "")
-          | .display_name = (.display_name // .name // "")
-          | .depth = (.depth // 0)
-          | .has_children = (.has_children // false)
-          | .expanded = (if .expanded == null then true else .expanded end)
-          | .can_create_children = (.can_create_children // false)
-          | .is_global = (.is_global // false)
-        )
-      | (.thread_messages // [] | length) as $thread_count
-      | .emails |= map(
-          .has_replied = (.has_replied // false)
-          | .message_count = (if $show_threads and .selected then ([1, $thread_count] | max) else (.message_count // 1) end)
-          | .checked = (.checked // false)
-          | .account_id = (if .account == "Flectar Support" then 2 else 1 end)
-          | .account_color = (if .account == "Flectar Support" then "#ea580c" else "#8b5cf6" end)
-          | .account_profile = (if .account == "Flectar Support" then "Support" else "Work" end)
-          | .show_account_marker = $show_account_markers
-          | .labels |= map(
-              .account_id = (.account_id // -1)
-              | .account_name = (.account_name // "")
-              | .display_name = (.display_name // .name // "")
-              | .depth = (.depth // 0)
-              | .has_children = (.has_children // false)
-              | .expanded = (if .expanded == null then true else .expanded end)
-              | .can_create_children = (.can_create_children // false)
-              | .is_global = (.is_global // false)
-            )
-          | .favicon = favicon_path(.address)
-          | .favicon_small = favicon_path(.address)
-          | .has_favicon = true
-        )
-      # The viewer runs no Rust projection or accordion initialization.
-      # Build the ungrouped list from the fully prepared email rows.
-      | .mail_list_entries = (.emails | to_entries | map({
-          is_header: false,
-          group_key: "",
-          group_kind: "",
-          group_month: 0,
-          group_year: 0,
-          group_count: 0,
-          expanded: false,
-          show_row: true,
-          reveal_row: false,
-          email_index: .key,
-          email: .value
-        }))
-      | .selected_address as $selected_address
-      | .thread_messages = (if $show_threads then (.thread_messages // []) else [] end)
-      | .thread_messages |= map(
-          .favicon = favicon_path(if .outgoing then $selected_address else .address end)
-          | .favicon_small = favicon_path(if .outgoing then $selected_address else .address end)
-          | .has_favicon = (.outgoing | not)
-        )
-      | .selected_thread_index = (if $show_threads then (.selected_thread_index // 0) else 0 end)
-    ' "$fixture" > "$data_file"
+    -f "$repo_dir/scripts/prepare-screenshot-data.jq" "$fixture" > "$data_file"
+
+}
+
+render() {
+  local output_name="$1"
+  local width="$2"
+  local height="$3"
+  local theme="$4"
+  local theme_preset="${6:-default}"
+  local style="fluent"
+  local data_file="$temporary_dir/$output_name.json"
+  local email_tiles
+  [[ "$theme" != "dark" ]] || style="fluent-dark"
+  temporary_ui="$(mktemp "$repo_dir/ui/.screenshot-app.XXXXXX.slint")"
+  prepare_data "$@"
 
   # Compile the body images into the preview. Runtime image properties can
   # still be empty when the headless viewer takes its first snapshot.
@@ -300,7 +171,8 @@ render_selected mobile-agenda-dark 390 844 dark default default calendar false f
 # runtime rather than in the static Slint preview.
 if [[ -z "${SCREENSHOT_ONLY:-}" || ",${SCREENSHOT_ONLY}," == *",frameless,"* ]]; then
   echo "Rendering frameless/*.png"
-  rm -f "$output_dir"/frameless/*.png
+  prepare_data frameless 1320 800 light
+  FLECTAR_SCREENSHOT_DATA="$temporary_dir/frameless.json" \
   FLECTAR_FRAMELESS_SCREENSHOTS="$output_dir/frameless" cargo test --quiet --locked \
     -p flectar-mail --lib screenshot_frameless::frameless_screenshots -- --ignored --exact
 fi
