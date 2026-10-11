@@ -550,8 +550,8 @@ export component WindowTopBar inherits Rectangle {
     accessible-role: window-title-bar;
     accessible-label: @tr("Flectar Mail");
 
-    // Tabs line up with the sidebar unless leading controls need more room.
-    private property <length> tabs-x: max(LayoutMetrics.product-rail-width + 8px, WindowChrome.leading-width);
+    // Tabs start at the window edge unless leading controls need the room.
+    private property <length> tabs-x: max(8px, WindowChrome.leading-width);
     private property <length> trailing: WindowChrome.trailing-width + 8px;
     // Tabs share the space up to the new-tab button.
     private property <length> tabs-room: root.width - root.tabs-x - 4px - 32px - root.trailing;
@@ -594,11 +594,9 @@ export component WindowTopBar inherits Rectangle {
         muted-color: root.muted-color;
     }
 
-    // The divider stops at the rail so the bar and rail read as one frame.
     Rectangle {
-        x: LayoutMetrics.product-rail-width - 1px;
         y: parent.height - 1px;
-        width: parent.width - self.x;
+        width: parent.width;
         height: 1px;
         background: root.divider-color;
     }
