@@ -19,7 +19,7 @@ use keyboard_types::Key;
 use parley::layout::PositionedLayoutItem;
 use semantics::*;
 #[cfg(feature = "gpu-renderer")]
-use slint::wgpu_29::wgpu;
+use slint::wgpu_30::wgpu;
 use std::{
     collections::BTreeMap,
     sync::{
@@ -59,6 +59,9 @@ const EMAIL_USER_AGENT_STYLE: &str = r#"
   a:any-link { color: #0969da; cursor: pointer; }
   html, body { overflow-wrap: break-word; word-break: normal; }
   table { max-width: 100%; }
+  /* Beta.3 follows natural replaced-element sizing. Keep large images fitted
+     by default; authored max-width rules still override this reader default. */
+  img { max-width: 100%; }
 "#;
 
 pub(crate) fn render_timings_enabled() -> bool {
@@ -623,7 +626,7 @@ impl GpuEmailRenderer {
             let Some(element) = node.element_data() else {
                 return;
             };
-            if element.name.local.as_ref() != "img" && element.background_images.is_empty() {
+            if element.name.local.as_str() != "img" && element.background_images.is_empty() {
                 return;
             }
             let y = node.absolute_position(0.0, 0.0).y;
@@ -1436,7 +1439,7 @@ fn drain_email_updates(
             let Some(node) = email.document.get_node(id) else {
                 break;
             };
-            if node.stylo_element_data_opt().is_some()
+            if node.try_stylo_element_data().is_some()
                 && (node.transform().is_some()
                     || node
                         .element_data()
@@ -1500,7 +1503,7 @@ fn desired_tile_range(
 fn content_surface_width(document: &HtmlDocument, viewport: f32) -> f32 {
     let mut width = viewport;
     document.visit(|_, node| {
-        if node.stylo_element_data_opt().is_some() && visible(node) {
+        if node.try_stylo_element_data().is_some() && visible(node) {
             let layout = node.final_layout();
             let right = node.absolute_position(0.0, 0.0).x
                 + layout.size.width.max(layout.scrollable_overflow_rect.right);
@@ -1516,10 +1519,10 @@ fn content_surface_height(document: &HtmlDocument) -> f32 {
     let mut content_bottom = 0.0_f32;
 
     document.visit(|_, node| {
-        // Blitz beta.2 stores box geometry only on document, element, and
+        // Blitz stores box geometry only on document, element, and
         // anonymous-block nodes. Text and comment nodes are represented by
         // their parent's inline layout and must not be queried directly.
-        if node.stylo_element_data_opt().is_none() || !visible(node) {
+        if node.try_stylo_element_data().is_none() || !visible(node) {
             return;
         }
         let is_viewport_box = node.data.is_element_with_tag_name(&local_name!("html"))
@@ -2011,7 +2014,7 @@ fn painted_point(document: &HtmlDocument, mut id: NodeId, mut x: f32, mut y: f32
             x = (a * px + c * py + e / scale) as f32;
             y = (b * px + d * py + f / scale) as f32;
         }
-        if node.stylo_element_data_opt().is_some() {
+        if node.try_stylo_element_data().is_some() {
             x += node.final_layout().location.x - node.scroll_offset().x as f32;
             y += node.final_layout().location.y - node.scroll_offset().y as f32;
         }

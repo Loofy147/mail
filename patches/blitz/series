@@ -1,11 +1,6 @@
 0001-bound-document-event-queue.patch
-0002-email-table-layout-and-borders.patch
-0003-inline-ancestor-backgrounds.patch
-0004-repository-integration.patch
-0005-reader-selection-and-resource-integration.patch
-0006-float-disabled-line-breaking.patch
-0007-inline-float-layout.patch
-0008-email-rendering-and-image-performance.patch
-0009-disable-email-font-hinting.patch
-0010-auto-email-table-track-sizing.patch
-0011-email-presentational-hints-and-table-fidelity.patch
+0002-reader-resources-and-image-performance.patch
+0003-email-table-layout-and-presentational-hints.patch
+0004-inline-float-layout.patch
+0005-email-painting-and-cache.patch
+0006-repository-integration.patch

@@ -1,8 +1,8 @@
-version = "0.3.0-beta.2"
-revision = "67edf2061121382b3e43af19977fc3472aa7e069"
+version = "0.3.0-beta.3"
+revision = "5890fab3afb087d8c0c5b0652b8b635f161f3a13"
 
 [crates.blitz-dom]
-sha256 = "71df97b78e3dbfd863358644e55b7b694902c187048fa0952e5e14788fdc1add"
+sha256 = "53e58a506e20e90b69ab8b03f933c125237361c31b0dae0e7e149c5bcbf9b28a"
 
 [crates.blitz-paint]
-sha256 = "0563058329a06eb1f6d08e6ccd9ec139bac23ff9fd6598a19269e1faacda5f16"
+sha256 = "31dd8929dd745efd8ada25f977a163b4c17fd8e9804cb7f42441df63215d2fdd"

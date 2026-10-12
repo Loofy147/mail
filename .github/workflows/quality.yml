@@ -120,6 +120,8 @@ jobs:
           done
       - name: Run the default test suite
         run: cargo test --workspace --all-targets --locked
+      - name: Test the vendored Blitz patches
+        run: cargo test -p blitz-dom --lib --locked
       - name: Exercise the mobile PDF renderer with bundled PDFium on the host
         run: |
           python3 scripts/stage-pdfium.py linux-x64 target/pdfium-mobile-test

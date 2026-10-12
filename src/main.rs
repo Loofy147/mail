@@ -1498,7 +1498,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 let slint::RenderingState::BeforeRendering = &state else {
                     return;
                 };
-                let slint::GraphicsAPI::WGPU29 { device, queue, .. } = graphics_api else {
+                let slint::GraphicsAPI::WGPU30 { device, queue, .. } = graphics_api else {
                     return;
                 };
                 if !reported_device {
@@ -1515,7 +1515,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         email_gpu_unavailable = Some(error);
                     }
                     eprintln!("FLECTAR_RENDERER {}", serde_json::json!({
-                        "event": "gpu_ready", "wgpu_version": 29,
+                        "event": "gpu_ready", "wgpu_version": 30,
                         "backend": format!("{:?}", info.backend), "adapter": info.name,
                         "device_type": format!("{:?}", info.device_type),
                         "wgpu_initialized": true, "instance_owner": "slint",

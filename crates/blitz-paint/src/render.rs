@@ -240,7 +240,7 @@ impl<'dom, 'a> BlitzDomPainter<'dom, 'a> {
         let node = &self.dom.as_ref().tree()[node_id];
 
         // Early return if the element is hidden
-        if matches!(node.style().display, taffy::Display::None) {
+        if matches!(node.taffy_display(), taffy::Display::None) {
             return;
         }
 
@@ -328,7 +328,7 @@ impl<'dom, 'a> BlitzDomPainter<'dom, 'a> {
         let overflow = *node.scrollable_overflow();
         let transform = parent_style_transform
             * Affine::translate(box_position)
-            * node.transform().unwrap_or_default();
+            * node.transform().as_deref().copied().unwrap_or_default();
 
         let screen_transform = Affine::translate(Vec2 {
             x: -self.initial_x,
@@ -343,6 +343,23 @@ impl<'dom, 'a> BlitzDomPainter<'dom, 'a> {
             || screen_bbox.x0 > clip_rect.x1
             || screen_bbox.y1 < clip_rect.y0
             || screen_bbox.y0 > clip_rect.y1
+        {
+            return;
+        }
+
+        // Cull elements whose transformed geometry is not representable in f32 (e.g.
+        // `transform: scale(99e99)`): the renderer works in f32 and flattening such paths
+        // can attempt to allocate an unbounded number of line segments.
+        let f32_max = f64::from(f32::MAX);
+        if !screen_bbox.is_finite()
+            || [
+                screen_bbox.x0,
+                screen_bbox.y0,
+                screen_bbox.x1,
+                screen_bbox.y1,
+            ]
+            .iter()
+            .any(|c| c.abs() > f32_max)
         {
             return;
         }
@@ -385,6 +402,22 @@ impl<'dom, 'a> BlitzDomPainter<'dom, 'a> {
         let default_clip = cx.frame.border_box_path();
         let mut clip_path_for_layer = clip_path_shape.unwrap_or(default_clip);
         clip_path_for_layer.apply_affine(Affine::scale(self.scale));
+
+        // CSS 2 `clip` property (absolutely positioned elements only). Applies to the whole of
+        // the element's rendering (including outlines and shadows), so it is the outermost layer.
+        let css_clip_rect = cx.css_clip_rect();
+        if css_clip_rect.is_some_and(|rect| rect.is_zero_area()) {
+            return;
+        }
+        let css_clip_layer_pushed = self.layer_manager.maybe_push_layer(
+            scene,
+            css_clip_rect.is_some(),
+            1.0,
+            cx.transform,
+            &css_clip_rect.unwrap_or(Rect::ZERO),
+            None,
+            None,
+        );
 
         cx.draw_outline(scene);
         cx.draw_outset_box_shadow(scene);
@@ -506,6 +539,9 @@ impl<'dom, 'a> BlitzDomPainter<'dom, 'a> {
                 cx.maybe_pop_css_mask_layer(scene, mask_layer_pushed);
             },
         );
+
+        self.layer_manager
+            .maybe_pop_layer(scene, css_clip_layer_pushed);
     }
 
     fn render_node(
@@ -760,6 +796,10 @@ impl ElementCx<'_, '_> {
                     panic!("Tried to render node marked as inline root that does not have an inline layout: {:?}", self.node);
                 });
 
+            let pos = Point {
+                x: pos.x,
+                y: pos.y + text_layout.block_offset as f64,
+            };
             let transform =
                 self.transform * Affine::translate((pos.x * self.scale, pos.y * self.scale));
 
@@ -939,18 +979,25 @@ impl ElementCx<'_, '_> {
                 Marker::Char(_) => 8.0,
                 Marker::String(_) => 0.0,
             };
-            let x_offset = -(layout.full_width() / layout.scale() + x_padding);
+            // Outside markers are placed outside the list item's border box
+            // (`pos` is the origin of its content box)
+            let item_layout = self.node.final_layout();
+            let x_offset = -(layout.full_width() / layout.scale()
+                + x_padding
+                + item_layout.padding.left
+                + item_layout.border.left);
 
             // Align the marker with the baseline of the first line of text in the list item
-            let y_offset = if let Some(first_text_line) = &self
+            let y_offset = if let Some((text_layout, first_text_line)) = &self
                 .element
                 .inline_layout_data
                 .as_ref()
-                .and_then(|text_layout| text_layout.layout.lines().next())
+                .and_then(|text_layout| Some((text_layout, text_layout.layout.lines().next()?)))
             {
                 (first_text_line.metrics().baseline
                     - layout.lines().next().unwrap().metrics().baseline)
                     / layout.scale()
+                    + text_layout.block_offset
             } else {
                 0.0
             };
@@ -987,9 +1034,10 @@ impl ElementCx<'_, '_> {
 
         if let Some(hoisted) = &self.node.stacking_context {
             for hoisted_child in hoisted.neg_z_hoisted_children() {
+                let position = hoisted_child.position(self.node.tree(), self.node.id);
                 let pos = kurbo::Vec2 {
-                    x: hoisted_child.position.x as f64 * self.scale,
-                    y: hoisted_child.position.y as f64 * self.scale,
+                    x: position.x as f64 * self.scale,
+                    y: position.y as f64 * self.scale,
                 };
                 self.render_node(
                     scene,
@@ -1003,16 +1051,33 @@ impl ElementCx<'_, '_> {
         // Regular children
         if let Some(children) = &*self.node.paint_children.borrow() {
             for child_id in children {
-                self.render_node(scene, *child_id, parent_style_transform, clip_rect);
+                // Fixed-position children of the root element are positioned against
+                // the viewport and do not scroll with it, so cancel out the viewport
+                // scroll (applied in `paint_scene`). A fixed box contained by a
+                // transformed ancestor scrolls with it like any out-of-flow box.
+                let child = &self.context.dom.as_ref().tree()[*child_id];
+                let child_transform = if child.taffy_position() == taffy::Position::Fixed
+                    && Some(self.node.id) == self.context.root_element_id
+                {
+                    let scroll = self.context.dom.as_ref().viewport_scroll();
+                    parent_style_transform.pre_translate(kurbo::Vec2 {
+                        x: scroll.x * self.scale,
+                        y: scroll.y * self.scale,
+                    })
+                } else {
+                    parent_style_transform
+                };
+                self.render_node(scene, *child_id, child_transform, clip_rect);
             }
         }
 
         // Positive z_index hoisted nodes
         if let Some(hoisted) = &self.node.stacking_context {
             for hoisted_child in hoisted.pos_z_hoisted_children() {
+                let position = hoisted_child.position(self.node.tree(), self.node.id);
                 let pos = kurbo::Vec2 {
-                    x: hoisted_child.position.x as f64 * self.scale,
-                    y: hoisted_child.position.y as f64 * self.scale,
+                    x: position.x as f64 * self.scale,
+                    y: position.y as f64 * self.scale,
                 };
                 self.render_node(
                     scene,
@@ -1160,7 +1225,7 @@ impl ElementCx<'_, '_> {
             let shape = &self.frame.border_box;
             let stroke = Stroke::new(self.scale);
 
-            let stroke_color = match self.node.style().display {
+            let stroke_color = match self.node.taffy_display() {
                 taffy::Display::Block | taffy::Display::FlowRoot => {
                     Color::new([1.0, 0.0, 0.0, 1.0])
                 }

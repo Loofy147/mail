@@ -434,7 +434,7 @@ impl ElementCx<'_, '_> {
             .with_caps(Cap::Butt)
             .with_dashes(0.0, [dash, gap]);
         let clip = self.frame.border_edge_shape(edge);
-        scene.push_clip_layer(self.transform, &clip);
+        scene.push_clip_layer(Fill::NonZero, self.transform, &clip);
         scene.stroke(&stroke, self.transform, color, None, &centerline);
         scene.pop_layer();
     }
@@ -507,7 +507,7 @@ impl ElementCx<'_, '_> {
         }
 
         let clip = self.frame.border_edge_shape(edge);
-        scene.push_clip_layer(self.transform, &clip);
+        scene.push_clip_layer(Fill::NonZero, self.transform, &clip);
         scene.fill(Fill::NonZero, self.transform, color, None, &path);
         scene.pop_layer();
     }

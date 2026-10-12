@@ -175,13 +175,13 @@ pub(crate) fn select_backend(
     };
     #[cfg(feature = "gpu-renderer")]
     if mode == RendererMode::Gpu {
-        let mut settings = slint::wgpu_29::WGPUSettings::default();
+        let mut settings = slint::wgpu_30::WGPUSettings::default();
         // Normal Vello uses compute/storage buffers, unavailable in WebGL2 limits.
-        settings.device_required_limits = slint::wgpu_29::wgpu::Limits::default();
+        settings.device_required_limits = slint::wgpu_30::wgpu::Limits::default();
         initialize_step(true, || {
             winit()
                 .renderer_name("femtovg-wgpu".into())
-                .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(settings))
+                .require_wgpu_30(slint::wgpu_30::WGPUConfiguration::Automatic(settings))
                 .select()
         })?;
         return Ok(true);

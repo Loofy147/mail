@@ -1,7 +1,8 @@
 # Emoji presentation backport
 
-The HTML renderer uses a patched Parley 0.11.1 until a compatible upstream
-release includes [Parley #811](https://github.com/linebender/parley/pull/811),
+Slint 1.18.1 still uses patched Parley 0.11.1. Blitz 0.3.0-beta.3 uses
+upstream Parley 0.12.0, which already includes
+[Parley #811](https://github.com/linebender/parley/pull/811),
 which fixes [#744](https://github.com/linebender/parley/issues/744). Plain
 digits, `#`, `*`, `©`, and `®` have the Unicode `Emoji` property, but default
 to text presentation. Previously they entered emoji fallback before script
@@ -46,7 +47,7 @@ The verifier downloads checksum-pinned sources into a temporary directory,
 applies the patch, and compares every file to both checked-in crates. It also
 checks desktop/Android patch wiring and the packaged MIT notice.
 
-When a compatible upstream release fixes presentation, remove this backport,
+When Slint also adopts a release with the presentation fix, remove this backport,
 both vendored crates, their manifest patches, and the verification step; update
 both lockfiles and rerun the application regressions. Keep the regression
 fixtures. Do not restore the removed Blitz CSS fallback workaround.

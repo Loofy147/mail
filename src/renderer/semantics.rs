@@ -9,7 +9,7 @@ pub(super) fn visible(node: &blitz_dom::Node) -> bool {
 fn excluded(node: &blitz_dom::Node) -> bool {
     node.element_data().is_some_and(|e| {
         matches!(
-            e.name.local.as_ref(),
+            e.name.local.as_str(),
             "head" | "style" | "script" | "title" | "template"
         )
     }) || !visible(node)
@@ -40,7 +40,7 @@ pub(super) fn subtree_text(document: &HtmlDocument, root: NodeId) -> String {
         }
         let tag = node
             .element_data()
-            .map(|e| e.name.local.as_ref())
+            .map(|e| e.name.local.as_str())
             .unwrap_or("");
         let block = matches!(
             tag,
@@ -128,7 +128,7 @@ impl GpuEmailRenderer {
             let Some(e) = node.element_data() else {
                 return;
             };
-            let tag = e.name.local.as_ref();
+            let tag = e.name.local.as_str();
             let semantic = matches!(
                 tag,
                 "p" | "h1"
@@ -258,7 +258,7 @@ impl GpuEmailRenderer {
             let Some(element) = node.element_data() else {
                 return;
             };
-            if element.name.local.as_ref() != "img"
+            if element.name.local.as_str() != "img"
                 || element.raster_image_data().is_some()
                 || email
                     .document
@@ -300,7 +300,7 @@ impl GpuEmailRenderer {
             let Some(element) = node.element_data() else {
                 return;
             };
-            if element.name.local.as_ref() != "img" || element.raster_image_data().is_some() {
+            if element.name.local.as_str() != "img" || element.raster_image_data().is_some() {
                 return;
             }
             let pos = node.absolute_position(0.0, 0.0);

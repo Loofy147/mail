@@ -490,7 +490,7 @@ fn downsampled_images_keep_intrinsic_layout_and_background_scale() {
             decoded.data.len(),
             (decoded.pixel_width * decoded.pixel_height * 4) as usize
         );
-        // Blitz fits this auto-sized replaced element to available width.
+        // The reader's UA stylesheet fits this auto-sized image to available width.
         // Its original aspect ratio must survive decoder scaling.
         let size = node.final_layout().size;
         assert_eq!(size.width, 700.0);

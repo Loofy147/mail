@@ -92,7 +92,7 @@ WebView.
 
 Desktop builds include **CPU — Low Memory** and **GPU — WGPU** under
 Settings → General → Renderer. CPU is selected initially and does not initialize
-WGPU. The GPU option uses Slint and Vello on a shared WGPU 29 device; changing
+WGPU. The GPU option uses Slint and Vello on a shared WGPU 30 device; changing
 the setting takes effect after restarting the app. A failed GPU startup falls
 back to CPU automatically.
 

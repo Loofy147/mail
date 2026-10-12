@@ -202,6 +202,51 @@ verify_manifest_wiring() {
             return 1
         fi
     done
+
+    # The benchmark is part of the renderer's compatibility surface too, and
+    # Android resolves a separate graph. Do not let either silently drift.
+    python3 - "$REPO_ROOT" "$version" <<'PY'
+from pathlib import Path
+import json
+import sys
+import tomllib
+
+root, version = Path(sys.argv[1]), sys.argv[2]
+crates = ("blitz-dom", "blitz-html", "blitz-paint", "blitz-traits")
+for manifest in ("Cargo.toml", "crates/renderer-probe/Cargo.toml"):
+    dependencies = tomllib.loads((root / manifest).read_text())["dependencies"]
+    for crate in crates:
+        requirement = dependencies[crate]
+        actual = requirement if isinstance(requirement, str) else requirement["version"]
+        if actual != f"={version}":
+            raise SystemExit(f"{manifest}: {crate} must pin ={version}, got {actual}")
+    if "floats" not in dependencies["blitz-dom"].get("features", []):
+        raise SystemExit(f"{manifest}: email layout requires Blitz floats")
+
+for lockfile in ("Cargo.lock", "platform/android/Cargo.lock"):
+    packages = tomllib.loads((root / lockfile).read_text())["package"]
+    for crate in (*crates, "stylo_taffy"):
+        matches = [package for package in packages if package["name"] == crate]
+        if len(matches) != 1 or matches[0]["version"] != version:
+            raise SystemExit(f"{lockfile}: expected exactly one {crate} {version}")
+        local = crate in ("blitz-dom", "blitz-paint")
+        if ("source" not in matches[0]) != local:
+            raise SystemExit(f"{lockfile}: incorrect patch wiring for {crate}")
+
+packages = tomllib.loads((root / "Cargo.lock").read_text())["package"]
+expected = {
+    f"cargo/vendor/{p['name']}-{p['version']}": p["checksum"]
+    for p in packages if p.get("source", "").startswith("registry+")
+}
+sources = json.loads((root / "packaging/flatpak/cargo-sources.json").read_text())
+archives = {s["dest"]: s["sha256"] for s in sources if s["type"] == "archive"}
+checksums = {
+    s["dest"]: json.loads(s["contents"])["package"]
+    for s in sources if s.get("dest-filename") == ".cargo-checksum.json"
+}
+if archives != expected or checksums != expected:
+    raise SystemExit("Flatpak offline sources differ from Cargo.lock")
+PY
 }
 
 command=${1:-verify}

@@ -31,13 +31,12 @@ blitz-dom = { workspace = true }
 
 # Servo dependencies
 style = { workspace = true }
-euclid = { workspace = true }
 
 # DioxusLabs dependencies
 taffy = { workspace = true }
 
 # Linebender + WGPU dependencies
-parley = { workspace = true }
+parley = { workspace = true, features = ["bytemuck"] }
 skrifa = { workspace = true }
 color = { workspace = true }
 peniko = { workspace = true }
@@ -45,5 +44,6 @@ kurbo = { workspace = true }
 usvg = { workspace = true, optional = true }
 
 # Other dependencies
+bytemuck = { workspace = true }
 smallvec = { workspace = true }
 tracing = { workspace = true, optional = true }

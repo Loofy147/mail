@@ -17,16 +17,16 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::{LazyLock, Mutex};
 
-use markup5ever::local_name;
+use markup5ever::{local_name, ns};
 use selectors::sink::Push;
 use style::applicable_declarations::ApplicableDeclarationBlock;
+use style::context::QuirksMode;
 use style::properties::{PropertyDeclarationBlock, parse_style_attribute};
 use style::rule_tree::{CascadeLevel, CascadeOrigin};
 use style::servo_arc::Arc as ServoArc;
 use style::shared_lock::Locked;
 use style::stylesheets::layer_rule::LayerOrder;
 use style::stylesheets::{CssRuleType, UrlExtraData};
-use style::context::QuirksMode;
 
 use crate::node::{ElementData, Node, NodeData};
 
@@ -59,6 +59,30 @@ where
     let Some(elem) = node.data.downcast_element() else {
         return;
     };
+    let accepts_lang = elem.name.ns == ns!(html) || elem.name.ns == ns!(svg);
+    let mut lang = None;
+    for attr in elem.attrs() {
+        if attr.name.local == local_name!("lang") {
+            if attr.name.ns == ns!(xml) {
+                lang = Some(attr.value.as_str());
+            } else if attr.name.ns == ns!() && accepts_lang {
+                lang = lang.or(Some(attr.value.as_str()));
+            }
+        }
+    }
+    if let Some(lang) = lang {
+        use style::properties::{Importance, PropertyDeclaration};
+        use style::values::specified::XLang;
+        let block = ServoArc::new(node.guard().wrap(PropertyDeclarationBlock::with_one(
+            PropertyDeclaration::XLang(XLang(style::Atom::from(lang))),
+            Importance::Normal,
+        )));
+        hints.push(ApplicableDeclarationBlock::from_declarations(
+            block,
+            CascadeLevel::new(CascadeOrigin::PresHints),
+            LayerOrder::root(),
+        ));
+    }
     // Cells also inherit hints from their table's attributes.
     let is_cell = elem.name.local == local_name!("td") || elem.name.local == local_name!("th");
     if elem.attrs().is_empty() && !is_cell {
@@ -160,8 +184,7 @@ fn collect(node: &Node, elem: &ElementData, css: &mut String) {
     // such as `bgcolor`, win where they overlap.
     if is_cell {
         if let Some(table) = owning_table(node).and_then(|table| table.element_data()) {
-            if let Some(padding) = attr(table, "cellpadding").and_then(parse_non_negative_integer)
-            {
+            if let Some(padding) = attr(table, "cellpadding").and_then(parse_non_negative_integer) {
                 let _ = write!(css, "padding:{padding}px;");
             }
             if table_border_width(table).is_some_and(|width| width > 0)
@@ -179,13 +202,14 @@ fn collect(node: &Node, elem: &ElementData, css: &mut String) {
 
         match name {
             "align" => align_hint(tag, is_embedded, value, css),
-            "valign" if is_cell
-                || *tag == local_name!("tr")
-                || *tag == local_name!("tbody")
-                || *tag == local_name!("thead")
-                || *tag == local_name!("tfoot")
-                || *tag == local_name!("col")
-                || *tag == local_name!("colgroup") =>
+            "valign"
+                if is_cell
+                    || *tag == local_name!("tr")
+                    || *tag == local_name!("tbody")
+                    || *tag == local_name!("thead")
+                    || *tag == local_name!("tfoot")
+                    || *tag == local_name!("col")
+                    || *tag == local_name!("colgroup") =>
             {
                 let keyword = match value.trim().to_ascii_lowercase().as_str() {
                     "top" => "top",
@@ -229,9 +253,7 @@ fn collect(node: &Node, elem: &ElementData, css: &mut String) {
             // hspace/vspace apply to a smaller set than width/height: not
             // `iframe` or `video`.
             "hspace" | "vspace"
-                if is_embedded
-                    && *tag != local_name!("iframe")
-                    && *tag != local_name!("video") =>
+                if is_embedded && *tag != local_name!("iframe") && *tag != local_name!("video") =>
             {
                 if let Some(size) = parse_dimension(value, false) {
                     let (a, b) = if name == "hspace" {
@@ -527,10 +549,7 @@ fn font_family_list(value: &str) -> Option<String> {
     ];
     let mut out = String::new();
     for family in value.split(',') {
-        let family = family
-            .trim()
-            .trim_matches(|c| c == '"' || c == '\'')
-            .trim();
+        let family = family.trim().trim_matches(|c| c == '"' || c == '\'').trim();
         if family.is_empty() || family.chars().any(char::is_control) {
             continue;
         }
@@ -562,7 +581,10 @@ fn legacy_font_size(value: &str) -> Option<&'static str> {
         b'-' => (-1, &value[1..]),
         _ => (0, value),
     };
-    let len = digits.len() - digits.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    let len = digits.len()
+        - digits
+            .trim_start_matches(|c: char| c.is_ascii_digit())
+            .len();
     if len == 0 {
         return None;
     }
@@ -594,7 +616,10 @@ mod tests {
         assert_eq!(parse_legacy_color("ff0000").as_deref(), Some("#ff0000"));
         assert_eq!(parse_legacy_color(" Red ").as_deref(), Some("#ff0000"));
         assert_eq!(parse_legacy_color("#fffff").as_deref(), Some("#fffff0"));
-        assert_eq!(parse_legacy_color("chucknorris").as_deref(), Some("#c00000"));
+        assert_eq!(
+            parse_legacy_color("chucknorris").as_deref(),
+            Some("#c00000")
+        );
         assert_eq!(parse_legacy_color("transparent"), None);
         assert_eq!(parse_legacy_color(""), None);
     }

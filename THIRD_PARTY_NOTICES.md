@@ -23,14 +23,15 @@ checksums, and patch order are recorded in
 
 ## Parley emoji presentation
 
-The locally patched Parley 0.11.1 text layout crate is used under its
-Apache-2.0 option. The emoji sequence detector is copied from
+Blitz uses upstream Parley 0.12.0; Slint still uses locally patched Parley
+0.11.1. Both are used under the Apache-2.0 option. The `parley_emoji`
+sequence detector includes the fix from
 [Parley PR #811](https://github.com/linebender/parley/pull/811), based on
 [Christian Hansen's c-emoji](https://github.com/chansen/c-emoji), and is
 licensed under MIT. Its copyright and license are included in
 [`LICENSES/Parley-Emoji-MIT.txt`](LICENSES/Parley-Emoji-MIT.txt).
-Pinned sources and backport details are recorded in
-[`patches/parley/README.md`](patches/parley/README.md).
+Published packages and checksums are pinned in `Cargo.lock`. The backport
+retained for Slint is documented in [`patches/parley/README.md`](patches/parley/README.md).
 
 ## Reader integration dependencies
 
@@ -42,7 +43,7 @@ notices and license texts; the Apache-2.0 license is also included in
 | Package | Locked version | Upstream source | Purpose |
 | --- | --- | --- | --- |
 | arboard | 3.6.1 | [1Password/arboard](https://github.com/1Password/arboard) | Desktop HTML and primary-selection clipboard |
-| html5ever | 0.39.0 | [servo/html5ever](https://github.com/servo/html5ever) | HTML preflight and export tokenization |
+| html5ever | 0.40.1 | [servo/html5ever](https://github.com/servo/html5ever) | HTML preflight and export tokenization |
 | unicode-segmentation | 1.13.3 | [unicode-rs/unicode-segmentation](https://github.com/unicode-rs/unicode-segmentation) | Unicode word selection |
 | percent-encoding | 2.3.2 | [servo/rust-url](https://github.com/servo/rust-url/) | Fragment and mailto decoding |
 | base64 | 0.22.1 | [marshallpierce/rust-base64](https://github.com/marshallpierce/rust-base64) | Export CSP hash encoding |

@@ -2,10 +2,12 @@ use super::{ElementCx, to_image_quality, to_peniko_image};
 use crate::color::{Color, ToColorColor};
 use crate::gradient::to_peniko_gradient;
 use anyrender::PaintScene;
+use blitz_dom::NodeId;
 use blitz_dom::node::{ImageData, ImageResourceData, SpecialElementData};
 use kurbo::{self, Affine, BezPath, Point, Rect, Shape, Size, Vec2};
 use peniko::{self, Fill};
 use style::{
+    computed_values::border_collapse::T as BorderCollapse,
     properties::{
         generated::longhands::{
             background_attachment::single_value::computed_value::T as StyloBackgroundAttachment,
@@ -219,52 +221,108 @@ impl ElementCx<'_, '_> {
         }
     }
 
+    /// Paint the backgrounds of the table's column groups, columns, row groups and rows
+    /// (in that order, bottom to top: CSS 2.1 §17.5.1).
+    ///
+    /// These backgrounds are only painted behind the table's cells (not in the
+    /// `border-spacing` between them, nor where a row has no cell), so they are
+    /// painted cell by cell.
     pub(super) fn draw_table_row_backgrounds(&self, scene: &mut impl PaintScene) {
         let SpecialElementData::TableRoot(table) = &self.element.special_data else {
             return;
         };
-        let grid_info = table.computed_grid_info.borrow();
-        let Some(grid_info) = grid_info.as_ref() else {
-            return;
-        };
 
-        // Track positions are relative to the table's border box. A row's
-        // background spans its cells, from the first column to the last.
-        let cols = &grid_info.columns.positions;
-        let (Some(x0), Some(x1)) = (
-            cols.iter().map(|line| line.start.min(line.end)).reduce(f32::min),
-            cols.iter().map(|line| line.start.max(line.end)).reduce(f32::max),
-        ) else {
-            return;
-        };
-
-        let rows = &grid_info.rows.positions;
-        for row in &table.rows {
-            let Some(position) = rows.get(usize::from(row.index)) else {
-                continue;
-            };
-            let row_node = &self.context.dom.get_node(row.node_id).unwrap();
-            let Some(style) = row_node.primary_styles() else {
-                continue;
-            };
-
-            let shape = Rect::new(
-                f64::from(x0),
-                f64::from(position.start),
-                f64::from(x1),
-                f64::from(position.end),
-            )
-            .scale_from_origin(self.scale);
-
+        let background_color = |node_id: NodeId| -> Option<Color> {
+            let node = self.context.dom.get_node(node_id)?;
+            let style = node.primary_styles()?;
             let current_color = style.clone_color();
-            let background_color = &style.get_background().background_color;
-            let bg_color = background_color
+            let color = style
+                .get_background()
+                .background_color
                 .resolve_to_absolute(&current_color)
                 .as_srgb_color();
+            (color != Color::TRANSPARENT).then_some(color)
+        };
 
-            if bg_color != Color::TRANSPARENT {
-                // Fill the color
-                scene.fill(Fill::NonZero, self.transform, bg_color, None, &shape);
+        // Resolve the (group, track) background colors once per track rather than once per cell
+        let column_colors: Vec<[Option<Color>; 2]> = table
+            .columns
+            .iter()
+            .map(|col| {
+                [
+                    col.group.and_then(background_color),
+                    background_color(col.node_id),
+                ]
+            })
+            .collect();
+        let mut row_colors = Vec::new();
+        for row in &table.rows {
+            row_colors.resize(usize::from(row.index) + 1, [None, None]);
+            row_colors[usize::from(row.index)] = [
+                row.group.and_then(background_color), background_color(row.node_id),
+            ];
+        }
+        let has_color =
+            |colors: &[[Option<Color>; 2]]| colors.iter().flatten().any(Option::is_some);
+        if !has_color(&column_colors) && !has_color(&row_colors) {
+            return;
+        }
+
+        let cell_rect = |cell_id: NodeId| -> Option<Rect> {
+            let layout = self.context.dom.get_node(cell_id)?.final_layout();
+            Some(Rect::new(
+                layout.location.x as f64,
+                layout.location.y as f64,
+                (layout.location.x + layout.size.width) as f64,
+                (layout.location.y + layout.size.height) as f64,
+            ))
+        };
+
+        // In the collapsed borders model the borders are laid out as gutters between the
+        // cells, but a cell's border box (and so its background) extends to the middle of
+        // the borders around it. The gutter is split on a whole pixel so that the
+        // backgrounds of adjacent cells tile exactly.
+        let collapsed = table.border_collapse == BorderCollapse::Collapse;
+        let (gutter, bounds) = if collapsed {
+            let gap = table.style.gap.map(|gap| gap.into_raw().value() as f64);
+            let bounds = table
+                .cells
+                .iter()
+                .filter_map(|cell| cell_rect(cell.node_id))
+                .reduce(|a, b| a.union(b));
+            (Size::new(gap.width, gap.height), bounds)
+        } else {
+            (Size::ZERO, None)
+        };
+        let before = Size::new((gutter.width / 2.0).ceil(), (gutter.height / 2.0).ceil());
+        let after = gutter - before;
+
+        for cell in &table.cells {
+            let no_colors = [None, None];
+            let column = column_colors
+                .get(cell.column as usize)
+                .unwrap_or(&no_colors);
+            let row = row_colors.get(cell.row as usize).unwrap_or(&no_colors);
+            let mut colors = column.iter().chain(row).flatten().peekable();
+            if colors.peek().is_none() {
+                continue;
+            }
+            let Some(mut rect) = cell_rect(cell.node_id) else {
+                continue;
+            };
+            if let Some(bounds) = bounds {
+                rect = Rect::new(
+                    rect.x0 - before.width,
+                    rect.y0 - before.height,
+                    rect.x1 + after.width,
+                    rect.y1 + after.height,
+                )
+                .intersect(bounds);
+            }
+
+            let shape = rect.scale_from_origin(self.scale);
+            for color in colors {
+                scene.fill(Fill::NonZero, self.transform, *color, None, &shape);
             }
         }
     }

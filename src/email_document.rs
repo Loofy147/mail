@@ -78,18 +78,18 @@ impl TokenSink for Sink {
                     if let Some(index) = s.stack.iter().rposition(|n| n == &name) {
                         s.stack.truncate(index);
                     }
-                    if matches!(name.as_ref(), "script" | "style" | "title") {
+                    if matches!(name.as_str(), "script" | "style" | "title") {
                         s.raw = None;
                     }
                     if s.emit_export
-                        && !matches!(name.as_ref(), "meta" | "base" | "link" | "script")
+                        && !matches!(name.as_str(), "meta" | "base" | "link" | "script")
                     {
                         s.export.push_str("</");
                         s.export.push_str(&name);
                         s.export.push('>');
                     }
                     if matches!(
-                        name.as_ref(),
+                        name.as_str(),
                         "p" | "div" | "tr" | "li" | "pre" | "h1" | "h2" | "h3"
                     ) {
                         s.append_text("\n");
@@ -97,7 +97,7 @@ impl TokenSink for Sink {
                 } else {
                     s.count += 1;
                     if !matches!(
-                        name.as_ref(),
+                        name.as_str(),
                         "area"
                             | "base"
                             | "br"
@@ -124,28 +124,28 @@ impl TokenSink for Sink {
                     }
                     for attr in &tag.attrs {
                         let value = attr.value.as_ref();
-                        let attr_name = attr.name.local.as_ref();
+                        let attr_name = attr.name.local.as_str();
                         if (matches!(attr_name, "colspan" | "rowspan" | "span")
                             && value.parse::<u64>().is_ok_and(|n| n > 512))
                             || (attr_name == "style" && excessive_css(value))
                         {
                             s.excessive = true;
                         }
-                        if (name.as_ref() == "img"
-                            && attr.name.local.as_ref() == "src"
+                        if (name.as_str() == "img"
+                            && attr.name.local.as_str() == "src"
                             && is_remote(value))
-                            || (attr.name.local.as_ref() == "style" && css_remote(value))
+                            || (attr.name.local.as_str() == "style" && css_remote(value))
                         {
                             s.remote = true;
                         }
                     }
                     if s.emit_export
-                        && !matches!(name.as_ref(), "meta" | "base" | "link" | "script")
+                        && !matches!(name.as_str(), "meta" | "base" | "link" | "script")
                     {
                         s.export.push('<');
                         s.export.push_str(&name);
                         for attr in &tag.attrs {
-                            let n = attr.name.local.as_ref();
+                            let n = attr.name.local.as_str();
                             if !n.starts_with("on") && n != "srcdoc" {
                                 s.export.push(' ');
                                 s.export.push_str(n);
@@ -156,17 +156,17 @@ impl TokenSink for Sink {
                         }
                         s.export.push('>');
                     }
-                    if name.as_ref() == "br" {
+                    if name.as_str() == "br" {
                         s.append_text("\n");
                     }
-                    if name.as_ref() == "img"
-                        && let Some(alt) = tag.attrs.iter().find(|a| a.name.local.as_ref() == "alt")
+                    if name.as_str() == "img"
+                        && let Some(alt) = tag.attrs.iter().find(|a| a.name.local.as_str() == "alt")
                     {
                         s.append_text(&alt.value);
                     }
-                    if matches!(name.as_ref(), "script" | "style" | "title") {
+                    if matches!(name.as_str(), "script" | "style" | "title") {
                         s.raw = Some(name.clone());
-                        return TokenSinkResult::RawData(if name.as_ref() == "title" {
+                        return TokenSinkResult::RawData(if name.as_str() == "title" {
                             html5ever::tokenizer::states::RawKind::Rcdata
                         } else {
                             html5ever::tokenizer::states::RawKind::Rawtext
@@ -217,11 +217,10 @@ fn excessive_css(css: &str) -> bool {
     if css.len() > 512 * 1024 {
         return true;
     }
-    let mut input = cssparser::ParserInput::new(css);
-    css_tokens_excessive(&mut cssparser::Parser::new(&mut input), 0)
+    css_tokens_excessive(&mut cssparser::Parser::new(css), 0)
 }
 
-fn css_tokens_excessive(parser: &mut cssparser::Parser<'_, '_>, depth: usize) -> bool {
+fn css_tokens_excessive(parser: &mut cssparser::Parser<'_>, depth: usize) -> bool {
     use cssparser::Token as CssToken;
     if depth > 64 {
         return true;
@@ -247,7 +246,7 @@ fn css_tokens_excessive(parser: &mut cssparser::Parser<'_, '_>, depth: usize) ->
             CssToken::Function(name) => {
                 let repeat = name.eq_ignore_ascii_case("repeat");
                 let mut excessive = false;
-                let _: Result<(), cssparser::ParseError<'_, ()>> =
+                let _: Result<(), cssparser::ParseError<()>> =
                     parser.parse_nested_block(|nested| {
                         if repeat
                             && nested
@@ -267,7 +266,7 @@ fn css_tokens_excessive(parser: &mut cssparser::Parser<'_, '_>, depth: usize) ->
             | CssToken::CurlyBracketBlock
             | CssToken::SquareBracketBlock => {
                 let mut excessive = false;
-                let _: Result<(), cssparser::ParseError<'_, ()>> =
+                let _: Result<(), cssparser::ParseError<()>> =
                     parser.parse_nested_block(|nested| {
                         excessive = css_tokens_excessive(nested, depth + 1);
                         Ok(())

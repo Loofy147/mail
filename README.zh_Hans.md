@@ -65,7 +65,7 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
 
 为了保持客户端完全原生、把内存占用维持在 90 MB 左右，Flectar Mail 使用 [Blitz](https://github.com/DioxusLabs/blitz)——Dioxus 团队开发的 Rust HTML/CSS 渲染器——来渲染邮件 HTML，而不是内嵌浏览器或 WebView。
 
-桌面版在「设置 → 常规 → 渲染器」下提供 **CPU — 低内存** 与 **GPU — WGPU** 两个选项。初始选择 CPU，且不会初始化 WGPU。GPU 选项在共享的 WGPU 29 设备上使用 Slint 与 Vello；更改设置后需重启应用才会生效。GPU 启动失败时会自动回退到 CPU。
+桌面版在「设置 → 常规 → 渲染器」下提供 **CPU — 低内存** 与 **GPU — WGPU** 两个选项。初始选择 CPU，且不会初始化 WGPU。GPU 选项在共享的 WGPU 30 设备上使用 Slint 与 Vello；更改设置后需重启应用才会生效。GPU 启动失败时会自动回退到 CPU。
 
 据我们所知，Flectar Mail 是最早把 Blitz 用于真实场景中任意邮件 HTML 的项目之一。邮件标记中含有大量非常规的 HTML 与 CSS，这会把渲染器推向要求极高的领域。目前我们在 Blitz 之上维护了若干补丁，并希望随时间推移尽可能多地把这些工作回流上游。
 
