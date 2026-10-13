@@ -6,6 +6,10 @@ target_dir="$project_dir/target"
 android_sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 android_ndk="${ANDROID_NDK_ROOT:-${ANDROID_NDK_HOME:-}}"
 
+# Missing registrations are supported: the app shows Sign-in settings instead
+# of sending a placeholder client ID to a provider. Reject invalid supplied IDs.
+python3 "$project_dir/scripts/verify-android-oauth.py"
+
 if [[ -z "$android_sdk" || ! -d "$android_sdk" ]]; then
   printf 'Android SDK not found. Set ANDROID_HOME to your Android SDK directory.\n' >&2
   exit 1
@@ -67,14 +71,6 @@ fi
 
 export ANDROID_HOME="$android_sdk"
 export CARGO_TARGET_DIR="$target_dir"
-
-# Test builds have deterministic provider placeholders so static packaging and
-# device startup can be exercised without borrowing production registrations.
-# Provider sign-in intentionally remains unavailable until the release-owner
-# values documented in ANDROID_FUNCTIONAL_APP_TODO.md are supplied.
-export FLECTAR_GOOGLE_ANDROID_CLIENT_ID="${FLECTAR_GOOGLE_ANDROID_CLIENT_ID:-test.apps.googleusercontent.com}"
-export FLECTAR_MICROSOFT_ANDROID_CLIENT_ID="${FLECTAR_MICROSOFT_ANDROID_CLIENT_ID:-00000000-0000-0000-0000-000000000000}"
-export FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI="${FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI:-msauth://com.flectar.mail/test-signature-hash}"
 
 cargo build \
   --locked \

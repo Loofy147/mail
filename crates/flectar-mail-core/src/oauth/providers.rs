@@ -63,6 +63,66 @@ pub fn for_provider(p: Provider) -> Option<&'static OAuthProviderConfig> {
     }
 }
 
+/// Validate local syntax, not the existence or consent status of a provider
+/// registration. Microsoft application IDs are non-nil, hyphenated GUIDs.
+pub fn validate_client_id(provider: Provider, client_id: &str) -> Result<()> {
+    let id = client_id.trim();
+    let valid = match provider {
+        Provider::Microsoft => {
+            let bytes = id.as_bytes();
+            bytes.len() == 36
+                && bytes.iter().enumerate().all(|(index, byte)| {
+                    if matches!(index, 8 | 13 | 18 | 23) {
+                        *byte == b'-'
+                    } else {
+                        byte.is_ascii_hexdigit()
+                    }
+                })
+                && id != "00000000-0000-0000-0000-000000000000"
+        }
+        // Google client IDs are opaque. Reject our former build placeholder
+        // without imposing an undocumented format on existing registrations.
+        Provider::Gmail => {
+            !id.is_empty()
+                && !id.eq_ignore_ascii_case("test.apps.googleusercontent.com")
+                && !id.chars().any(|ch| ch.is_whitespace() || ch.is_control())
+        }
+        Provider::Imap => false,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(CoreError::Auth(match provider {
+            Provider::Microsoft => "Enter the Microsoft Application (client) ID from your app registration in Sign-in settings; it must be a nonzero GUID, not a placeholder.".into(),
+            Provider::Gmail => "Enter your Google OAuth client ID in Sign-in settings; a test placeholder cannot be used for sign-in.".into(),
+            Provider::Imap => "provider does not use oauth".into(),
+        }))
+    }
+}
+
+pub(crate) fn validate_custom_client_id(provider: Provider, client_id: &str) -> Result<()> {
+    if client_id.trim().is_empty() {
+        // Clearing a custom registration restores the bundled default.
+        Ok(())
+    } else {
+        validate_client_id(provider, client_id)
+    }
+}
+
+fn checked_credentials(
+    provider: Provider,
+    client_id: &str,
+    client_secret: Option<&str>,
+) -> Result<(String, Option<String>)> {
+    validate_client_id(provider, client_id)?;
+    let secret = client_secret
+        .filter(|_| provider == Provider::Gmail)
+        .map(str::trim)
+        .filter(|secret| !secret.is_empty())
+        .map(str::to_owned);
+    Ok((client_id.trim().to_owned(), secret))
+}
+
 /// Client credentials the user entered in Settings. Refreshed on startup and
 /// whenever settings change. An explicit user registration overrides the app
 /// registration bundled by the build.
@@ -109,15 +169,9 @@ fn bundled_credentials(provider: Provider) -> Option<(String, Option<String>)> {
         Provider::Microsoft => (option_env!("FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID"), None),
         Provider::Imap => return None,
     };
-    let client_id = client_id?.trim();
-    if client_id.is_empty() {
-        return None;
-    }
-    let client_secret = client_secret
-        .map(str::trim)
-        .filter(|secret| !secret.is_empty())
-        .map(str::to_owned);
-    Some((client_id.to_owned(), client_secret))
+    // Invalid build-time defaults must not enable the sign-in buttons. Runtime
+    // or user configuration may still provide a real registration.
+    checked_credentials(provider, client_id?, client_secret).ok()
 }
 
 pub fn has_bundled_credentials(provider: Provider) -> bool {
@@ -134,7 +188,8 @@ pub fn resolve_credentials(provider: Provider) -> Result<(String, Option<String>
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(&provider)
     {
-        return Ok(entry.clone());
+        // An invalid saved override must not silently switch registrations.
+        return checked_credentials(provider, &entry.0, entry.1.as_deref());
     }
     if let Some(entry) = bundled_credentials(provider) {
         return Ok(entry);
@@ -157,7 +212,7 @@ pub fn resolve_credentials(provider: Provider) -> Result<(String, Option<String>
         let secret = client_secret_env
             .and_then(|name| std::env::var(name).ok())
             .filter(|secret| !secret.trim().is_empty());
-        return Ok((id, secret));
+        return checked_credentials(provider, &id, secret.as_deref());
     }
     Err(CoreError::Auth(format!(
         "no OAuth app configured for {}: use custom OAuth credentials in Settings → General, or build with {}",
@@ -186,15 +241,71 @@ mod tests {
     use super::*;
 
     #[test]
+    fn rejects_nil_and_malformed_microsoft_app_ids() {
+        for id in [
+            "",
+            " ",
+            "00000000-0000-0000-0000-000000000000",
+            "00000000000000000000000000000000",
+            "ms-id",
+            "11111111-2222-4333-8444-55555555555z",
+            "111111112222-4333-8444-555555555555",
+            "{11111111-2222-4333-8444-555555555555}",
+            "11111111-2222-4333-8444-555555555555?x=1",
+        ] {
+            assert!(
+                validate_client_id(Provider::Microsoft, id).is_err(),
+                "{id:?}"
+            );
+            assert!(checked_credentials(Provider::Microsoft, id, None).is_err());
+        }
+        for id in [
+            "11111111-2222-4333-8444-555555555555",
+            "ABCDEF01-2345-4678-9ABC-DEF012345678",
+            "  abcdef01-2345-4678-9abc-def012345678  ",
+        ] {
+            let (actual, secret) =
+                checked_credentials(Provider::Microsoft, id, Some("ignored")).unwrap();
+            assert_eq!(actual, id.trim());
+            assert!(secret.is_none());
+        }
+        assert!(validate_custom_client_id(Provider::Microsoft, "  ").is_ok());
+    }
+
+    #[test]
+    fn rejects_legacy_google_placeholder_and_preserves_opaque_ids() {
+        for id in [
+            "",
+            "test.apps.googleusercontent.com",
+            " TEST.apps.googleusercontent.com ",
+            "id with spaces",
+        ] {
+            assert!(checked_credentials(Provider::Gmail, id, None).is_err());
+        }
+        assert_eq!(
+            checked_credentials(Provider::Gmail, " custom-google-id ", Some(" secret ")).unwrap(),
+            ("custom-google-id".into(), Some("secret".into()))
+        );
+    }
+
+    #[test]
     fn resolve_uses_configured_values_and_clears() {
         // Explicit settings always win, including in a release build that has
         // an official registration compiled into it.
-        set_configured(Provider::Microsoft, "  ms-id  ", "");
+        set_configured(
+            Provider::Microsoft,
+            "  11111111-2222-4333-8444-555555555555  ",
+            "",
+        );
         let (id, secret) = resolve_credentials(Provider::Microsoft).unwrap();
-        assert_eq!(id, "ms-id");
+        assert_eq!(id, "11111111-2222-4333-8444-555555555555");
         assert_eq!(secret, None);
 
-        set_configured(Provider::Microsoft, "ms-id", "  ignored-secret ");
+        set_configured(
+            Provider::Microsoft,
+            "11111111-2222-4333-8444-555555555555",
+            "  ignored-secret ",
+        );
         let (_, secret) = resolve_credentials(Provider::Microsoft).unwrap();
         assert_eq!(secret, None);
 
@@ -203,6 +314,15 @@ mod tests {
         assert_eq!(secret.as_deref(), Some("s3cret"));
         set_configured(Provider::Gmail, "", "");
 
+        // Even if a valid default is bundled, an invalid explicit override
+        // cannot authorize under that default's different app registration.
+        set_configured(
+            Provider::Microsoft,
+            "00000000-0000-0000-0000-000000000000",
+            "",
+        );
+        assert!(resolve_credentials(Provider::Microsoft).is_err());
+
         // Empty id clears the custom registration. A bundled registration may
         // then become active, so only verify that the custom value is gone.
         set_configured(Provider::Microsoft, "", "whatever");
@@ -210,7 +330,7 @@ mod tests {
             resolve_credentials(Provider::Microsoft)
                 .ok()
                 .map(|entry| entry.0),
-            Some("ms-id".to_owned())
+            Some("11111111-2222-4333-8444-555555555555".to_owned())
         );
     }
 

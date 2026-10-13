@@ -6935,6 +6935,20 @@ impl Core {
             .write(move |conn| {
                 let tx = conn.transaction()?;
                 let previous = repo::settings::get(&tx)?;
+                // Allow unrelated settings to be saved even if an older build
+                // persisted invalid OAuth keys; validate any newly supplied ID.
+                if settings.google_client_id != previous.google_client_id {
+                    oauth::providers::validate_custom_client_id(
+                        Provider::Gmail,
+                        &settings.google_client_id,
+                    )?;
+                }
+                if settings.ms_client_id != previous.ms_client_id {
+                    oauth::providers::validate_custom_client_id(
+                        Provider::Microsoft,
+                        &settings.ms_client_id,
+                    )?;
+                }
                 repo::contacts::advance_learning_boundaries(
                     &tx,
                     !previous.collect_outgoing_contacts && settings.collect_outgoing_contacts,
@@ -7148,6 +7162,14 @@ impl Core {
         google: Option<(String, String)>,
         microsoft: Option<String>,
     ) -> Result<Settings> {
+        // Reject a bad registration before either provider is written. Empty
+        // IDs remain the explicit way to clear a custom registration.
+        if let Some((id, _)) = &google {
+            oauth::providers::validate_custom_client_id(Provider::Gmail, id)?;
+        }
+        if let Some(id) = &microsoft {
+            oauth::providers::validate_custom_client_id(Provider::Microsoft, id)?;
+        }
         self.db
             .write(move |conn| {
                 let mut settings = repo::settings::get(conn)?;

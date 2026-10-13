@@ -68,3 +68,39 @@ those callbacks use the same library-loading path.
 Record the APK version, Android version and test results before closing #64.
 If Google authorization still fails, preserve the provider's error separately
 from JNI linkage failures; never include access tokens or mailbox data in logs.
+
+## OAuth configuration and issue #65
+
+Preview builds may omit either `FLECTAR_GOOGLE_ANDROID_CLIENT_ID` or
+`FLECTAR_MICROSOFT_ANDROID_CLIENT_ID`. No placeholder is substituted: that
+provider stays unavailable until a valid custom registration is saved through
+Sign-in settings. A supplied invalid ID fails the build before compilation.
+Production builds require both IDs and verify that the configured Microsoft
+redirect matches the APK signing certificate.
+
+Microsoft client IDs must be the nonzero Application (client) ID from Entra app
+registration, in hyphenated GUID form. The app validates bundled, custom and
+runtime configuration before starting authorization. Existing invalid saved
+IDs remain editable, and unrelated settings remain usable. Invalid custom
+input is rejected without changing either provider's saved registration.
+
+For working Outlook sign-in, register the Android package `com.flectar.mail`
+and the signing certificate of the APK being installed. Obtain the certificate
+hash and exact redirect with `scripts/android-signing-identities.sh <apk>`.
+The running app derives its redirect from its installed signing certificate;
+setting a build variable alone does not register that redirect with Microsoft.
+The app uses the `common` authority for work/school and personal Microsoft
+accounts, so choose the corresponding supported account types in Entra. This
+is a public client using authorization code with PKCE; do not add a client secret.
+
+References: [Microsoft app registration](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app),
+[Android client configuration](https://learn.microsoft.com/en-us/entra/msal/android/msal-configuration),
+and [Android signing redirects](https://learn.microsoft.com/en-us/entra/msal/android/frequently-asked-questions).
+
+Run `python3 scripts/test-android-oauth.py` for the build configuration regression
+tests. Run `cargo test -p flectar-mail-core --locked --test oauth_settings` for
+saved configuration, atomic rejection, and the no-browser-on-invalid-ID check.
+Local syntax validation cannot establish that an ID is registered, that its
+redirect is registered, or that a tenant permits consent. Check real sign-in
+using the release registration and signing certificate before promising
+built-in Outlook availability.

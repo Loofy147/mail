@@ -29,14 +29,7 @@ if [[ ! -f "$FLECTAR_ANDROID_KEYSTORE" ]]; then
   printf 'Production keystore not found: %s\n' "$FLECTAR_ANDROID_KEYSTORE" >&2
   exit 1
 fi
-if [[ "$FLECTAR_GOOGLE_ANDROID_CLIENT_ID" != *.apps.googleusercontent.com || "$FLECTAR_GOOGLE_ANDROID_CLIENT_ID" == test.* ]]; then
-  printf 'FLECTAR_GOOGLE_ANDROID_CLIENT_ID is not a production Android OAuth client ID.\n' >&2
-  exit 1
-fi
-if [[ ! "$FLECTAR_MICROSOFT_ANDROID_CLIENT_ID" =~ ^[0-9A-Fa-f-]{36}$ || "$FLECTAR_MICROSOFT_ANDROID_CLIENT_ID" == 00000000-0000-0000-0000-000000000000 ]]; then
-  printf 'FLECTAR_MICROSOFT_ANDROID_CLIENT_ID is not a production Entra application ID.\n' >&2
-  exit 1
-fi
+python3 "$project_dir/scripts/verify-android-oauth.py" --require-all
 if [[ ! "$FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI" =~ ^msauth://com\.flectar\.mail/.+ ]]; then
   printf 'Microsoft redirect must be msauth://com.flectar.mail/<signature-hash>.\n' >&2
   exit 1
