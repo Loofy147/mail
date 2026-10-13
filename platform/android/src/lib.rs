@@ -111,10 +111,14 @@ fn app_cache_dir(app: &slint::android::AndroidApp) -> Result<std::path::PathBuf,
 #[unsafe(no_mangle)]
 fn android_main(app: slint::android::AndroidApp) {
     observability::install();
+    // SAFETY: AndroidApp owns these live VM and Activity references.
+    unsafe { tls::initialize(app.vm_as_ptr().cast(), app.activity_as_ptr().cast()) }
+        .expect("failed to initialize Android TLS certificate verification");
     let internal = app
         .internal_data_path()
         .expect("Android did not provide an app-private data directory");
-    let cache_dir = app_cache_dir(&app).expect("Android did not provide an app-private cache directory");
+    let cache_dir =
+        app_cache_dir(&app).expect("Android did not provide an app-private cache directory");
     tracing::info!(internal_data_path = %internal.display(), "resolved Android app-private root");
     let oauth_redirects = oauth::AndroidOAuthBroker::global(&app, &internal)
         .expect("failed to initialize Android OAuth services");
@@ -140,6 +144,8 @@ fn android_main(app: slint::android::AndroidApp) {
 mod credentials;
 #[cfg(target_os = "android")]
 mod oauth;
+#[cfg(target_os = "android")]
+mod tls;
 
 #[cfg(target_os = "android")]
 mod documents;
