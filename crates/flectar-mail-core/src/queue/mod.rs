@@ -621,26 +621,60 @@ async fn append_sent_action(
     )
     .await?;
 
-    imap::select(session, &sent.imap_name).await?;
+    let selected = imap::select(session, &sent.imap_name).await?;
     let header_value = format!("<{}>", rfc_message_id.trim_matches(['<', '>']));
-    if imap::uid_search_header(session, "Message-ID", &header_value)
+    // The uid is the authoritative identity of the Sent copy: Outlook rewrites
+    // Message-IDs in some folders, so a header search alone can neither prove
+    // absence before an append (retries appended twice) nor hand the sync a
+    // stable key (the fetched copy duplicated the local row). Record it
+    // whenever it can be established.
+    let sent_uid = if let Some(uid) = imap::uid_search_header(session, "Message-ID", &header_value)
         .await?
-        .is_empty()
+        .into_iter()
+        .next()
     {
-        imap::append(session, &sent.imap_name, &raw, true).await?;
-        tracing::debug!(
+        tracing::info!(
             account_id = config.id,
             message_id,
             folder = %sent.imap_name,
-            "smtp send: appended durable copy to Sent",
+            uid,
+            "smtp send: Sent copy already exists"
         );
+        Some(uid)
     } else {
-        tracing::debug!(
+        let before = selected.uid_next;
+        imap::append(session, &sent.imap_name, &raw, true).await?;
+        // The appended message takes the pre-append UIDNEXT. An after value of
+        // exactly one more rules out a concurrent append in between; anything
+        // else falls back to a header search (which works when the server
+        // preserves the Message-ID).
+        let after = imap::select(session, &sent.imap_name).await?.uid_next;
+        let appended = match (before, after) {
+            (Some(next), Some(after_next)) if after_next == next + 1 => Some(next as u32),
+            _ => imap::uid_search_header(session, "Message-ID", &header_value)
+                .await?
+                .into_iter()
+                .next(),
+        };
+        tracing::info!(
             account_id = config.id,
             message_id,
             folder = %sent.imap_name,
-            "smtp send: Sent copy already exists",
+            uid = ?appended,
+            "smtp send: appended durable copy to Sent"
         );
+        appended
+    };
+    if let Some(uid) = sent_uid {
+        let folder_id = sent.id;
+        ctx.db
+            .write(move |conn| {
+                let tx = conn.transaction()?;
+                repo::messages::set_uid_and_folder(&tx, message_id, folder_id, Some(uid as i64))?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await?;
     }
     Ok(())
 }
