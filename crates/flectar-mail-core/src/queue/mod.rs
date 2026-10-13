@@ -920,7 +920,11 @@ async fn send_action(
     // so the Sent-folder sync dedupes against this row instead of duplicating.
     let sent_at = now_ms();
     let send_action_id = action.id;
-    let should_append_sent = config.provider != Provider::Gmail;
+    // Gmail and Outlook.com save their own copy of SMTP submissions; appending
+    // as well would file every sent message twice (Outlook rewrites the
+    // Message-ID of its copy, which also defeats header-search dedupe). The
+    // Sent-folder sync adopts the server copy into this row instead.
+    let should_append_sent = !matches!(config.provider, Provider::Gmail | Provider::Microsoft);
     let (thread_id, staged_paths) = ctx
         .db
         .write(move |conn| {

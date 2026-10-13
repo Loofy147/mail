@@ -145,6 +145,33 @@ pub fn jmap_adoption_candidate(
     Ok(if ambiguous { None } else { candidate })
 }
 
+/// Adopt the server's own copy of an SMTP submission into the queued outgoing
+/// row. Outlook.com rewrites the Message-ID when it saves the copy, so match
+/// on the Sent folder, the empty remote identity, subject and send time
+/// instead; two candidates make the match ambiguous and are rejected.
+pub fn outgoing_sent_adoption_candidate(
+    conn: &Connection,
+    account_id: i64,
+    folder_id: i64,
+    subject: &str,
+    sent_at_ms: i64,
+) -> Result<Option<MessageRow>> {
+    let mut stmt = conn.prepare_cached(basic_message_select!(
+        "WHERE account_id=?1 AND folder_id=?2 AND is_outgoing=1 AND uid IS NULL
+           AND subject=?3
+           AND ABS(date-?4) <= 120000
+         ORDER BY id LIMIT 2"
+    ))?;
+    let mut rows = stmt.query_map(
+        params![account_id, folder_id, subject, sent_at_ms],
+        row_basic,
+    )?;
+    let candidate = rows.next().transpose()?;
+    // Decode the second row too, preserving errors and rejecting ambiguity.
+    let ambiguous = rows.next().transpose()?.is_some();
+    Ok(if ambiguous { None } else { candidate })
+}
+
 /// Stable Gmail API resource lookup. Unlike an RFC Message-ID this is always
 /// present, unique within the account and unchanged by labels/moves.
 pub fn by_gm_msgid(

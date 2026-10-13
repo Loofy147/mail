@@ -2185,9 +2185,27 @@ async fn store_headers(
 
                 // Dedupe: same Message-ID already stored (e.g. our own sent
                 // message APPENDed earlier, or Gmail label duplication).
-                if let Some(mid) = &parsed.message_id
-                    && let Some(existing) = repo::messages::by_message_id(&tx, account_id, mid)?
+                let mut existing = match &parsed.message_id {
+                    Some(mid) => repo::messages::by_message_id(&tx, account_id, mid)?,
+                    None => None,
+                };
+                // Outlook.com saves its own copy of SMTP submissions under a
+                // rewritten Message-ID. Adopt that copy into the queued
+                // outgoing row (same Sent folder, no uid yet, same subject and
+                // send time) so the sent message keeps one identity.
+                if existing.is_none()
+                    && folder_role.as_deref() == Some(roles::SENT)
+                    && let Some(sent_at_ms) = parsed.date_ms
                 {
+                    existing = repo::messages::outgoing_sent_adoption_candidate(
+                        &tx,
+                        account_id,
+                        folder_id,
+                        &parsed.subject,
+                        sent_at_ms,
+                    )?;
+                }
+                if let Some(existing) = existing {
                     if existing.uid.is_none()
                         && !repo::actions::has_active_move_from(&tx, existing.id, folder_id)?
                     {
