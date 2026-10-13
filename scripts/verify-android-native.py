@@ -1,8 +1,51 @@
 #!/usr/bin/env python3
-"""Verify packaged native ABI completeness and 16 KiB ELF load alignment."""
+"""Verify native ABI completeness, JNI exports and 16 KiB ELF load alignment."""
 import argparse
+import os
+from pathlib import Path
+import shutil
 import struct
+import subprocess
+import tempfile
 import zipfile
+
+
+REQUIRED_EXPORTS = {
+    "ANativeActivity_onCreate",
+    *("Java_com_flectar_mail_FlectarActivity_" + method for method in (
+        "nativeGoogleAuthorizationResult",
+        "nativeMicrosoftRedirect",
+        "nativeDocumentResult",
+        "nativeDocumentRequestActive",
+        "nativeSuspendPdfPreview",
+    )),
+}
+
+
+def verify_jni_exports(data, name):
+    # Inspect the dynamic symbol table: strings or a debug symbol table do not
+    # prove that ART can find these functions after release stripping/LTO.
+    readelf = os.environ.get("READELF") or shutil.which("llvm-readelf") or shutil.which("readelf")
+    if not readelf:
+        raise ValueError("JNI verification requires llvm-readelf or readelf (or set READELF)")
+    with tempfile.TemporaryDirectory(prefix="flectar-jni-") as directory:
+        library = Path(directory) / "library.so"
+        library.write_bytes(data)
+        result = subprocess.run(
+            [readelf, "--dyn-syms", "--wide", str(library)],
+            check=True, capture_output=True, text=True,
+            env={**os.environ, "LC_ALL": "C"},
+        )
+    exported = set()
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if (len(fields) >= 8 and fields[3] == "FUNC"
+                and fields[4] in {"GLOBAL", "WEAK"}
+                and fields[5] in {"DEFAULT", "PROTECTED"} and fields[6] != "UND"):
+            exported.add(fields[7])
+    missing = REQUIRED_EXPORTS - exported
+    if missing:
+        raise ValueError(f"{name}: missing native exports: {', '.join(sorted(missing))}")
 
 
 def verify_elf(data, name):
@@ -42,7 +85,9 @@ def verify_apk(path):
         for name in sorted(names):
             if name.startswith("lib/") and name.endswith(".so"):
                 verify_elf(archive.read(name), name)
-    print("PASS: native libraries include PDFium and licenses, with 16 KiB ELF alignment")
+        for app in app_libraries:
+            verify_jni_exports(archive.read(app), app)
+    print("PASS: native libraries include JNI exports, PDFium and licenses, with 16 KiB ELF alignment")
 
 
 if __name__ == "__main__":

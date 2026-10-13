@@ -535,6 +535,29 @@ jobs:
       - name: Record public test signing identity
         run: ./scripts/android-signing-identities.sh target/android/release/apk/flectar-mail.apk > target/android/release/apk/signing-identities.txt
 
+      - name: Enable Android emulator acceleration
+        run: sudo chmod a+rw /dev/kvm
+
+      - name: Exercise packaged JNI callbacks
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          # This Google APIs image supports ARM64 native translation, so tests
+          # exercise the same stripped Rust library staged for the release APK.
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: ./platform/android/gradle/gradlew --no-daemon -p platform/android/gradle :app:connectedDebugAndroidTest
+
+      - name: Upload JNI test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-jni-test-results
+          path: |
+            target/android/gradle/app/reports/androidTests/
+            target/android/gradle/app/outputs/androidTest-results/
+
       - name: Remove restored signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/flectar-android-test.keystore"

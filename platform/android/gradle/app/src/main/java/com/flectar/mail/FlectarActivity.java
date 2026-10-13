@@ -25,6 +25,13 @@ import java.security.NoSuchAlgorithmException;
 
 /** NativeActivity host plus the supported Google AuthorizationClient bridge. */
 public final class FlectarActivity extends NativeActivity {
+    static {
+        // NativeActivity loads the library for ANativeActivity_onCreate, but
+        // Java's native-method lookup also needs it registered with this class
+        // loader. Load before any OAuth, document or lifecycle callback runs.
+        System.loadLibrary("flectar_mail_android");
+    }
+
     private static native void nativeSuspendPdfPreview();
 
     @Override

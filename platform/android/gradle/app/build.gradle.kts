@@ -13,6 +13,7 @@ android {
         applicationId = "com.flectar.mail"
         minSdk = 26
         targetSdk = 36
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = providers.environmentVariable("FLECTAR_ANDROID_VERSION_CODE")
             .orElse("1").get().toInt()
         versionName = providers.environmentVariable("FLECTAR_ANDROID_VERSION_NAME")
@@ -88,4 +89,6 @@ dependencies {
     // AuthorizationClient is Google's supported API for authorizing an
     // Android application to Gmail and other Google user data.
     implementation("com.google.android.gms:play-services-auth:21.6.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

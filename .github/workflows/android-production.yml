@@ -76,6 +76,32 @@ jobs:
             target/android/production/flectar-mail.apk \
             > target/android/production/signing-identities.txt
 
+      - name: Enable Android emulator acceleration
+        run: sudo chmod a+rw /dev/kvm
+
+      - name: Exercise packaged JNI callbacks
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        env:
+          # The instrumentation APK uses the local debug key; production
+          # credentials are only supplied to the production build step above.
+          FLECTAR_ANDROID_KEYSTORE: ""
+        with:
+          # Google APIs ARM64 translation tests the release Rust library.
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: ./platform/android/gradle/gradlew --no-daemon -p platform/android/gradle :app:connectedDebugAndroidTest
+
+      - name: Upload JNI test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-production-jni-test-results
+          path: |
+            target/android/gradle/app/reports/androidTests/
+            target/android/gradle/app/outputs/androidTest-results/
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: flectar-mail-android-production-${{ inputs.version_name }}

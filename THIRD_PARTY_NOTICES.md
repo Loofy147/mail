@@ -93,6 +93,14 @@ Renderer regression tests also use a subset of Noto Color Emoji under SIL OFL
 1.1. Its license and reproduction instructions are retained in
 [`resources/test-fonts`](resources/test-fonts).
 
+## Android instrumentation tests
+
+Device tests use AndroidX Test Runner 1.7.0 and AndroidX Test JUnit 1.3.0
+from [android/android-test](https://github.com/android/android-test), under
+Apache-2.0. The license text is included in
+[`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt). These dependencies are
+included only in the test APK, not the application APK.
+
 ## Screenshot examples
 
 The fictional screenshot fixture uses real public sender domains so the same

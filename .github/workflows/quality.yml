@@ -89,6 +89,7 @@ jobs:
         run: |
           python3 scripts/test-release.py
           python3 scripts/test-pdf-packaging.py
+          python3 scripts/test-android-jni.py
       - name: Validate Android workspace lockfile
         run: cargo metadata --manifest-path platform/android/Cargo.toml --locked --format-version 1 > /dev/null
       - name: Reject unused direct dependencies

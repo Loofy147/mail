@@ -217,7 +217,10 @@ class PackagingTests(unittest.TestCase):
                     for name, data in values.items():
                         output.writestr(name, data)
             write(files)
-            native.verify_apk(apk)
+            # This fixture only models load segments. JNI exports are exercised
+            # with compiled shared libraries in test-android-jni.py.
+            with patch.object(native, "verify_jni_exports"):
+                native.verify_apk(apk)
             write({k: v for k, v in files.items() if not k.endswith("libpdfium.so")})
             with self.assertRaisesRegex(ValueError, "missing bundled PDFium"):
                 native.verify_apk(apk)
