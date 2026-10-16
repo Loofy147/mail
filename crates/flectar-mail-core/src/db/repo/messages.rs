@@ -1469,6 +1469,105 @@ mod tests {
     }
 
     #[test]
+    fn outgoing_sent_adoption_matches_by_subject_and_send_window() {
+        let c = testutil::conn();
+        testutil::seed_account(&c);
+        c.execute(
+            "INSERT INTO threads (account_id, subject_norm, unread_count, last_message_at)
+             VALUES (1, 'subject', 1, 1000)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO messages (thread_id, account_id, folder_id, uid, message_id, subject,
+             from_addr, date, is_read, is_automated, is_draft, is_outgoing)
+             VALUES (1, 1, 1, NULL, 'mid-local', 'Subject', 'me@test.dev', 1000, 1, 0, 0, 1)",
+            [],
+        )
+        .unwrap();
+        let outgoing = c.last_insert_rowid();
+
+        // The server's rewritten copy matches on the queued row's subject and
+        // send time even though its Message-ID differs.
+        assert_eq!(
+            outgoing_sent_adoption_candidate(&c, 1, 1, "Subject", 1000)
+                .unwrap()
+                .map(|row| row.id),
+            Some(outgoing)
+        );
+        // The +/-2 minute window is inclusive.
+        assert_eq!(
+            outgoing_sent_adoption_candidate(&c, 1, 1, "Subject", 1000 + 120_000)
+                .unwrap()
+                .map(|row| row.id),
+            Some(outgoing)
+        );
+        assert!(
+            outgoing_sent_adoption_candidate(&c, 1, 1, "Subject", 1000 + 120_001)
+                .unwrap()
+                .is_none()
+        );
+        // Subject and folder still have to agree.
+        assert!(
+            outgoing_sent_adoption_candidate(&c, 1, 1, "Other", 1000)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            outgoing_sent_adoption_candidate(&c, 1, 2, "Subject", 1000)
+                .unwrap()
+                .is_none()
+        );
+
+        // Two candidates are ambiguous and adopted by neither.
+        c.execute(
+            "INSERT INTO messages (thread_id, account_id, folder_id, uid, message_id, subject,
+             from_addr, date, is_read, is_automated, is_draft, is_outgoing)
+             VALUES (1, 1, 1, NULL, 'mid-local-2', 'Subject', 'me@test.dev', 2000, 1, 0, 0, 1)",
+            [],
+        )
+        .unwrap();
+        assert!(
+            outgoing_sent_adoption_candidate(&c, 1, 1, "Subject", 1500)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn outgoing_sent_adoption_ignores_incoming_rows_and_answered_rows() {
+        let c = testutil::conn();
+        testutil::seed_account(&c);
+        // An incoming row with the same subject and time is not a candidate…
+        testutil::seed_message(&c, "other@test.dev", "Subject", false);
+        assert!(
+            outgoing_sent_adoption_candidate(&c, 1, 1, "Subject", 1000)
+                .unwrap()
+                .is_none()
+        );
+        // …and neither is an outgoing row that already carries a uid.
+        c.execute(
+            "INSERT INTO threads (account_id, subject_norm, unread_count, last_message_at)
+             VALUES (1, 'subject', 1, 1000)",
+            [],
+        )
+        .unwrap();
+        let thread = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO messages (thread_id, account_id, folder_id, uid, message_id, subject,
+             from_addr, date, is_read, is_automated, is_draft, is_outgoing)
+             VALUES (?1, 1, 1, 42, 'mid-adopted', 'Subject', 'me@test.dev', 1000, 1, 0, 0, 1)",
+            params![thread],
+        )
+        .unwrap();
+        assert!(
+            outgoing_sent_adoption_candidate(&c, 1, 1, "Subject", 1000)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
     fn missing_bodies_obeys_content_retry_deadlines_and_all_folder_policy() {
         let c = testutil::conn();
         testutil::seed_account(&c);
