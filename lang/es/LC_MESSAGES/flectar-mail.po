@@ -387,6 +387,7 @@ msgstr "No se pudo guardar la preferencia de marco de ventana: {}"
 #: ui/app.slint:205
 msgid "At most {} tabs can be open. Close a tab to open another."
 msgstr ""
+"Se pueden abrir como máximo {} pestañas. Cierra una pestaña para abrir otra."
 
 #: ui/app.slint:206
 msgid "Mail grouping is active for this session."
@@ -1461,51 +1462,53 @@ msgstr "Copiar datos de diagnóstico"
 
 #: ui/components/account-mail-preferences.slint:100
 msgid "Server allows any address at this domain"
-msgstr ""
+msgstr "El servidor permite cualquier dirección de este dominio"
 
 #: ui/components/account-mail-preferences.slint:103
 msgid "Awaiting verification by the provider; cannot be selected yet"
 msgstr ""
+"Pendiente de verificación por el proveedor; todavía no se puede seleccionar"
 
 #: ui/components/account-mail-preferences.slint:106
 msgid "The server refused the last message from this address: {}"
-msgstr ""
+msgstr "El servidor rechazó el último mensaje enviado desde esta dirección: {}"
 
 #: ui/components/account-mail-preferences.slint:106
 msgid "The server refused the last message from this address"
-msgstr ""
+msgstr "El servidor rechazó el último mensaje enviado desde esta dirección"
 
 #: ui/components/account-mail-preferences.slint:109
 msgid "Sign-in address · replies go to {}"
-msgstr ""
+msgstr "Dirección de inicio de sesión · las respuestas se envían a {}"
 
 #: ui/components/account-mail-preferences.slint:109
 msgid "Sign-in address"
-msgstr ""
+msgstr "Dirección de inicio de sesión"
 
 #: ui/components/account-mail-preferences.slint:113
 msgid "Added by you · accepted by the server · replies go to {}"
 msgstr ""
+"Añadida por ti · aceptada por el servidor · las respuestas se envían a {}"
 
 #: ui/components/account-mail-preferences.slint:113
 msgid "Added by you · accepted by the server"
-msgstr ""
+msgstr "Añadida por ti · aceptada por el servidor"
 
 #: ui/components/account-mail-preferences.slint:115
 msgid "Added by you · not used yet · replies go to {}"
-msgstr ""
+msgstr "Añadida por ti · aún sin usar · las respuestas se envían a {}"
 
 #: ui/components/account-mail-preferences.slint:115
 msgid "Added by you · not used yet"
-msgstr ""
+msgstr "Añadida por ti · aún sin usar"
 
 #: ui/components/account-mail-preferences.slint:117
 msgid "Provided by the server · replies go to {}"
-msgstr ""
+msgstr "Proporcionada por el servidor · las respuestas se envían a {}"
 
 #: ui/components/account-mail-preferences.slint:117
 msgid "Provided by the server"
-msgstr ""
+msgstr "Proporcionada por el servidor"
 
 #: ui/components/account-mail-preferences.slint:121
 msgid "Sender identities, signatures & OpenPGP"
@@ -1559,20 +1562,25 @@ msgid ""
 "Gmail decides which addresses you can send from. Add an address in Gmail "
 "settings under Accounts › Send mail as, then refresh sender identities."
 msgstr ""
+"Gmail decide desde qué direcciones puedes enviar. Añade una dirección en la "
+"configuración de Gmail, en Cuentas › Enviar como, y actualiza las "
+"identidades de remitente."
 
 #: ui/components/account-mail-preferences.slint:163
 msgid "Edit sender address"
-msgstr ""
+msgstr "Editar dirección de remitente"
 
 #: ui/components/account-mail-preferences.slint:163
 msgid "Add a sender address"
-msgstr ""
+msgstr "Añadir una dirección de remitente"
 
 #: ui/components/account-mail-preferences.slint:167
 msgid ""
 "Your server lets you send from any address at the domains shown as "
 "wildcards. Add the addresses you want to choose from."
 msgstr ""
+"Tu servidor permite enviar desde cualquier dirección de los dominios "
+"indicados con comodines. Añade las direcciones que quieras poder seleccionar."
 
 #: ui/components/account-mail-preferences.slint:168
 msgid ""
@@ -1580,6 +1588,9 @@ msgid ""
 "server decides when you send; Flectar shows whether it accepted the last "
 "message."
 msgstr ""
+"Añade un alias u otra dirección desde la que tu servidor de correo permita "
+"enviar. El servidor decide al enviar; Flectar muestra si aceptó el último "
+"mensaje."
 
 #: ui/components/account-mail-preferences.slint:170
 #: ui/dialogs/settings-dialog.slint:2614 ui/views/onboarding-view.slint:257
@@ -1588,31 +1599,31 @@ msgstr "Dirección de correo"
 
 #: ui/components/account-mail-preferences.slint:170
 msgid "alias@example.com"
-msgstr ""
+msgstr "alias@example.com"
 
 #: ui/components/account-mail-preferences.slint:171
 msgid "Sender name"
-msgstr ""
+msgstr "Nombre del remitente"
 
 #: ui/components/account-mail-preferences.slint:171
 msgid "Name shown to recipients (optional)"
-msgstr ""
+msgstr "Nombre que verán los destinatarios (opcional)"
 
 #: ui/components/account-mail-preferences.slint:172
 msgid "Reply-to address"
-msgstr ""
+msgstr "Dirección de respuesta"
 
 #: ui/components/account-mail-preferences.slint:172
 msgid "Where replies should go (optional)"
-msgstr ""
+msgstr "Dónde recibir las respuestas (opcional)"
 
 #: ui/components/account-mail-preferences.slint:176
 msgid "Save sender address"
-msgstr ""
+msgstr "Guardar dirección de remitente"
 
 #: ui/components/account-mail-preferences.slint:176
 msgid "Add sender address"
-msgstr ""
+msgstr "Añadir dirección de remitente"
 
 #: ui/components/account-mail-preferences.slint:177
 #: ui/dialogs/folder-dialog.slint:125 ui/dialogs/settings-dialog.slint:1946
@@ -2782,15 +2793,15 @@ msgstr "Navegación principal"
 
 #: ui/components/workspace-navigation.slint:401
 msgid "New tab"
-msgstr ""
+msgstr "Nueva pestaña"
 
 #: ui/components/workspace-navigation.slint:529
 msgid "Close tab"
-msgstr ""
+msgstr "Cerrar pestaña"
 
 #: ui/components/workspace-navigation.slint:573
 msgid "Tabs"
-msgstr ""
+msgstr "Pestañas"
 
 #: ui/components/zoom-controls.slint:19
 msgid "Zoom out"
@@ -3244,15 +3255,15 @@ msgstr "No se pudo actualizar el uso del almacenamiento. Inténtalo de nuevo."
 
 #: ui/dialogs/settings-dialog.slint:406 ui/dialogs/settings-dialog.slint:415
 msgid "Paid"
-msgstr ""
+msgstr "De pago"
 
 #: ui/dialogs/settings-dialog.slint:407 ui/dialogs/settings-dialog.slint:416
 msgid "Coming soon"
-msgstr ""
+msgstr "Próximamente"
 
 #: ui/dialogs/settings-dialog.slint:443
 msgid "Learn more"
-msgstr ""
+msgstr "Ver detalles"
 
 #: ui/dialogs/settings-dialog.slint:620
 msgid "Every minute"
@@ -3364,6 +3375,8 @@ msgid ""
 "services flectar base account sign in subscription paid sync devices "
 "business email custom domain mailbox"
 msgstr ""
+"servicios flectar base cuenta iniciar sesión suscripción pago sincronización "
+"dispositivos correo empresarial dominio personalizado buzón"
 
 #: ui/dialogs/settings-dialog.slint:688
 msgid "about version credits contributors license flectar"
@@ -3404,7 +3417,7 @@ msgstr "Almacenamiento"
 #: ui/dialogs/settings-dialog.slint:935 ui/dialogs/settings-dialog.slint:2113
 #: ui/dialogs/settings-dialog.slint:2393
 msgid "Services"
-msgstr ""
+msgstr "Servicios"
 
 #: ui/dialogs/settings-dialog.slint:936 ui/dialogs/settings-dialog.slint:2200
 #: ui/dialogs/settings-dialog.slint:2394
@@ -4114,100 +4127,114 @@ msgid ""
 "Optional paid services from Flectar. Flectar Mail stays free and works "
 "without them."
 msgstr ""
+"Servicios de pago opcionales de Flectar. Flectar Mail sigue siendo gratuito "
+"y funciona sin ellos."
 
 #: ui/dialogs/settings-dialog.slint:2119
 msgid "Flectar account"
-msgstr ""
+msgstr "Cuenta de Flectar"
 
 #: ui/dialogs/settings-dialog.slint:2119
 msgid "Not signed in"
-msgstr ""
+msgstr "Sin iniciar sesión"
 
 #: ui/dialogs/settings-dialog.slint:2121
 msgid ""
 "Services are managed with your Flectar account on base.flectar.com. Signing "
 "in will open your browser, and no mail passwords are shared."
 msgstr ""
+"Los servicios se gestionan con tu cuenta de Flectar en base.flectar.com. Al "
+"iniciar sesión se abrirá el navegador y no se compartirán contraseñas de "
+"correo."
 
 #: ui/dialogs/settings-dialog.slint:2126
 msgid "Sign in with Flectar"
-msgstr ""
+msgstr "Iniciar sesión con Flectar"
 
 #: ui/dialogs/settings-dialog.slint:2126
 msgid "Sign-in coming soon"
-msgstr ""
+msgstr "Acceso próximamente"
 
 #: ui/dialogs/settings-dialog.slint:2138
 msgid "Flectar Mail Sync"
-msgstr ""
+msgstr "Flectar Mail Sync"
 
 #: ui/dialogs/settings-dialog.slint:2139
 msgid "Your setup on every device"
-msgstr ""
+msgstr "Tu configuración en cada dispositivo"
 
 #: ui/dialogs/settings-dialog.slint:2140
 msgid ""
 "Sign in on a new phone or computer and your accounts, calendars, contacts, "
 "and preferences are ready without setting them up again."
 msgstr ""
+"Inicia sesión en un teléfono u ordenador nuevo y tus cuentas, calendarios, "
+"contactos y preferencias estarán listos sin tener que configurarlos de nuevo."
 
 #: ui/dialogs/settings-dialog.slint:2142
 msgid "Mail accounts, profiles, and signatures"
-msgstr ""
+msgstr "Cuentas de correo, perfiles y firmas"
 
 #: ui/dialogs/settings-dialog.slint:2143
 msgid "Calendar and contact connections"
-msgstr ""
+msgstr "Conexiones de calendarios y contactos"
 
 #: ui/dialogs/settings-dialog.slint:2144
 msgid "Themes, layout, and notification preferences"
-msgstr ""
+msgstr "Temas, diseño y preferencias de notificaciones"
 
 #: ui/dialogs/settings-dialog.slint:2145
 msgid "Account credentials, encrypted on this device before upload"
 msgstr ""
+"Credenciales de las cuentas, cifradas en este dispositivo antes de subirlas"
 
 #: ui/dialogs/settings-dialog.slint:2147
 msgid ""
 "Your messages stay with your mail provider. Sync only carries your Flectar "
 "Mail setup."
 msgstr ""
+"Tus mensajes permanecen con tu proveedor de correo. La sincronización solo "
+"transfiere la configuración de Flectar Mail."
 
 #: ui/dialogs/settings-dialog.slint:2162
 msgid "Business Email"
-msgstr ""
+msgstr "Correo empresarial"
 
 #: ui/dialogs/settings-dialog.slint:2163
 msgid "Mailboxes on your own domain"
-msgstr ""
+msgstr "Buzones con tu propio dominio"
 
 #: ui/dialogs/settings-dialog.slint:2164
 msgid ""
 "Professional addresses such as you@yourcompany.com, hosted on Flectar "
 "infrastructure and managed from Flectar Base."
 msgstr ""
+"Direcciones profesionales como tu@tuempresa.com, alojadas en la "
+"infraestructura de Flectar y gestionadas desde Flectar Base."
 
 #: ui/dialogs/settings-dialog.slint:2166
 msgid "Connect a domain you already own"
-msgstr ""
+msgstr "Conecta un dominio que ya tengas"
 
 #: ui/dialogs/settings-dialog.slint:2167
 msgid "Create and manage mailboxes for your team"
-msgstr ""
+msgstr "Crea y gestiona buzones para tu equipo"
 
 #: ui/dialogs/settings-dialog.slint:2168
 msgid "New mailboxes appear in Flectar Mail automatically"
-msgstr ""
+msgstr "Los nuevos buzones aparecen automáticamente en Flectar Mail"
 
 #: ui/dialogs/settings-dialog.slint:2170
 msgid "Billed per mailbox through Flectar Base."
-msgstr ""
+msgstr "Facturación por buzón a través de Flectar Base."
 
 #: ui/dialogs/settings-dialog.slint:2182
 msgid ""
 "These services are in development. Plans and availability will be announced "
 "on flectar.com."
 msgstr ""
+"Estos servicios están en desarrollo. Los planes y la disponibilidad se "
+"anunciarán en flectar.com."
 
 #: ui/dialogs/settings-dialog.slint:2201
 msgid "Flectar Mail, its makers, and its community."
@@ -5298,7 +5325,7 @@ msgstr "Deseleccionar {}"
 
 #: ui/views/mail-list-pane.slint:913
 msgid "Open in new tab"
-msgstr ""
+msgstr "Abrir en una pestaña nueva"
 
 #: ui/views/mail-list-pane.slint:917 ui/views/mail-reading-pane.slint:371
 msgid "Archive"
@@ -5653,8 +5680,3 @@ msgstr "Restaurar"
 #: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Maximize"
 msgstr "Maximizar"
-
-#~ msgid "Could not refresh sender identities; using cached values: {}"
-#~ msgstr ""
-#~ "No se pudieron actualizar las identidades de remitente; se usarán los "
-#~ "valores en caché: {}"
