@@ -20,7 +20,7 @@ msgstr ""
 msgid "Jan"
 msgstr "янв"
 
-#: ui/app.slint:78 ui/views/mail-list-pane.slint:292
+#: ui/app.slint:78 ui/views/mail-list-pane.slint:296
 msgid "January"
 msgstr "Январь"
 
@@ -28,7 +28,7 @@ msgstr "Январь"
 msgid "Feb"
 msgstr "фев"
 
-#: ui/app.slint:79 ui/views/mail-list-pane.slint:293
+#: ui/app.slint:79 ui/views/mail-list-pane.slint:297
 msgid "February"
 msgstr "Февраль"
 
@@ -36,7 +36,7 @@ msgstr "Февраль"
 msgid "Mar"
 msgstr "мар"
 
-#: ui/app.slint:80 ui/views/mail-list-pane.slint:294
+#: ui/app.slint:80 ui/views/mail-list-pane.slint:298
 msgid "March"
 msgstr "Март"
 
@@ -44,11 +44,11 @@ msgstr "Март"
 msgid "Apr"
 msgstr "апр"
 
-#: ui/app.slint:81 ui/views/mail-list-pane.slint:295
+#: ui/app.slint:81 ui/views/mail-list-pane.slint:299
 msgid "April"
 msgstr "Апрель"
 
-#: ui/app.slint:82 ui/views/mail-list-pane.slint:296
+#: ui/app.slint:82 ui/views/mail-list-pane.slint:300
 msgid "May"
 msgstr "Май"
 
@@ -56,7 +56,7 @@ msgstr "Май"
 msgid "Jun"
 msgstr "июн"
 
-#: ui/app.slint:83 ui/views/mail-list-pane.slint:297
+#: ui/app.slint:83 ui/views/mail-list-pane.slint:301
 msgid "June"
 msgstr "Июнь"
 
@@ -64,7 +64,7 @@ msgstr "Июнь"
 msgid "Jul"
 msgstr "июл"
 
-#: ui/app.slint:84 ui/views/mail-list-pane.slint:298
+#: ui/app.slint:84 ui/views/mail-list-pane.slint:302
 msgid "July"
 msgstr "Июль"
 
@@ -72,7 +72,7 @@ msgstr "Июль"
 msgid "Aug"
 msgstr "авг"
 
-#: ui/app.slint:85 ui/views/mail-list-pane.slint:299
+#: ui/app.slint:85 ui/views/mail-list-pane.slint:303
 msgid "August"
 msgstr "Август"
 
@@ -80,7 +80,7 @@ msgstr "Август"
 msgid "Sep"
 msgstr "сен"
 
-#: ui/app.slint:86 ui/views/mail-list-pane.slint:300
+#: ui/app.slint:86 ui/views/mail-list-pane.slint:304
 msgid "September"
 msgstr "Сентябрь"
 
@@ -88,7 +88,7 @@ msgstr "Сентябрь"
 msgid "Oct"
 msgstr "окт"
 
-#: ui/app.slint:87 ui/views/mail-list-pane.slint:301
+#: ui/app.slint:87 ui/views/mail-list-pane.slint:305
 msgid "October"
 msgstr "Октябрь"
 
@@ -96,7 +96,7 @@ msgstr "Октябрь"
 msgid "Nov"
 msgstr "ноя"
 
-#: ui/app.slint:88 ui/views/mail-list-pane.slint:302
+#: ui/app.slint:88 ui/views/mail-list-pane.slint:306
 msgid "November"
 msgstr "Ноябрь"
 
@@ -104,7 +104,7 @@ msgstr "Ноябрь"
 msgid "Dec"
 msgstr "дек"
 
-#: ui/app.slint:89 ui/views/mail-list-pane.slint:303
+#: ui/app.slint:89 ui/views/mail-list-pane.slint:307
 msgid "December"
 msgstr "Декабрь"
 
@@ -1844,7 +1844,7 @@ msgid "Filters only affect this agenda."
 msgstr "Фильтры действуют только в этом расписании."
 
 #: ui/components/calendar-agenda.slint:210 ui/components/calendar.slint:569
-#: ui/views/mail-list-pane.slint:308
+#: ui/views/mail-list-pane.slint:312
 msgid "Today"
 msgstr "Сегодня"
 
@@ -2243,7 +2243,7 @@ msgstr "Вкл."
 msgid "Off"
 msgstr "Выкл."
 
-#: ui/components/controls.slint:218 ui/views/mail-list-pane.slint:403
+#: ui/components/controls.slint:218 ui/views/mail-list-pane.slint:407
 msgid "Clear selection"
 msgstr "Очистить выделение"
 
@@ -2512,7 +2512,7 @@ msgstr "Удалить глобальную метку"
 msgid "Delete label from {}"
 msgstr "Удалить метку из {}"
 
-#: ui/components/sidebar.slint:59 ui/views/mail-list-pane.slint:999
+#: ui/components/sidebar.slint:59 ui/views/mail-list-pane.slint:1003
 msgid "New email"
 msgstr "Новое письмо"
 
@@ -3277,7 +3277,7 @@ msgstr "6 месяцев · Рекомендуется"
 msgid "1 year"
 msgstr "1 год"
 
-#: ui/dialogs/settings-dialog.slint:634 ui/views/mail-list-pane.slint:354
+#: ui/dialogs/settings-dialog.slint:634 ui/views/mail-list-pane.slint:358
 msgid "All mail"
 msgstr "Вся почта"
 
@@ -4060,7 +4060,7 @@ msgstr "Написать новое письмо"
 msgid "C"
 msgstr "C"
 
-#: ui/dialogs/settings-dialog.slint:2091 ui/views/mail-list-pane.slint:352
+#: ui/dialogs/settings-dialog.slint:2091 ui/views/mail-list-pane.slint:356
 msgid "Search mail"
 msgstr "Поиск почты"
 
@@ -4068,7 +4068,7 @@ msgstr "Поиск почты"
 msgid "/"
 msgstr "/"
 
-#: ui/dialogs/settings-dialog.slint:2092 ui/views/mail-list-pane.slint:425
+#: ui/dialogs/settings-dialog.slint:2092 ui/views/mail-list-pane.slint:429
 msgid "Archive selected message"
 msgstr "Архивировать выбранное письмо"
 
@@ -4084,7 +4084,7 @@ msgstr "Отметить как спам"
 msgid "!"
 msgstr "!"
 
-#: ui/dialogs/settings-dialog.slint:2094 ui/views/mail-list-pane.slint:443
+#: ui/dialogs/settings-dialog.slint:2094 ui/views/mail-list-pane.slint:447
 #: ui/views/mail-reading-pane.slint:357 ui/views/mail-reading-pane.slint:388
 msgid "Move to trash"
 msgstr "Переместить в корзину"
@@ -5170,155 +5170,155 @@ msgstr[0] "{n} письмо"
 msgstr[1] "{n} письма"
 msgstr[2] "{n} писем"
 
-#: ui/views/mail-list-pane.slint:304 ui/views/mail-list-pane.slint:317
+#: ui/views/mail-list-pane.slint:308 ui/views/mail-list-pane.slint:321
 msgid "Earlier"
 msgstr "Ранее"
 
-#: ui/views/mail-list-pane.slint:309
+#: ui/views/mail-list-pane.slint:313
 msgid "Yesterday"
 msgstr "Вчера"
 
-#: ui/views/mail-list-pane.slint:310
+#: ui/views/mail-list-pane.slint:314
 msgid "This week"
 msgstr "На этой неделе"
 
-#: ui/views/mail-list-pane.slint:311
+#: ui/views/mail-list-pane.slint:315
 msgid "Last week"
 msgstr "На прошлой неделе"
 
-#: ui/views/mail-list-pane.slint:312
+#: ui/views/mail-list-pane.slint:316
 msgid "This month"
 msgstr "В этом месяце"
 
-#: ui/views/mail-list-pane.slint:313
+#: ui/views/mail-list-pane.slint:317
 msgid "Last month"
 msgstr "В прошлом месяце"
 
-#: ui/views/mail-list-pane.slint:315
+#: ui/views/mail-list-pane.slint:319
 msgid "{} {}"
 msgstr "{} {}"
 
-#: ui/views/mail-list-pane.slint:349
+#: ui/views/mail-list-pane.slint:353
 msgid "Show folders"
 msgstr "Показать папки"
 
-#: ui/views/mail-list-pane.slint:349
+#: ui/views/mail-list-pane.slint:353
 msgid "Hide folders"
 msgstr "Скрыть папки"
 
-#: ui/views/mail-list-pane.slint:355
+#: ui/views/mail-list-pane.slint:359
 msgid "Unread"
 msgstr "Непрочитанные"
 
-#: ui/views/mail-list-pane.slint:356
+#: ui/views/mail-list-pane.slint:360
 msgid "Starred"
 msgstr "Со звёздочкой"
 
-#: ui/views/mail-list-pane.slint:357 ui/views/mail-list-pane.slint:562
+#: ui/views/mail-list-pane.slint:361 ui/views/mail-list-pane.slint:566
 msgid "Has attachments"
 msgstr "С вложениями"
 
-#: ui/views/mail-list-pane.slint:360
+#: ui/views/mail-list-pane.slint:364
 msgid "Filter mail"
 msgstr "Фильтр почты"
 
-#: ui/views/mail-list-pane.slint:363
+#: ui/views/mail-list-pane.slint:367
 msgid "Synchronizing mail"
 msgstr "Синхронизация почты"
 
-#: ui/views/mail-list-pane.slint:363
+#: ui/views/mail-list-pane.slint:367
 msgid "Reload mail"
 msgstr "Обновить почту"
 
-#: ui/views/mail-list-pane.slint:403
+#: ui/views/mail-list-pane.slint:407
 msgid "Select all messages on this page"
 msgstr "Выбрать все письма на этой странице"
 
-#: ui/views/mail-list-pane.slint:434 ui/views/mail-list-pane.slint:918
+#: ui/views/mail-list-pane.slint:438 ui/views/mail-list-pane.slint:922
 #: ui/views/mail-reading-pane.slint:387
 msgid "Move to spam"
 msgstr "Переместить в спам"
 
-#: ui/views/mail-list-pane.slint:443
+#: ui/views/mail-list-pane.slint:447
 msgid "Delete selected permanently"
 msgstr "Удалить выбранное безвозвратно"
 
-#: ui/views/mail-list-pane.slint:456 ui/views/mail-reading-pane.slint:917
+#: ui/views/mail-list-pane.slint:460 ui/views/mail-reading-pane.slint:917
 msgid "More message actions"
 msgstr "Другие действия с письмом"
 
-#: ui/views/mail-list-pane.slint:462 ui/views/mail-list-pane.slint:916
+#: ui/views/mail-list-pane.slint:466 ui/views/mail-list-pane.slint:920
 #: ui/views/mail-reading-pane.slint:385
 msgid "Mark as read"
 msgstr "Отметить как прочитанное"
 
-#: ui/views/mail-list-pane.slint:463 ui/views/mail-list-pane.slint:916
+#: ui/views/mail-list-pane.slint:467 ui/views/mail-list-pane.slint:920
 #: ui/views/mail-reading-pane.slint:385
 msgid "Mark as unread"
 msgstr "Отметить как непрочитанное"
 
-#: ui/views/mail-list-pane.slint:464 ui/views/mail-list-pane.slint:915
+#: ui/views/mail-list-pane.slint:468 ui/views/mail-list-pane.slint:919
 msgid "Star message"
 msgstr "Отметить письмо звёздочкой"
 
-#: ui/views/mail-list-pane.slint:465 ui/views/mail-list-pane.slint:915
+#: ui/views/mail-list-pane.slint:469 ui/views/mail-list-pane.slint:919
 msgid "Remove star"
 msgstr "Убрать звёздочку"
 
-#: ui/views/mail-list-pane.slint:557
+#: ui/views/mail-list-pane.slint:561
 msgid "{}, {}"
 msgstr "{}, {}"
 
-#: ui/views/mail-list-pane.slint:557 ui/views/mail-list-pane.slint:735
+#: ui/views/mail-list-pane.slint:561 ui/views/mail-list-pane.slint:739
 msgid "(No subject)"
 msgstr "(Без темы)"
 
-#: ui/views/mail-list-pane.slint:559
+#: ui/views/mail-list-pane.slint:563
 msgid "Profile: {}"
 msgstr "Профиль: {}"
 
-#: ui/views/mail-list-pane.slint:560
+#: ui/views/mail-list-pane.slint:564
 msgid "{} messages"
 msgstr "Писем: {}"
 
-#: ui/views/mail-list-pane.slint:563
+#: ui/views/mail-list-pane.slint:567
 msgid "Replied"
 msgstr "Есть ответ"
 
-#: ui/views/mail-list-pane.slint:678
+#: ui/views/mail-list-pane.slint:682
 msgid "{} messages in this conversation"
 msgstr "Писем в этой переписке: {}"
 
-#: ui/views/mail-list-pane.slint:763
+#: ui/views/mail-list-pane.slint:767
 msgid "Account: {}"
 msgstr "Учётная запись: {}"
 
-#: ui/views/mail-list-pane.slint:905
+#: ui/views/mail-list-pane.slint:909
 msgid "Deselect {}"
 msgstr "Снять выделение: {}"
 
-#: ui/views/mail-list-pane.slint:913
+#: ui/views/mail-list-pane.slint:917
 msgid "Open in new tab"
 msgstr "Открыть в новой вкладке"
 
-#: ui/views/mail-list-pane.slint:917 ui/views/mail-reading-pane.slint:371
+#: ui/views/mail-list-pane.slint:921 ui/views/mail-reading-pane.slint:371
 msgid "Archive"
 msgstr "Архивировать"
 
-#: ui/views/mail-list-pane.slint:919 ui/views/mail-reading-pane.slint:357
+#: ui/views/mail-list-pane.slint:923 ui/views/mail-reading-pane.slint:357
 #: ui/views/mail-reading-pane.slint:388
 msgid "Delete permanently…"
 msgstr "Удалить безвозвратно…"
 
-#: ui/views/mail-list-pane.slint:976 ui/views/onboarding-view.slint:130
+#: ui/views/mail-list-pane.slint:980 ui/views/onboarding-view.slint:130
 msgid "Opening your mailbox…"
 msgstr "Открытие почтового ящика…"
 
-#: ui/views/mail-list-pane.slint:976
+#: ui/views/mail-list-pane.slint:980
 msgid "Nothing here"
 msgstr "Здесь ничего нет"
 
-#: ui/views/mail-list-pane.slint:977
+#: ui/views/mail-list-pane.slint:981
 msgid "Try another folder or search term."
 msgstr "Попробуйте другую папку или поисковый запрос."
 
@@ -5577,11 +5577,11 @@ msgstr "Серо-синий"
 msgid "Use across all accounts (local only)"
 msgstr "Использовать во всех учётных записях (только локально)"
 
-#: ui/views/mail-view.slint:335
+#: ui/views/mail-view.slint:337
 msgid "Message list width"
 msgstr "Ширина списка писем"
 
-#: ui/views/mail-view.slint:676
+#: ui/views/mail-view.slint:678
 msgid "Close folders"
 msgstr "Закрыть список папок"
 

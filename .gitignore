@@ -24,3 +24,6 @@
 # Temporary UI previews and local review captures
 /ui/.*.slint
 /settings-accounts-*.png
+
+# Candle is tested through the application workspace lockfile.
+/crates/candle-core/Cargo.lock

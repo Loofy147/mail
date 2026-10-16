@@ -18,7 +18,7 @@ msgstr ""
 msgid "Jan"
 msgstr "ene"
 
-#: ui/app.slint:78 ui/views/mail-list-pane.slint:292
+#: ui/app.slint:78 ui/views/mail-list-pane.slint:296
 msgid "January"
 msgstr "enero"
 
@@ -26,7 +26,7 @@ msgstr "enero"
 msgid "Feb"
 msgstr "feb"
 
-#: ui/app.slint:79 ui/views/mail-list-pane.slint:293
+#: ui/app.slint:79 ui/views/mail-list-pane.slint:297
 msgid "February"
 msgstr "febrero"
 
@@ -34,7 +34,7 @@ msgstr "febrero"
 msgid "Mar"
 msgstr "mar"
 
-#: ui/app.slint:80 ui/views/mail-list-pane.slint:294
+#: ui/app.slint:80 ui/views/mail-list-pane.slint:298
 msgid "March"
 msgstr "marzo"
 
@@ -42,11 +42,11 @@ msgstr "marzo"
 msgid "Apr"
 msgstr "abr"
 
-#: ui/app.slint:81 ui/views/mail-list-pane.slint:295
+#: ui/app.slint:81 ui/views/mail-list-pane.slint:299
 msgid "April"
 msgstr "abril"
 
-#: ui/app.slint:82 ui/views/mail-list-pane.slint:296
+#: ui/app.slint:82 ui/views/mail-list-pane.slint:300
 msgid "May"
 msgstr "mayo"
 
@@ -54,7 +54,7 @@ msgstr "mayo"
 msgid "Jun"
 msgstr "jun"
 
-#: ui/app.slint:83 ui/views/mail-list-pane.slint:297
+#: ui/app.slint:83 ui/views/mail-list-pane.slint:301
 msgid "June"
 msgstr "junio"
 
@@ -62,7 +62,7 @@ msgstr "junio"
 msgid "Jul"
 msgstr "jul"
 
-#: ui/app.slint:84 ui/views/mail-list-pane.slint:298
+#: ui/app.slint:84 ui/views/mail-list-pane.slint:302
 msgid "July"
 msgstr "julio"
 
@@ -70,7 +70,7 @@ msgstr "julio"
 msgid "Aug"
 msgstr "ago"
 
-#: ui/app.slint:85 ui/views/mail-list-pane.slint:299
+#: ui/app.slint:85 ui/views/mail-list-pane.slint:303
 msgid "August"
 msgstr "agosto"
 
@@ -78,7 +78,7 @@ msgstr "agosto"
 msgid "Sep"
 msgstr "sept"
 
-#: ui/app.slint:86 ui/views/mail-list-pane.slint:300
+#: ui/app.slint:86 ui/views/mail-list-pane.slint:304
 msgid "September"
 msgstr "septiembre"
 
@@ -86,7 +86,7 @@ msgstr "septiembre"
 msgid "Oct"
 msgstr "oct"
 
-#: ui/app.slint:87 ui/views/mail-list-pane.slint:301
+#: ui/app.slint:87 ui/views/mail-list-pane.slint:305
 msgid "October"
 msgstr "octubre"
 
@@ -94,7 +94,7 @@ msgstr "octubre"
 msgid "Nov"
 msgstr "nov"
 
-#: ui/app.slint:88 ui/views/mail-list-pane.slint:302
+#: ui/app.slint:88 ui/views/mail-list-pane.slint:306
 msgid "November"
 msgstr "noviembre"
 
@@ -102,7 +102,7 @@ msgstr "noviembre"
 msgid "Dec"
 msgstr "dic"
 
-#: ui/app.slint:89 ui/views/mail-list-pane.slint:303
+#: ui/app.slint:89 ui/views/mail-list-pane.slint:307
 msgid "December"
 msgstr "diciembre"
 
@@ -1865,7 +1865,7 @@ msgid "Filters only affect this agenda."
 msgstr "Los filtros solo afectan a esta agenda."
 
 #: ui/components/calendar-agenda.slint:210 ui/components/calendar.slint:569
-#: ui/views/mail-list-pane.slint:308
+#: ui/views/mail-list-pane.slint:312
 msgid "Today"
 msgstr "Hoy"
 
@@ -2263,7 +2263,7 @@ msgstr "Activado"
 msgid "Off"
 msgstr "Desactivado"
 
-#: ui/components/controls.slint:218 ui/views/mail-list-pane.slint:403
+#: ui/components/controls.slint:218 ui/views/mail-list-pane.slint:407
 msgid "Clear selection"
 msgstr "Limpiar selección"
 
@@ -2533,7 +2533,7 @@ msgstr "Eliminar etiqueta global"
 msgid "Delete label from {}"
 msgstr "Eliminar etiqueta de {}"
 
-#: ui/components/sidebar.slint:59 ui/views/mail-list-pane.slint:999
+#: ui/components/sidebar.slint:59 ui/views/mail-list-pane.slint:1003
 msgid "New email"
 msgstr "Nuevo correo"
 
@@ -3301,7 +3301,7 @@ msgstr "6 meses · Recomendado"
 msgid "1 year"
 msgstr "1 año"
 
-#: ui/dialogs/settings-dialog.slint:634 ui/views/mail-list-pane.slint:354
+#: ui/dialogs/settings-dialog.slint:634 ui/views/mail-list-pane.slint:358
 msgid "All mail"
 msgstr "Todo el correo"
 
@@ -4089,7 +4089,7 @@ msgstr "Redactar un mensaje nuevo"
 msgid "C"
 msgstr "C"
 
-#: ui/dialogs/settings-dialog.slint:2091 ui/views/mail-list-pane.slint:352
+#: ui/dialogs/settings-dialog.slint:2091 ui/views/mail-list-pane.slint:356
 msgid "Search mail"
 msgstr "Buscar correo"
 
@@ -4097,7 +4097,7 @@ msgstr "Buscar correo"
 msgid "/"
 msgstr "/"
 
-#: ui/dialogs/settings-dialog.slint:2092 ui/views/mail-list-pane.slint:425
+#: ui/dialogs/settings-dialog.slint:2092 ui/views/mail-list-pane.slint:429
 msgid "Archive selected message"
 msgstr "Archivar el mensaje seleccionado"
 
@@ -4113,7 +4113,7 @@ msgstr "Marcar como spam"
 msgid "!"
 msgstr "!"
 
-#: ui/dialogs/settings-dialog.slint:2094 ui/views/mail-list-pane.slint:443
+#: ui/dialogs/settings-dialog.slint:2094 ui/views/mail-list-pane.slint:447
 #: ui/views/mail-reading-pane.slint:357 ui/views/mail-reading-pane.slint:388
 msgid "Move to trash"
 msgstr "Mover a la papelera"
@@ -5196,155 +5196,155 @@ msgid_plural "{n} messages"
 msgstr[0] "{n} mensaje"
 msgstr[1] "{n} mensajes"
 
-#: ui/views/mail-list-pane.slint:304 ui/views/mail-list-pane.slint:317
+#: ui/views/mail-list-pane.slint:308 ui/views/mail-list-pane.slint:321
 msgid "Earlier"
 msgstr "Anteriormente"
 
-#: ui/views/mail-list-pane.slint:309
+#: ui/views/mail-list-pane.slint:313
 msgid "Yesterday"
 msgstr "Ayer"
 
-#: ui/views/mail-list-pane.slint:310
+#: ui/views/mail-list-pane.slint:314
 msgid "This week"
 msgstr "Esta semana"
 
-#: ui/views/mail-list-pane.slint:311
+#: ui/views/mail-list-pane.slint:315
 msgid "Last week"
 msgstr "La semana pasada"
 
-#: ui/views/mail-list-pane.slint:312
+#: ui/views/mail-list-pane.slint:316
 msgid "This month"
 msgstr "Este mes"
 
-#: ui/views/mail-list-pane.slint:313
+#: ui/views/mail-list-pane.slint:317
 msgid "Last month"
 msgstr "El mes pasado"
 
-#: ui/views/mail-list-pane.slint:315
+#: ui/views/mail-list-pane.slint:319
 msgid "{} {}"
 msgstr "{} {}"
 
-#: ui/views/mail-list-pane.slint:349
+#: ui/views/mail-list-pane.slint:353
 msgid "Show folders"
 msgstr "Mostrar carpetas"
 
-#: ui/views/mail-list-pane.slint:349
+#: ui/views/mail-list-pane.slint:353
 msgid "Hide folders"
 msgstr "Ocultar carpetas"
 
-#: ui/views/mail-list-pane.slint:355
+#: ui/views/mail-list-pane.slint:359
 msgid "Unread"
 msgstr "No leídos"
 
-#: ui/views/mail-list-pane.slint:356
+#: ui/views/mail-list-pane.slint:360
 msgid "Starred"
 msgstr "Destacados"
 
-#: ui/views/mail-list-pane.slint:357 ui/views/mail-list-pane.slint:562
+#: ui/views/mail-list-pane.slint:361 ui/views/mail-list-pane.slint:566
 msgid "Has attachments"
 msgstr "Con adjuntos"
 
-#: ui/views/mail-list-pane.slint:360
+#: ui/views/mail-list-pane.slint:364
 msgid "Filter mail"
 msgstr "Filtrar correo"
 
-#: ui/views/mail-list-pane.slint:363
+#: ui/views/mail-list-pane.slint:367
 msgid "Synchronizing mail"
 msgstr "Sincronizando correo"
 
-#: ui/views/mail-list-pane.slint:363
+#: ui/views/mail-list-pane.slint:367
 msgid "Reload mail"
 msgstr "Recargar correo"
 
-#: ui/views/mail-list-pane.slint:403
+#: ui/views/mail-list-pane.slint:407
 msgid "Select all messages on this page"
 msgstr "Seleccionar todos los mensajes de esta página"
 
-#: ui/views/mail-list-pane.slint:434 ui/views/mail-list-pane.slint:918
+#: ui/views/mail-list-pane.slint:438 ui/views/mail-list-pane.slint:922
 #: ui/views/mail-reading-pane.slint:387
 msgid "Move to spam"
 msgstr "Mover a spam"
 
-#: ui/views/mail-list-pane.slint:443
+#: ui/views/mail-list-pane.slint:447
 msgid "Delete selected permanently"
 msgstr "Eliminar seleccionados permanentemente"
 
-#: ui/views/mail-list-pane.slint:456 ui/views/mail-reading-pane.slint:917
+#: ui/views/mail-list-pane.slint:460 ui/views/mail-reading-pane.slint:917
 msgid "More message actions"
 msgstr "Más acciones del mensaje"
 
-#: ui/views/mail-list-pane.slint:462 ui/views/mail-list-pane.slint:916
+#: ui/views/mail-list-pane.slint:466 ui/views/mail-list-pane.slint:920
 #: ui/views/mail-reading-pane.slint:385
 msgid "Mark as read"
 msgstr "Marcar como leído"
 
-#: ui/views/mail-list-pane.slint:463 ui/views/mail-list-pane.slint:916
+#: ui/views/mail-list-pane.slint:467 ui/views/mail-list-pane.slint:920
 #: ui/views/mail-reading-pane.slint:385
 msgid "Mark as unread"
 msgstr "Marcar como no leído"
 
-#: ui/views/mail-list-pane.slint:464 ui/views/mail-list-pane.slint:915
+#: ui/views/mail-list-pane.slint:468 ui/views/mail-list-pane.slint:919
 msgid "Star message"
 msgstr "Destacar mensaje"
 
-#: ui/views/mail-list-pane.slint:465 ui/views/mail-list-pane.slint:915
+#: ui/views/mail-list-pane.slint:469 ui/views/mail-list-pane.slint:919
 msgid "Remove star"
 msgstr "Quitar destacado"
 
-#: ui/views/mail-list-pane.slint:557
+#: ui/views/mail-list-pane.slint:561
 msgid "{}, {}"
 msgstr "{}, {}"
 
-#: ui/views/mail-list-pane.slint:557 ui/views/mail-list-pane.slint:735
+#: ui/views/mail-list-pane.slint:561 ui/views/mail-list-pane.slint:739
 msgid "(No subject)"
 msgstr "(Sin asunto)"
 
-#: ui/views/mail-list-pane.slint:559
+#: ui/views/mail-list-pane.slint:563
 msgid "Profile: {}"
 msgstr "Perfil: {}"
 
-#: ui/views/mail-list-pane.slint:560
+#: ui/views/mail-list-pane.slint:564
 msgid "{} messages"
 msgstr "{} mensajes"
 
-#: ui/views/mail-list-pane.slint:563
+#: ui/views/mail-list-pane.slint:567
 msgid "Replied"
 msgstr "Respondido"
 
-#: ui/views/mail-list-pane.slint:678
+#: ui/views/mail-list-pane.slint:682
 msgid "{} messages in this conversation"
 msgstr "{} mensajes en esta conversación"
 
-#: ui/views/mail-list-pane.slint:763
+#: ui/views/mail-list-pane.slint:767
 msgid "Account: {}"
 msgstr "Cuenta: {}"
 
-#: ui/views/mail-list-pane.slint:905
+#: ui/views/mail-list-pane.slint:909
 msgid "Deselect {}"
 msgstr "Deseleccionar {}"
 
-#: ui/views/mail-list-pane.slint:913
+#: ui/views/mail-list-pane.slint:917
 msgid "Open in new tab"
 msgstr "Abrir en una pestaña nueva"
 
-#: ui/views/mail-list-pane.slint:917 ui/views/mail-reading-pane.slint:371
+#: ui/views/mail-list-pane.slint:921 ui/views/mail-reading-pane.slint:371
 msgid "Archive"
 msgstr "Archivar"
 
-#: ui/views/mail-list-pane.slint:919 ui/views/mail-reading-pane.slint:357
+#: ui/views/mail-list-pane.slint:923 ui/views/mail-reading-pane.slint:357
 #: ui/views/mail-reading-pane.slint:388
 msgid "Delete permanently…"
 msgstr "Eliminar permanentemente…"
 
-#: ui/views/mail-list-pane.slint:976 ui/views/onboarding-view.slint:130
+#: ui/views/mail-list-pane.slint:980 ui/views/onboarding-view.slint:130
 msgid "Opening your mailbox…"
 msgstr "Abriendo tu buzón…"
 
-#: ui/views/mail-list-pane.slint:976
+#: ui/views/mail-list-pane.slint:980
 msgid "Nothing here"
 msgstr "No hay nada aquí"
 
-#: ui/views/mail-list-pane.slint:977
+#: ui/views/mail-list-pane.slint:981
 msgid "Try another folder or search term."
 msgstr "Prueba otra carpeta o término de búsqueda."
 
@@ -5603,11 +5603,11 @@ msgstr "Pizarra"
 msgid "Use across all accounts (local only)"
 msgstr "Usar en todas las cuentas (solo local)"
 
-#: ui/views/mail-view.slint:335
+#: ui/views/mail-view.slint:337
 msgid "Message list width"
 msgstr "Ancho de la lista de mensajes"
 
-#: ui/views/mail-view.slint:676
+#: ui/views/mail-view.slint:678
 msgid "Close folders"
 msgstr "Cerrar carpetas"
 

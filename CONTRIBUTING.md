@@ -11,6 +11,15 @@ and safe for a mail client that handles private user data.
 - Never submit real mailbox contents, credentials, OAuth tokens, signing
   material, or personal fixture data. Use reserved `.example` domains.
 
+## Platform code
+
+Shared code selects platform behaviour with capability aliases such as
+`mobile`, `desktop` and `linux_desktop`, not operating-system names. Only the
+platform layer names a mobile operating system. Read
+[Platform architecture](platform/README.md) before changing platform-specific
+code or proposing a new platform; new platforms start as community-maintained
+ports.
+
 ## Contribution licensing
 
 Contributions are licensed under the same license that applies to the files
@@ -37,6 +46,7 @@ Run the checks relevant to your change:
 
 ```bash
 cargo fmt --all -- --check
+python3 scripts/check-platform-gates.py
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 slint-viewer --check ui/app.slint

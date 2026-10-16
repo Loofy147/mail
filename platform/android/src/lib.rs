@@ -130,13 +130,13 @@ fn android_main(app: slint::android::AndroidApp) {
     pdf::configure(&app).expect("failed to configure bundled PDF preview");
     let documents =
         documents::AndroidDocuments::new(&app).expect("failed to initialize document access");
-    let mut platform = flectar_mail::PlatformContext::app_private(
+    let platform = flectar_mail::PlatformContext::app_private(
         internal.clone(),
         cache_dir,
+        documents,
         std::sync::Arc::new(credential_store),
         oauth_redirects,
     );
-    platform.documents = documents;
     slint::android::init(app).expect("failed to initialize Slint's Android backend");
     flectar_mail::run(platform).expect("Flectar Mail terminated with an error");
 }

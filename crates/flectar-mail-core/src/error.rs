@@ -86,6 +86,7 @@ impl From<anyhow::Error> for CoreError {
     }
 }
 
+#[cfg(desktop)]
 impl From<keyring::Error> for CoreError {
     fn from(e: keyring::Error) -> Self {
         match e {

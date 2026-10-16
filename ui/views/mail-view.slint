@@ -83,6 +83,8 @@ export component MailView inherits FocusScope {
     in-out property <string> compact-page: "list";
     in-out property <bool> folders-open: false;
     private property <bool> focus-list-after-settings: false;
+    out property <bool> list-focus-visible: root.single-pane
+        ? compact-list-pane.keyboard-focus-visible : desktop-list-pane.keyboard-focus-visible;
     private property <bool> single-pane: root.compact || root.layout-mode == "minimal";
     private property <length> list-pane-maximum-width: max(
         LayoutMetrics.list-pane-width,
@@ -165,9 +167,9 @@ export component MailView inherits FocusScope {
         }
     }
 
-    public function focus-list() {
-        if root.single-pane { compact-list-pane.focus-list(); }
-        else { desktop-list-pane.focus-list(); }
+    public function focus-list(show-focus: bool) {
+        if root.single-pane { compact-list-pane.focus-list(show-focus); }
+        else { desktop-list-pane.focus-list(show-focus); }
     }
 
     function focus-reader() {
@@ -179,10 +181,10 @@ export component MailView inherits FocusScope {
 
     init => {
         if root.single-pane && root.compact-page == "message" { root.focus-reader(); }
-        else { root.focus-list(); }
+        else { root.focus-list(false); }
     }
     changed compact-page => {
-        if root.compact-page == "list" { root.focus-list(); }
+        if root.compact-page == "list" { root.focus-list(false); }
         else { root.focus-reader(); }
     }
     capture-key-pressed(event) => {
@@ -194,7 +196,7 @@ export component MailView inherits FocusScope {
             } else if !root.single-pane && desktop-list-pane.keyboard-focused {
                 root.focus-reader();
             } else {
-                root.focus-list();
+                root.focus-list(true);
             }
             return accept;
         }
@@ -213,17 +215,17 @@ export component MailView inherits FocusScope {
             root.folders-open = false;
         }
         if root.settings_open { root.focus-list-after-settings = true; }
-        else { root.focus-list(); }
+        else { root.focus-list(false); }
     }
     changed settings_open => {
         if !root.settings_open && root.focus-list-after-settings {
             root.focus-list-after-settings = false;
-            root.focus-list();
+            root.focus-list(false);
         }
     }
     changed compact => {
         if root.single-pane && root.compact-page == "message" { root.focus-reader(); }
-        else { root.focus-list(); }
+        else { root.focus-list(false); }
     }
 
         HorizontalBox {
@@ -409,7 +411,7 @@ export component MailView inherits FocusScope {
                 select_email(id) => { root.select_email(id); }
                 select_thread_message(index) => { root.select_thread_message(index); }
                 compose_message_action(action) => { root.compose_message_action(action); }
-                close_preview => { root.close_preview(); root.focus-list(); }
+                close_preview => { root.close_preview(); root.focus-list(false); }
                 print_message => { root.print_message(); }
                 open_message_in_browser => { root.open_message_in_browser(); }
                 open_email_link(url) => { root.open_email_link(url); }

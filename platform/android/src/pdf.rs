@@ -25,7 +25,7 @@ pub fn configure(app: &slint::android::AndroidApp) -> Result<(), String> {
         .get_string(&JString::from(directory))
         .map_err(|e| e.to_string())?
         .into();
-    flectar_mail::pdf_preview::configure_android(directory.into())
+    flectar_mail::platform::configure_pdfium(directory.into())
 }
 
 #[unsafe(no_mangle)]

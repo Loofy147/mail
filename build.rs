@@ -1,4 +1,18 @@
+use cfg_aliases::cfg_aliases;
+
 fn main() {
+    // Shared code selects behaviour by capability, never by naming a mobile
+    // operating system. A new platform joins these groups here (and in the
+    // core's build.rs) instead of editing call sites. See platform/README.md.
+    cfg_aliases! {
+        mobile: { any(target_os = "android", target_os = "ios") },
+        desktop: { not(mobile) },
+        // OpenHarmony reports target_os = "linux" without a desktop session,
+        // portals, X11 or a Secret Service.
+        linux_desktop: { all(desktop, target_os = "linux", not(target_env = "ohos")) },
+        glibc: { all(target_os = "linux", target_env = "gnu") },
+    }
+
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
         cc::Build::new()
             .file("platform/ios/Documents.m")
