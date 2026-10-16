@@ -140,12 +140,7 @@ fn restrict_permissions(_directory: &Path, _files: &[&Path]) -> Result<()> {
 }
 
 fn publish_snapshot(staging: &Path, destination: &Path) -> Result<()> {
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "macos",
-        target_os = "ios"
-    ))]
+    #[cfg(rename_noreplace)]
     {
         rustix::fs::renameat_with(
             rustix::fs::CWD,
@@ -156,12 +151,7 @@ fn publish_snapshot(staging: &Path, destination: &Path) -> Result<()> {
         )
         .map_err(std::io::Error::from)?;
     }
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "macos",
-        target_os = "ios"
-    )))]
+    #[cfg(not(rename_noreplace))]
     {
         // Windows directory rename fails if the destination already exists.
         std::fs::rename(staging, destination)?;

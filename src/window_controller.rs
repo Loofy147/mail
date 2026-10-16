@@ -10,12 +10,12 @@ use crate::tray_ui::FlectarTray;
 pub(super) fn create_and_register_window_lifecycle(
     app: &AppWindow,
 ) -> Result<Option<FlectarTray>, slint::PlatformError> {
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "flatpak")))]
+    #[cfg(not(any(mobile, feature = "flatpak")))]
     let tray = Some(FlectarTray::new()?);
-    #[cfg(any(target_os = "android", target_os = "ios", feature = "flatpak"))]
+    #[cfg(any(mobile, feature = "flatpak"))]
     let tray: Option<FlectarTray> = None;
 
-    #[cfg(any(target_os = "android", target_os = "ios", feature = "flatpak"))]
+    #[cfg(any(mobile, feature = "flatpak"))]
     app.set_close_to_tray(false);
 
     if let Some(tray) = tray.as_ref() {
@@ -75,7 +75,7 @@ pub(super) fn show_from_tray(app: &AppWindow) {
 fn release_free_memory() {
     // Only return already-free allocator pages at this explicit idle boundary;
     // do not periodically purge working caches or discard live mapped pages.
-    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[cfg(glibc)]
     unsafe {
         libc::malloc_trim(0);
     }
@@ -133,11 +133,7 @@ pub(super) fn register_window_preference_callbacks(
         let Some(app) = app_weak.upgrade() else {
             return;
         };
-        if cfg!(any(
-            target_os = "android",
-            target_os = "ios",
-            feature = "flatpak"
-        )) {
+        if cfg!(any(mobile, feature = "flatpak")) {
             app.set_close_to_tray(false);
             app.set_sync_status(UiMessage::plain(
                 "System tray behavior is unavailable in this package.",

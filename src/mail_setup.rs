@@ -4,7 +4,7 @@ use super::*;
 
 pub(super) fn register(app: &AppWindow, _runtime: &Rc<tokio::runtime::Runtime>) {
     let weak = app.as_weak();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     let runtime = Rc::clone(_runtime);
     app.on_import_mail_certificate(move || {
         let Some(app) = weak.upgrade() else {
@@ -13,7 +13,7 @@ pub(super) fn register(app: &AppWindow, _runtime: &Rc<tokio::runtime::Runtime>) 
         if app.get_account_setup_in_progress() {
             return;
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         {
             let weak = app.as_weak();
             runtime.spawn(async move {
@@ -45,14 +45,14 @@ pub(super) fn register(app: &AppWindow, _runtime: &Rc<tokio::runtime::Runtime>) 
                 });
             });
         }
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(mobile)]
         app.set_sync_status(UiMessage::plain(
             "Paste the PEM certificate into the certificate field.",
         ));
     });
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn read_certificate(path: &std::path::Path) -> Result<String, String> {
     use tokio::io::AsyncReadExt;
     let file = tokio::fs::File::open(path)

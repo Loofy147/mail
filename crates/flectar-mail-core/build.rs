@@ -1,3 +1,4 @@
+use cfg_aliases::cfg_aliases;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -8,6 +9,15 @@ const DESKTOP_OAUTH_ENV: [&str; 3] = [
 ];
 
 fn main() {
+    // Keep `mobile` identical to the application's build.rs; see
+    // platform/README.md.
+    cfg_aliases! {
+        mobile: { any(target_os = "android", target_os = "ios") },
+        desktop: { not(mobile) },
+        // rustix exposes renameat2/renameatx_np with RENAME_NOREPLACE here.
+        rename_noreplace: { any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios") },
+    }
+
     let workspace_env = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.env");
     println!("cargo:rerun-if-changed={}", workspace_env.display());
 

@@ -3964,10 +3964,10 @@ async fn persist_body(
     Ok(())
 }
 
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(all(test, desktop))]
 #[path = "mime_recovery_tests.rs"]
 mod mime_recovery_tests;
 
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(all(test, desktop))]
 #[path = "sync_cycle_tests.rs"]
 mod sync_cycle_tests;

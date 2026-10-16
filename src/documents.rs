@@ -1,6 +1,6 @@
 //! Native document access boundary. Providers import into private staging and
 //! export completed files; content-provider URIs never reach filesystem APIs.
-use std::{future::Future, path::PathBuf, pin::Pin, sync::Arc};
+use std::{future::Future, path::PathBuf, pin::Pin};
 pub type DocumentFuture<T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send>>;
 /// Owns a native import copy until Core has staged it. Dropping a cancelled
 /// request or an unread channel result must release the copy as well.
@@ -43,15 +43,11 @@ pub trait DocumentProvider: Send + Sync {
     fn import(&self) -> DocumentFuture<Option<ImportedDocument>>;
     fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool>;
 }
-pub fn default_provider() -> Arc<dyn DocumentProvider> {
-    #[cfg(target_os = "ios")]
-    {
-        Arc::new(crate::ios_documents::IosDocuments)
-    }
-    #[cfg(not(target_os = "ios"))]
-    {
-        Arc::new(DesktopDocuments)
-    }
+/// Desktop file dialogs. Mobile hosts inject their own provider through
+/// `PlatformContext::app_private`.
+#[cfg(desktop)]
+pub fn default_provider() -> std::sync::Arc<dyn DocumentProvider> {
+    std::sync::Arc::new(DesktopDocuments)
 }
 pub(crate) fn safe_name(name: &str) -> String {
     if flectar_mail_core::files::validate_name(name).is_ok() {
@@ -61,46 +57,33 @@ pub(crate) fn safe_name(name: &str) -> String {
     }
 }
 
+#[cfg(desktop)]
 struct DesktopDocuments;
+#[cfg(desktop)]
 impl DocumentProvider for DesktopDocuments {
     fn import(&self) -> DocumentFuture<Option<ImportedDocument>> {
         Box::pin(async {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            {
-                Ok(rfd::AsyncFileDialog::new()
-                    .set_title("Upload file")
-                    .pick_file()
-                    .await
-                    .map(|f| ImportedDocument::source(f.path().to_owned())))
-            }
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            {
-                Err("The native document provider is not initialized.".into())
-            }
+            Ok(rfd::AsyncFileDialog::new()
+                .set_title("Upload file")
+                .pick_file()
+                .await
+                .map(|f| ImportedDocument::source(f.path().to_owned())))
         })
     }
     fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool> {
         Box::pin(async move {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            {
-                let Some(file) = rfd::AsyncFileDialog::new()
-                    .set_title("Download file")
-                    .set_file_name(name)
-                    .save_file()
-                    .await
-                else {
-                    return Ok(false);
-                };
-                flectar_mail_core::files::save_cached_file(&path, file.path())
-                    .await
-                    .map_err(|e| e.to_string())?;
-                Ok(true)
-            }
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            {
-                let _ = (path, name);
-                Err("The native document provider is not initialized.".into())
-            }
+            let Some(file) = rfd::AsyncFileDialog::new()
+                .set_title("Download file")
+                .set_file_name(name)
+                .save_file()
+                .await
+            else {
+                return Ok(false);
+            };
+            flectar_mail_core::files::save_cached_file(&path, file.path())
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(true)
         })
     }
 }
@@ -108,7 +91,10 @@ impl DocumentProvider for DesktopDocuments {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     fn imported(path: PathBuf, drops: Arc<AtomicUsize>) -> ImportedDocument {
         ImportedDocument::temporary(path, move |path| {

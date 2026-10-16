@@ -1,0 +1,22 @@
+//! Host integration layer. This is the only application module that names a
+//! mobile operating system; shared code selects behaviour with the `mobile`,
+//! `desktop` and `linux_desktop` aliases from build.rs and calls the items
+//! re-exported here. Every mobile module provides the same crate-internal
+//! items, so a new platform adds one module instead of editing call sites.
+//! See platform/README.md for the full host contract.
+
+#[cfg(target_os = "android")]
+mod android;
+#[cfg(target_os = "android")]
+pub use android::*;
+
+#[cfg(target_os = "ios")]
+mod ios;
+#[cfg(target_os = "ios")]
+pub use ios::*;
+
+/// Build the platform context for the process launcher in src/desktop.rs.
+#[cfg(desktop)]
+pub fn launch_context() -> Result<crate::PlatformContext, flectar_mail_core::error::CoreError> {
+    crate::PlatformContext::desktop()
+}

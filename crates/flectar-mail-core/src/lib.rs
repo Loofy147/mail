@@ -35,7 +35,7 @@ pub mod smtp;
 pub mod sync;
 pub mod unsubscribe;
 
-use crate::accounts::credentials::{self, CredentialStoreHandle, Slot, SystemCredentialStore};
+use crate::accounts::credentials::{self, CredentialStoreHandle, Slot};
 use crate::config::Paths;
 use crate::db::Db;
 use crate::db::repo;
@@ -340,10 +340,11 @@ pub struct Core {
 }
 
 impl Core {
+    #[cfg(desktop)]
     pub async fn start(paths: Paths) -> Result<Core> {
         Self::start_with_platform(
             paths,
-            Arc::new(SystemCredentialStore),
+            Arc::new(credentials::SystemCredentialStore),
             Arc::new(LoopbackRedirectBroker::default()),
             true,
         )
@@ -354,8 +355,10 @@ impl Core {
     /// folder discovery, and keyword search stay fully enabled, while the
     /// optional local embedding model is left unloaded until a host that
     /// exposes semantic search asks for it.
+    #[cfg(desktop)]
     pub async fn start_mail_ui(paths: Paths) -> Result<Core> {
-        Self::start_mail_ui_with_credentials(paths, Arc::new(SystemCredentialStore)).await
+        Self::start_mail_ui_with_credentials(paths, Arc::new(credentials::SystemCredentialStore))
+            .await
     }
 
     /// Start a mail-only core with a host-provided credential backend. Mobile

@@ -133,7 +133,8 @@ windows-sys = { version = "0.61", features = [
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
-[target.'cfg(target_os = "linux")'.dependencies]
+# Cargo cannot evaluate build.rs aliases; this is `linux_desktop`.
+[target.'cfg(all(target_os = "linux", not(target_env = "ohos")))'.dependencies]
 ashpd = { version = "0.11", default-features = false, features = ["tokio"] }
 landlock = "0.4.7"
 seccompiler = "0.5"
@@ -155,6 +156,7 @@ objc2 = { version = "0.6", default-features = false, features = ["std"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSButton", "NSControl", "NSResponder", "NSView", "NSWindow"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSGeometry", "NSString", "NSUserDefaults"] }
 
+# This is `desktop`; keep it in step with the `mobile` alias in build.rs.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 arboard = { version = "3.6", default-features = false, features = ["wayland-data-control"] }
 rfd = { version = "0.16", default-features = false, features = ["tokio", "xdg-portal"] }
@@ -180,10 +182,11 @@ auto_link_exclude_list = [
 # These do not appear as normal Rust paths on every host, so dependency
 # scanners need the explicit exceptions.
 [package.metadata.cargo-machete]
-ignored = ["fontique_0_11", "fontique_0_12", "slint-build", "winresource", "cc"]
+ignored = ["fontique_0_11", "fontique_0_12", "slint-build", "winresource", "cc", "cfg_aliases"]
 
 [build-dependencies]
 cc = "1"
+cfg_aliases = "0.2"
 slint-build = "1.18.1"
 winresource = "0.1"
 

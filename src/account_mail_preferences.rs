@@ -302,7 +302,7 @@ pub(super) fn register(
     editor: &Rc<RefCell<LazyComposeEditor>>,
 ) {
     let ui = app.global::<AccountMailPreferences>();
-    ui.set_desktop_supported(!cfg!(any(target_os = "android", target_os = "ios")));
+    ui.set_desktop_supported(!cfg!(mobile));
     let tasks = UiWork {
         runtime: runtime.clone(),
         generation: Rc::new(Cell::new(0)),
@@ -902,14 +902,14 @@ fn register_keys_and_reader(app: &AppWindow, state: &Rc<RefCell<InboxState>>, ta
 
 // Mobile keeps the shared UI result interface, but key actions return an
 // unsupported-platform error until a native OpenPGP backend is available.
-#[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
+#[cfg_attr(mobile, allow(dead_code))]
 enum KeyResult {
     Generated(String),
     Inventory(String),
     Message(OpenedMessage),
     Done(String),
 }
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn key_action(action: &str, fingerprint: &str, email: &str) -> Result<KeyResult, String> {
     let gpg = flectar_mail_core::mail_security::Gpg::default();
     match action {
@@ -1006,11 +1006,11 @@ async fn key_action(action: &str, fingerprint: &str, email: &str) -> Result<KeyR
         _ => Err("Unknown key action.".into()),
     }
 }
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 async fn key_action(_: &str, _: &str, _: &str) -> Result<KeyResult, String> {
     Err("OpenPGP requires desktop GnuPG.".into())
 }
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn export_message(data: Vec<u8>) -> Result<(), String> {
     if let Some(file) = rfd::AsyncFileDialog::new()
         .set_title("Save decrypted message (contains private content)")
@@ -1022,7 +1022,7 @@ async fn export_message(data: Vec<u8>) -> Result<(), String> {
     }
     Ok(())
 }
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 async fn export_message(_: Vec<u8>) -> Result<(), String> {
     Err("Message export is unavailable on this platform.".into())
 }
