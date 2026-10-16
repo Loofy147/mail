@@ -1,5 +1,8 @@
 //! Mail list/detail projection, paging, avatars, and rendered-email bridge.
 
+#[cfg(test)]
+mod removal_tests;
+
 use super::*;
 use chrono::Datelike;
 
@@ -173,7 +176,13 @@ pub(super) fn apply_background_mail_page(
     };
 
     if selection_removed {
-        if let Err(error) = render_current(app, state, runtime) {
+        // Normal selection also reveals a successor in a collapsed date group.
+        let selected_id = state.borrow().selected_id;
+        let result = match selected_id {
+            Some(id) => select_message(app, state, runtime, id),
+            None => render_current(app, state, runtime),
+        };
+        if let Err(error) = result {
             app.set_render_status(UiMessage::detail(
                 "Background mail refresh failed: {}",
                 error,
@@ -1637,7 +1646,7 @@ mod tests {
         assert!(rows[1].selected);
     }
 
-    fn message(id: i32) -> MailMessage {
+    pub(super) fn message(id: i32) -> MailMessage {
         MailMessage {
             id,
             thread_id: Some(i64::from(id)),
