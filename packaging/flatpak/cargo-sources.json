@@ -106,14 +106,14 @@
     {
         "type": "archive",
         "archive-type": "tar-gzip",
-        "url": "https://static.crates.io/crates/ammonia/ammonia-4.1.4.crate",
-        "sha256": "dc6d763210e2eb7670d1a5183a08bebefa3f97db2a738a684f2ce00bd49f681d",
-        "dest": "cargo/vendor/ammonia-4.1.4"
+        "url": "https://static.crates.io/crates/ammonia/ammonia-4.1.7.crate",
+        "sha256": "36322ccf536de7b7afd259098615203e4cc5caca1b78482b58334a720c66e40a",
+        "dest": "cargo/vendor/ammonia-4.1.7"
     },
     {
         "type": "inline",
-        "contents": "{\"package\": \"dc6d763210e2eb7670d1a5183a08bebefa3f97db2a738a684f2ce00bd49f681d\", \"files\": {}}",
-        "dest": "cargo/vendor/ammonia-4.1.4",
+        "contents": "{\"package\": \"36322ccf536de7b7afd259098615203e4cc5caca1b78482b58334a720c66e40a\", \"files\": {}}",
+        "dest": "cargo/vendor/ammonia-4.1.7",
         "dest-filename": ".cargo-checksum.json"
     },
     {
@@ -1063,19 +1063,6 @@
         "type": "inline",
         "contents": "{\"package\": \"95a66a987056935f7efce4ab5668920b5d0dac4a7c99991a67395f13702ddd20\", \"files\": {}}",
         "dest": "cargo/vendor/calloop-wayland-source-0.3.0",
-        "dest-filename": ".cargo-checksum.json"
-    },
-    {
-        "type": "archive",
-        "archive-type": "tar-gzip",
-        "url": "https://static.crates.io/crates/candle-core/candle-core-0.11.0.crate",
-        "sha256": "5ecb245093b0f791b89d3420c3df9c6d49c60ab63ba54db896bf8a3baf486706",
-        "dest": "cargo/vendor/candle-core-0.11.0"
-    },
-    {
-        "type": "inline",
-        "contents": "{\"package\": \"5ecb245093b0f791b89d3420c3df9c6d49c60ab63ba54db896bf8a3baf486706\", \"files\": {}}",
-        "dest": "cargo/vendor/candle-core-0.11.0",
         "dest-filename": ".cargo-checksum.json"
     },
     {
@@ -7074,14 +7061,14 @@
     {
         "type": "archive",
         "archive-type": "tar-gzip",
-        "url": "https://static.crates.io/crates/quinn-proto/quinn-proto-0.11.17.crate",
-        "sha256": "04759210543be93709136e28212294a659ef5001836ff4eab4d663e4529bba83",
-        "dest": "cargo/vendor/quinn-proto-0.11.17"
+        "url": "https://static.crates.io/crates/quinn-proto/quinn-proto-0.11.19.crate",
+        "sha256": "0e750cca55fe4f0439a15d0bb529da9651e79993e8e72c61a899a36d462befbe",
+        "dest": "cargo/vendor/quinn-proto-0.11.19"
     },
     {
         "type": "inline",
-        "contents": "{\"package\": \"04759210543be93709136e28212294a659ef5001836ff4eab4d663e4529bba83\", \"files\": {}}",
-        "dest": "cargo/vendor/quinn-proto-0.11.17",
+        "contents": "{\"package\": \"0e750cca55fe4f0439a15d0bb529da9651e79993e8e72c61a899a36d462befbe\", \"files\": {}}",
+        "dest": "cargo/vendor/quinn-proto-0.11.19",
         "dest-filename": ".cargo-checksum.json"
     },
     {
@@ -7724,14 +7711,14 @@
     {
         "type": "archive",
         "archive-type": "tar-gzip",
-        "url": "https://static.crates.io/crates/rustls/rustls-0.23.45.crate",
-        "sha256": "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634",
-        "dest": "cargo/vendor/rustls-0.23.45"
+        "url": "https://static.crates.io/crates/rustls/rustls-0.23.46.crate",
+        "sha256": "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf",
+        "dest": "cargo/vendor/rustls-0.23.46"
     },
     {
         "type": "inline",
-        "contents": "{\"package\": \"0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634\", \"files\": {}}",
-        "dest": "cargo/vendor/rustls-0.23.45",
+        "contents": "{\"package\": \"48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf\", \"files\": {}}",
+        "dest": "cargo/vendor/rustls-0.23.46",
         "dest-filename": ".cargo-checksum.json"
     },
     {
@@ -11923,14 +11910,14 @@
     {
         "type": "archive",
         "archive-type": "tar-gzip",
-        "url": "https://static.crates.io/crates/zip/zip-8.6.0.crate",
-        "sha256": "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b",
-        "dest": "cargo/vendor/zip-8.6.0"
+        "url": "https://static.crates.io/crates/zip/zip-9.0.4.crate",
+        "sha256": "a954114b47a54df49f83d2722814e86b23d4bb1b54a1b90fb7d92b41619ddc22",
+        "dest": "cargo/vendor/zip-9.0.4"
     },
     {
         "type": "inline",
-        "contents": "{\"package\": \"2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b\", \"files\": {}}",
-        "dest": "cargo/vendor/zip-8.6.0",
+        "contents": "{\"package\": \"a954114b47a54df49f83d2722814e86b23d4bb1b54a1b90fb7d92b41619ddc22\", \"files\": {}}",
+        "dest": "cargo/vendor/zip-9.0.4",
         "dest-filename": ".cargo-checksum.json"
     },
     {

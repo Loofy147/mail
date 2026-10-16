@@ -645,7 +645,7 @@ fn flags_of(fetch: &async_imap::types::Fetch) -> FetchedFlags {
     f
 }
 
-const HEADER_FIELDS: &str = "BODY.PEEK[HEADER.FIELDS (MESSAGE-ID IN-REPLY-TO REFERENCES SUBJECT FROM TO CC BCC DATE LIST-ID LIST-UNSUBSCRIBE LIST-UNSUBSCRIBE-POST PRECEDENCE AUTO-SUBMITTED AUTHENTICATION-RESULTS)]";
+const HEADER_FIELDS: &str = "BODY.PEEK[HEADER.FIELDS (MESSAGE-ID X-FLECTAR-SUBMISSION-ID IN-REPLY-TO REFERENCES SUBJECT FROM TO CC BCC DATE LIST-ID LIST-UNSUBSCRIBE LIST-UNSUBSCRIBE-POST PRECEDENCE AUTO-SUBMITTED AUTHENTICATION-RESULTS)]";
 
 /// Fetch envelope headers + flags for a UID set (e.g. "100:200" or "5,7,9").
 pub async fn fetch_headers(session: &mut Session, uid_set: &str) -> Result<Vec<FetchedHeader>> {
@@ -1292,7 +1292,25 @@ async fn uid_move_inner(session: &mut Session, uid: u32, target: &str) -> Result
     Ok(())
 }
 
+/// UIDPLUS receipt; a UID is meaningful only within this UIDVALIDITY.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AppendReceipt {
+    pub uid_validity: u32,
+    pub uid: u32,
+}
+
 pub async fn append(session: &mut Session, folder: &str, raw: &[u8], seen: bool) -> Result<()> {
+    append_with_receipt(session, folder, raw, seen)
+        .await
+        .map(|_| ())
+}
+
+pub async fn append_with_receipt(
+    session: &mut Session,
+    folder: &str,
+    raw: &[u8],
+    seen: bool,
+) -> Result<Option<AppendReceipt>> {
     with_deadline(
         "APPEND",
         CONTENT_TIMEOUT,
@@ -1301,13 +1319,90 @@ pub async fn append(session: &mut Session, folder: &str, raw: &[u8], seen: bool)
     .await
 }
 
-async fn append_inner(session: &mut Session, folder: &str, raw: &[u8], seen: bool) -> Result<()> {
-    let flags = if seen { Some("(\\Seen)") } else { None };
-    session
-        .append(folder, flags, None, raw)
+async fn append_inner(
+    session: &mut Session,
+    folder: &str,
+    raw: &[u8],
+    seen: bool,
+) -> Result<Option<AppendReceipt>> {
+    use async_imap::imap_proto::{Response, ResponseCode, Status, UidSetMember};
+    use tokio::io::AsyncWriteExt;
+
+    if folder.chars().any(|c| matches!(c, '\r' | '\n' | '\0')) {
+        return Err(CoreError::Imap("invalid APPEND mailbox".into()));
+    }
+    let folder = folder.replace('\\', "\\\\").replace('"', "\\\"");
+    let flags = if seen { " (\\Seen)" } else { "" };
+    let tag = session
+        .run_command(format!("APPEND \"{folder}\"{flags} {{{}}}", raw.len()))
         .await
-        .map_err(|e| CoreError::Imap(e.to_string()))?;
-    Ok(())
+        .map_err(|e| CoreError::Imap(format!("APPEND connection failed: {e}")))?;
+    let mut sent_literal = false;
+    loop {
+        let response = session
+            .read_response()
+            .await
+            .map_err(|e| CoreError::Imap(format!("APPEND connection failed: {e}")))?
+            .ok_or_else(|| CoreError::Imap("connection closed before APPEND completed".into()))?;
+        match response.parsed() {
+            Response::Continue { .. } if !sent_literal => {
+                let stream = session.as_mut();
+                stream
+                    .write_all(raw)
+                    .await
+                    .map_err(|e| CoreError::Imap(format!("APPEND connection failed: {e}")))?;
+                stream
+                    .write_all(b"\r\n")
+                    .await
+                    .map_err(|e| CoreError::Imap(format!("APPEND connection failed: {e}")))?;
+                stream
+                    .flush()
+                    .await
+                    .map_err(|e| CoreError::Imap(format!("APPEND connection failed: {e}")))?;
+                sent_literal = true;
+            }
+            Response::Done {
+                tag: received,
+                status,
+                code,
+                ..
+            } if *received == tag => {
+                if *status != Status::Ok {
+                    return Err(CoreError::Imap(format!("{status:?}: APPEND rejected")));
+                }
+                if !sent_literal {
+                    return Err(CoreError::Imap(
+                        "APPEND completed before literal was sent".into(),
+                    ));
+                }
+                return Ok(match code {
+                    Some(ResponseCode::AppendUid(validity, uids)) if *validity > 0 => {
+                        match uids.as_slice() {
+                            [UidSetMember::Uid(uid)] if *uid > 0 => Some(AppendReceipt {
+                                uid_validity: *validity,
+                                uid: *uid,
+                            }),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                });
+            }
+            Response::Done { .. } | Response::Continue { .. } => {
+                return Err(CoreError::Imap(
+                    "unexpected APPEND response; connection must close".into(),
+                ));
+            }
+            Response::Data {
+                status: Status::Bye,
+                ..
+            } => {
+                return Err(CoreError::Imap("server closed APPEND session".into()));
+            }
+            // Flags and expunges are reconciled by the sync actor.
+            _ => {}
+        }
+    }
 }
 
 pub async fn create_folder(session: &mut Session, name: &str) -> Result<()> {

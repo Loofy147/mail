@@ -7,6 +7,12 @@ repository = "https://github.com/flectar/mail"
 homepage = "https://flectar.com"
 publish = false
 
+# Exercise the vendored ZIP compatibility patch with the application's lockfile.
+[[test]]
+name = "embedding_archives"
+path = "../candle-core/tests/serialization_tests.rs"
+required-features = ["local-embeddings"]
+
 [features]
 # Keep the protocol/database core lean by default. Hosts that expose semantic
 # search opt in explicitly; mail-only applications should never compile or
@@ -87,6 +93,7 @@ ignored = ["cfg_aliases"]
 cfg_aliases = "0.2"
 
 [dev-dependencies]
+zip = { version = "9.0.4", default-features = false }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Cargo cannot evaluate build.rs aliases; this is `rename_noreplace`.
