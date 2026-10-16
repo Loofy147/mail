@@ -32,6 +32,9 @@ export global LayoutMetrics {
     out property <length> desktop-mail-toolbar-height: 64px;
     out property <length> content-inset: 12px;
     out property <length> list-row-inset: 12px;
+    // Rows stop short of the overlaid scrollbar so selection and focus
+    // outlines never paint over it.
+    out property <length> list-scrollbar-gutter: 12px;
     out property <length> compact-inset: 10px;
     out property <length> control-height: 40px;
     out property <length> corner-radius: 8px;
