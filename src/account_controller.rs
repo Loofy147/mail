@@ -238,6 +238,7 @@ pub(super) fn apply_connected_accounts(
                 smtp_host: config.smtp_host.clone().into(),
                 smtp_port: config.smtp_port.to_string().into(),
                 mail_history: config.settings.mail_history.as_str().into(),
+                sent_copy_policy: config.settings.sent_copy_policy.as_str().into(),
                 calendar_connected: calendar.is_some(),
                 calendar_enabled: calendar.is_some_and(|connection| connection.enabled),
                 calendar_status: calendar

@@ -766,6 +766,12 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    pub async fn set_account_sent_copy_policy(&self, account_id: i64, value: &str) -> Result<(), String> {
+        let policy = flectar_mail_core::models::SentCopyPolicy::from_storage(value)
+            .ok_or_else(|| format!("unsupported Sent copy policy: {value}"))?;
+        self.core.set_account_sent_copy_policy(account_id, policy).await.map_err(|e| e.to_string())
+    }
+
     pub async fn set_mark_read_on_open(&self, enabled: bool) -> Result<(), String> {
         let mut settings = self.load_settings().await?;
         settings.mark_read_on_open = enabled;

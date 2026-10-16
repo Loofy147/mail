@@ -582,19 +582,16 @@ async fn append_sent_action(
     let message_id = action
         .message_id
         .ok_or_else(|| CoreError::NotFound("message for Sent filing".into()))?;
-    let (raw_path, rfc_message_id) = ctx
+    let row = ctx
         .db
         .read(move |conn| {
-            let row = repo::messages::get_row(conn, message_id)?
-                .ok_or_else(|| CoreError::NotFound(format!("message {message_id}")))?;
-            Ok((
-                row.raw_path
-                    .ok_or_else(|| CoreError::NotFound("outgoing MIME snapshot".into()))?,
-                row.message_id
-                    .ok_or_else(|| CoreError::NotFound("outgoing Message-ID".into()))?,
-            ))
+            repo::messages::get_row(conn, message_id)?
+                .ok_or_else(|| CoreError::NotFound(format!("message {message_id}")))
         })
         .await?;
+    if row.account_id != config.id || action.account_id != config.id {
+        return Err(CoreError::Other("Sent filing account mismatch".into()));
+    }
     let sent = ctx
         .db
         .read({
@@ -603,10 +600,39 @@ async fn append_sent_action(
         })
         .await?
         .ok_or_else(|| CoreError::Imap("Sent mailbox has not been discovered yet".into()))?;
-
-    // The action payload is durable database state, but still treat its file
-    // reference as untrusted. Outgoing snapshots must stay inside this
-    // account's app-managed mail directory.
+    let selected = imap::select(session, &sent.imap_name).await?;
+    let existing_uid = if row.folder_id == Some(sent.id)
+        && sent.uidvalidity.is_some()
+        && sent.uidvalidity == selected.uid_validity
+    {
+        row.uid
+            .and_then(|uid| u32::try_from(uid).ok())
+            .filter(|uid| *uid > 0)
+    } else {
+        None
+    };
+    let rfc_message_id = row
+        .message_id
+        .as_deref()
+        .ok_or_else(|| CoreError::NotFound("outgoing Message-ID".into()))?;
+    let sent_uid = match existing_uid {
+        Some(uid) => Some(uid),
+        None => find_sent_uid(session, rfc_message_id).await?,
+    };
+    if let Some(uid) = sent_uid {
+        return finish_sent_filing(ctx, action, sent.id, selected.uid_validity, Some(uid)).await;
+    }
+    // Persisted *before* the command. A timeout, disconnect, or process crash
+    // cannot prove APPEND failed. Reconcile by identity on subsequent attempts,
+    // and leave the local outgoing snapshot intact if the result stays unknown.
+    if action.payload["sentAppendStarted"].as_bool() == Some(true) {
+        return Err(CoreError::Other(
+            "Sent copy could not be confirmed after an interrupted APPEND; automatic append suppressed to avoid duplicates".into(),
+        ));
+    }
+    let raw_path = row
+        .raw_path
+        .ok_or_else(|| CoreError::NotFound("outgoing MIME snapshot".into()))?;
     let mail_root = tokio::fs::canonicalize(ctx.paths.mail_dir(config.id)).await?;
     let canonical = tokio::fs::canonicalize(&raw_path).await?;
     if !canonical.starts_with(&mail_root) {
@@ -620,62 +646,103 @@ async fn append_sent_action(
         "outgoing MIME snapshot",
     )
     .await?;
+    let action_id = action.id;
+    let mut payload = action.payload.clone();
+    payload["sentAppendStarted"] = true.into();
+    ctx.db
+        .write(move |conn| {
+            conn.execute(
+                "UPDATE pending_actions SET payload=?2 WHERE id=?1",
+                rusqlite::params![action_id, serde_json::to_string(&payload)?],
+            )?;
+            Ok(())
+        })
+        .await?;
+    let receipt = imap::append_with_receipt(session, &sent.imap_name, &raw, true).await?;
+    // Tagged OK is enough to complete filing even without UIDPLUS. Header sync
+    // will attach the UID later; no fallible post-APPEND SELECT/search is needed.
+    let (validity, uid) = receipt
+        .map(|r| (Some(i64::from(r.uid_validity)), Some(r.uid)))
+        .unwrap_or((selected.uid_validity, None));
+    finish_sent_filing(ctx, action, sent.id, validity, uid).await
+}
 
-    let selected = imap::select(session, &sent.imap_name).await?;
-    let header_value = format!("<{}>", rfc_message_id.trim_matches(['<', '>']));
-    // The uid is the authoritative identity of the Sent copy: Outlook rewrites
-    // Message-IDs in some folders, so a header search alone can neither prove
-    // absence before an append (retries appended twice) nor hand the sync a
-    // stable key (the fetched copy duplicated the local row). Record it
-    // whenever it can be established.
-    let sent_uid = if let Some(uid) = imap::uid_search_header(session, "Message-ID", &header_value)
-        .await?
-        .into_iter()
-        .next()
-    {
-        tracing::info!(
-            account_id = config.id,
-            message_id,
-            folder = %sent.imap_name,
-            uid,
-            "smtp send: Sent copy already exists"
-        );
-        Some(uid)
-    } else {
-        let before = selected.uid_next;
-        imap::append(session, &sent.imap_name, &raw, true).await?;
-        // The appended message takes the pre-append UIDNEXT. An after value of
-        // exactly one more rules out a concurrent append in between; anything
-        // else falls back to a header search (which works when the server
-        // preserves the Message-ID).
-        let after = imap::select(session, &sent.imap_name).await?.uid_next;
-        let appended = match (before, after) {
-            (Some(next), Some(after_next)) if after_next == next + 1 => Some(next as u32),
-            _ => imap::uid_search_header(session, "Message-ID", &header_value)
-                .await?
-                .into_iter()
-                .next(),
-        };
-        tracing::info!(
-            account_id = config.id,
-            message_id,
-            folder = %sent.imap_name,
-            uid = ?appended,
-            "smtp send: appended durable copy to Sent"
-        );
-        appended
-    };
-    if let Some(uid) = sent_uid {
-        let folder_id = sent.id;
-        ctx.db
-            .write(move |conn| {
-                let tx = conn.transaction()?;
-                repo::messages::set_uid_and_folder(&tx, message_id, folder_id, Some(uid as i64))?;
-                tx.commit()?;
-                Ok(())
-            })
-            .await?;
+async fn find_sent_uid(session: &mut Session, message_id: &str) -> Result<Option<u32>> {
+    let bare = message_id.trim_matches(['<', '>']);
+    if bare.is_empty() {
+        return Err(CoreError::NotFound("outgoing Message-ID".into()));
     }
+    let mut candidates =
+        imap::uid_search_header(session, "Message-ID", &format!("<{bare}>")).await?;
+    candidates
+        .extend(imap::uid_search_header(session, crate::mime::SUBMISSION_ID_HEADER, bare).await?);
+    candidates.sort_unstable();
+    candidates.dedup();
+    let mut found = None;
+    // SEARCH HEADER is a substring search: verify complete header identities
+    // before assigning a UID. Chunk to keep the FETCH command bounded.
+    for chunk in candidates.chunks(100) {
+        let uids = chunk
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        for header in imap::fetch_headers(session, &uids).await? {
+            let parsed = crate::mime::parse_header_block(&header.header_bytes)?;
+            if parsed.message_id.as_deref() == Some(bare)
+                || parsed.submission_id.as_deref() == Some(bare)
+            {
+                if found.is_some() {
+                    return Err(CoreError::Other(
+                        "multiple Sent copies match this submission; automatic append suppressed"
+                            .into(),
+                    ));
+                }
+                found = Some(header.uid);
+            }
+        }
+    }
+    Ok(found)
+}
+
+async fn finish_sent_filing(
+    ctx: &SyncCtx,
+    action: &repo::actions::PendingAction,
+    folder_id: i64,
+    uid_validity: Option<i64>,
+    uid: Option<u32>,
+) -> Result<()> {
+    let action = action.clone();
+    ctx.db
+        .write(move |conn| finish_sent_filing_in_db(conn, &action, folder_id, uid_validity, uid))
+        .await
+}
+
+fn finish_sent_filing_in_db(
+    conn: &mut rusqlite::Connection,
+    action: &repo::actions::PendingAction,
+    folder_id: i64,
+    uid_validity: Option<i64>,
+    uid: Option<u32>,
+) -> Result<()> {
+    let tx = conn.transaction()?;
+    // A user may have moved the local row while filing was in flight. Never
+    // undo that newer intent or bind a UID from another mailbox generation.
+    if let (Some(message_id), Some(validity), Some(uid)) = (action.message_id, uid_validity, uid) {
+        tx.execute(
+            "UPDATE messages SET uid=?3 WHERE id=?1 AND folder_id=?2 AND uid IS NULL
+             AND account_id=?4 AND EXISTS(SELECT 1 FROM folders WHERE id=?2 AND uidvalidity=?5)",
+            rusqlite::params![
+                message_id,
+                folder_id,
+                i64::from(uid),
+                action.account_id,
+                validity
+            ],
+        )?;
+    }
+    repo::actions::set_state(&tx, action.id, "done", None)?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -836,11 +903,12 @@ async fn send_action(
     crate::file_io::write_atomic(&raw_path, &raw, "outgoing MIME snapshot").await?;
     let raw_path_string = raw_path.to_string_lossy().into_owned();
     let stable_id = msg_id_bare.clone();
+    let snapshot_path = raw_path_string.clone();
     ctx.db
         .write(move |conn| {
             conn.execute(
-                "UPDATE messages SET message_id = ?2 WHERE id = ?1",
-                rusqlite::params![draft_id, stable_id],
+                "UPDATE messages SET message_id = ?2, raw_path = ?3 WHERE id = ?1",
+                rusqlite::params![draft_id, stable_id, snapshot_path],
             )?;
             Ok(())
         })
@@ -954,19 +1022,24 @@ async fn send_action(
     // so the Sent-folder sync dedupes against this row instead of duplicating.
     let sent_at = now_ms();
     let send_action_id = action.id;
-    // Gmail and Outlook.com save their own copy of SMTP submissions; appending
-    // as well would file every sent message twice (Outlook rewrites the
-    // Message-ID of its copy, which also defeats header-search dedupe). The
-    // Sent-folder sync adopts the server copy into this row instead.
-    let should_append_sent = !matches!(config.provider, Provider::Gmail | Provider::Microsoft);
     let (thread_id, staged_paths) = ctx
         .db
         .write(move |conn| {
             let tx = conn.transaction()?;
+            // The dedicated SMTP worker outlives settings edits. Read the
+            // latest policy at completion instead of its startup snapshot.
+            let current = repo::accounts::get_config(&tx, account_id)?
+                .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))?;
+            let should_append_sent = current
+                .settings
+                .sent_copy_policy
+                .should_append(current.provider);
+
             tx.execute(
                 "UPDATE messages SET is_draft = 0, is_outgoing = 1, is_read = 1,
                         message_id = ?2, raw_path = ?3,
-                        folder_id = COALESCE(?4, folder_id), uid = NULL, date = ?5
+                        folder_id = COALESCE(?4, folder_id),
+                        uid = CASE WHEN folder_id = ?4 THEN uid ELSE NULL END, date = ?5
                  WHERE id = ?1",
                 rusqlite::params![
                     draft_id,
@@ -1233,3 +1306,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+pub(crate) mod sent_tests;
