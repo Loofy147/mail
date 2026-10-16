@@ -261,10 +261,28 @@ class ReleaseTests(unittest.TestCase):
 
             # Exercise the AppImage shell packager up to its tool boundary,
             # without downloading deployment tools or compiling the application.
+            # Model the explicitly bundled X11 libraries without depending on
+            # the host's development packages or invoking real deployment tools.
+            libraries = root / "fixture-libs"
+            libraries.mkdir()
+            for name in ("libxkbcommon-x11.so.0", "libxkbcommon.so.0"):
+                shutil.copyfile("/bin/true", libraries / name)
+            pkg_config = root / "bin/pkg-config"
+            pkg_config.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "assert sys.argv[1:] == ['--variable=libdir', 'xkbcommon-x11']\n"
+                f"print({str(libraries)!r})\n"
+            )
+            pkg_config.chmod(0o755)
             deploy = root / "bin/linuxdeploy"
             deploy.write_text('''#!/usr/bin/env python3
-import pathlib, sys
+import pathlib, shutil, sys
 appdir = pathlib.Path(sys.argv[sys.argv.index("--appdir") + 1])
+library = pathlib.Path(sys.argv[sys.argv.index("--library") + 1])
+assert library.name == "libxkbcommon-x11.so.0"
+for name in ("libxkbcommon-x11.so.0", "libxkbcommon.so.0"):
+    shutil.copyfile(library.parent / name, appdir / "usr/lib" / name)
 (appdir / "com.flectar.mail.desktop").symlink_to("usr/share/applications/com.flectar.mail.desktop")
 ''')
             pack = root / "bin/appimagetool"
