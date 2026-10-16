@@ -169,8 +169,7 @@ pub(super) fn apply_background_mail_page(
             state.selected_id = successor_selection(&old_order, removed_id, &visible);
             state.preview_closed = false;
         }
-        let removed = removed.is_some();
-        removed
+        removed.is_some()
     };
 
     if selection_removed {

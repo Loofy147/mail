@@ -27,3 +27,6 @@
 
 # Candle is tested through the application workspace lockfile.
 /crates/candle-core/Cargo.lock
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
