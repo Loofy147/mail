@@ -32,7 +32,7 @@ slint::slint! {
         callback checked(int, bool);
         callback page-requested();
         callback searched(string);
-        public function focus-list() { list.focus-list(); }
+        public function focus-list() { list.focus-list(true); }
         init => { Palette.color-scheme = ColorScheme.light; }
         changed dark => { Palette.color-scheme = root.dark ? ColorScheme.dark : ColorScheme.light; }
         list := MailListPane {
@@ -77,11 +77,12 @@ slint::slint! {
         in-out property <bool> source-mode: false;
         in-out property <bool> settings-open: false;
         out property <string> page: view.compact-page;
+        out property <bool> list-ring: view.list-focus-visible;
         callback selected(int);
         callback closed();
         init => { Palette.color-scheme = ColorScheme.light; }
         changed dark => { Palette.color-scheme = root.dark ? ColorScheme.dark : ColorScheme.light; }
-        public function focus-list() { view.focus-list(); }
+        public function focus-list() { view.focus-list(true); }
         view := MailView {
             width: parent.width;
             height: parent.height;
@@ -422,15 +423,29 @@ fn keyboard_navigation_keeps_focus_scrolls_and_respects_text_inputs() {
     workspace.on_closed(move || count.set(count.get() + 1));
     workspace.show().unwrap();
     render(&window, 1200, 600, "workspace");
+    assert!(
+        !workspace.get_list_ring(),
+        "opening the mail view focuses the list without an outline"
+    );
+    key(workspace.window(), Key::DownArrow);
+    assert!(
+        workspace.get_list_ring(),
+        "keyboard use reveals the outline"
+    );
     workspace.invoke_focus_list();
     key(workspace.window(), Key::Return);
     selected.set(-1);
     key(workspace.window(), Key::DownArrow);
     assert_eq!(selected.get(), -1, "Enter transfers focus to the reader");
     key(workspace.window(), Key::F6);
+    assert!(workspace.get_list_ring(), "F6 shows where focus landed");
     key(workspace.window(), Key::DownArrow);
     assert_eq!(selected.get(), 2, "F6 restores message-list navigation");
     workspace.set_layout_mode("minimal".into());
+    assert!(
+        !workspace.get_list_ring(),
+        "layout changes restore list focus without an outline"
+    );
     render(&window, 1200, 600, "workspace-minimal");
     selected.set(-1);
     key(workspace.window(), Key::DownArrow);

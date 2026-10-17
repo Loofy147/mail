@@ -1,11 +1,11 @@
 //! Optional desktop formats; the Slint text clipboard remains the fallback.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 thread_local! {
     static CLIPBOARD: std::cell::RefCell<Option<arboard::Clipboard>> = const { std::cell::RefCell::new(None) };
 }
 
 pub fn set_html(html: &str, text: &str) -> bool {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     return CLIPBOARD.with(|slot| {
         let mut slot = slot.borrow_mut();
         if slot.is_none() {
@@ -14,7 +14,7 @@ pub fn set_html(html: &str, text: &str) -> bool {
         slot.as_mut()
             .is_some_and(|clipboard| clipboard.set_html(html, Some(text)).is_ok())
     });
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(mobile)]
     {
         let _ = (html, text);
         false
@@ -22,7 +22,7 @@ pub fn set_html(html: &str, text: &str) -> bool {
 }
 
 pub fn set_primary(text: &str) {
-    #[cfg(target_os = "linux")]
+    #[cfg(linux_desktop)]
     if !text.is_empty() {
         use arboard::SetExtLinux;
         CLIPBOARD.with(|slot| {
@@ -38,6 +38,6 @@ pub fn set_primary(text: &str) {
             }
         });
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(linux_desktop))]
     let _ = text;
 }

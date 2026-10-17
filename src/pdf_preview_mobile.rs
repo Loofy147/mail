@@ -23,29 +23,6 @@ static SLOT: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
 // the admitted worker, and remain alive for the process lifetime. We use the
 // public raw bindings because the high-level bitmap API has no pause callback.
 static ENGINE: OnceLock<Result<Box<dyn PdfiumLibraryBindings>, String>> = OnceLock::new();
-#[cfg(target_os = "android")]
-static ANDROID_LIBRARY: OnceLock<PathBuf> = OnceLock::new();
-
-/// Supply ApplicationInfo.nativeLibraryDir, never a document-controlled path.
-/// The APK uses extracted native libraries so this is a private installed file.
-#[cfg(target_os = "android")]
-pub fn configure_android(directory: PathBuf) -> Result<(), String> {
-    if !directory.is_absolute() {
-        return Err("Android did not provide an absolute native library directory.".into());
-    }
-    let path = directory.join("libpdfium.so");
-    if let Some(existing) = ANDROID_LIBRARY.get() {
-        return if existing == &path {
-            Ok(())
-        } else {
-            Err("PDF library directory changed.".into())
-        };
-    }
-    ANDROID_LIBRARY
-        .set(path)
-        .map_err(|_| "PDF library already configured.".into())
-}
-
 /// Called on backgrounding and memory pressure, as well as by UI cancellation.
 /// Does not kill a thread or pretend that a native parser has already stopped.
 pub fn cancel_active() {
@@ -53,18 +30,9 @@ pub fn cancel_active() {
 }
 
 fn library_path() -> Result<PathBuf, String> {
-    #[cfg(target_os = "android")]
-    return ANDROID_LIBRARY
-        .get()
-        .cloned()
-        .ok_or_else(|| "PDF preview is not configured.".into());
-    #[cfg(target_os = "ios")]
-    return std::env::current_exe()
-        .map_err(|e| e.to_string())?
-        .parent()
-        .map(|p| p.join("Frameworks/PDFium.framework/PDFium"))
-        .ok_or_else(|| "Missing application bundle.".into());
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(mobile)]
+    return crate::platform::pdfium_library();
+    #[cfg(desktop)]
     std::env::var_os("FLECTAR_TEST_PDFIUM")
         .map(PathBuf::from)
         .ok_or_else(|| "Set FLECTAR_TEST_PDFIUM for the native integration test.".into())
@@ -129,14 +97,8 @@ async fn run_job(
         .name("pdf-preview".into())
         .stack_size(4 * 1024 * 1024)
         .spawn(move || {
-            #[cfg(target_os = "android")]
-            unsafe {
-                libc::nice(10);
-            }
-            #[cfg(target_os = "ios")]
-            unsafe {
-                libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_UTILITY, 0);
-            }
+            #[cfg(mobile)]
+            crate::platform::lower_current_thread_priority();
             let result = work(&cancellation);
             drop(permit);
             let _ = sender.send(result);

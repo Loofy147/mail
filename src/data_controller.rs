@@ -341,7 +341,7 @@ fn read_account_backup(path: &std::path::Path) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn pick_backup_export_path(title: String, filter: String) -> Option<PathBuf> {
     rfd::FileDialog::new()
         .set_title(title)
@@ -353,12 +353,12 @@ fn pick_backup_export_path(title: String, filter: String) -> Option<PathBuf> {
         .save_file()
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 fn pick_backup_export_path(_title: String, _filter: String) -> Option<PathBuf> {
     None
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn pick_backup_import_path(title: String, filter: String) -> Option<PathBuf> {
     rfd::FileDialog::new()
         .set_title(title)
@@ -366,12 +366,12 @@ fn pick_backup_import_path(title: String, filter: String) -> Option<PathBuf> {
         .pick_file()
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 fn pick_backup_import_path(_title: String, _filter: String) -> Option<PathBuf> {
     None
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn pick_database_snapshot_path(title: String) -> Option<PathBuf> {
     rfd::FileDialog::new()
         .set_title(title)
@@ -384,7 +384,7 @@ fn pick_database_snapshot_path(title: String) -> Option<PathBuf> {
         })
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 fn pick_database_snapshot_path(_title: String) -> Option<PathBuf> {
     None
 }
@@ -488,7 +488,7 @@ pub(super) fn register_data_management_callbacks(
             .to_string(),
             translated(&app, &UiMessage::plain("Flectar Mail backup")).to_string(),
         ) else {
-            #[cfg(any(target_os = "android", target_os = "ios"))]
+            #[cfg(mobile)]
             app.set_sync_status(UiMessage::plain(
                 "The platform host does not provide document export.",
             ));
@@ -609,7 +609,7 @@ pub(super) fn register_data_management_callbacks(
             )
             .to_string(),
         ) else {
-            #[cfg(any(target_os = "android", target_os = "ios"))]
+            #[cfg(mobile)]
             app.set_sync_status(UiMessage::plain(
                 "The platform host does not provide document export.",
             ));
@@ -662,7 +662,7 @@ pub(super) fn register_data_management_callbacks(
             .to_string(),
             translated(&app, &UiMessage::plain("Flectar Mail backup")).to_string(),
         ) else {
-            #[cfg(any(target_os = "android", target_os = "ios"))]
+            #[cfg(mobile)]
             app.set_sync_status(UiMessage::plain(
                 "The platform host does not provide document import.",
             ));
@@ -953,9 +953,9 @@ pub(super) fn register_data_management_callbacks(
                 app.set_remote_images_enabled(
                     settings.load_remote_images && cfg!(feature = "remote-content"),
                 );
-                #[cfg(not(any(target_os = "android", target_os = "ios", feature = "flatpak")))]
+                #[cfg(not(any(mobile, feature = "flatpak")))]
                 app.set_close_to_tray(settings.close_to_tray);
-                #[cfg(any(target_os = "android", target_os = "ios", feature = "flatpak"))]
+                #[cfg(any(mobile, feature = "flatpak"))]
                 app.set_close_to_tray(false);
                 app.set_sync_status(if imported == 0 {
                     UiMessage::detail(

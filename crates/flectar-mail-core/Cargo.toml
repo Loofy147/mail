@@ -7,6 +7,12 @@ repository = "https://github.com/flectar/mail"
 homepage = "https://flectar.com"
 publish = false
 
+# Exercise the vendored ZIP compatibility patch with the application's lockfile.
+[[test]]
+name = "embedding_archives"
+path = "../candle-core/tests/serialization_tests.rs"
+required-features = ["local-embeddings"]
+
 [features]
 # Keep the protocol/database core lean by default. Hosts that expose semantic
 # search opt in explicitly; mail-only applications should never compile or
@@ -48,7 +54,6 @@ futures = "0.3"
 
 # storage
 rusqlite = { version = "0.40", features = ["backup", "bundled", "functions"] }
-dirs = "6"
 
 # Local embeddings use Candle's CPU backend only: no MKL, CUDA, Metal, or
 # Accelerate runtime. Match Candle's tokenizer version so the opt-in feature
@@ -60,7 +65,6 @@ tokenizers = { version = "0.22", default-features = false, features = ["fancy-re
 hf-hub = { version = "1", default-features = false, features = ["rustls-tls"], optional = true }
 
 # auth
-keyring = { version = "3", features = ["sync-secret-service", "apple-native", "windows-native"] }
 base64 = "0.23"
 sha2 = "0.10"
 url = "2"
@@ -81,8 +85,23 @@ encoding_rs = "0.8"
 tempfile = "3"
 ring = "0.17"
 
+# Used only by build.rs, which cargo-machete does not scan.
+[package.metadata.cargo-machete]
+ignored = ["cfg_aliases"]
+
+[build-dependencies]
+cfg_aliases = "0.2"
+
 [dev-dependencies]
+zip = { version = "9.0.4", default-features = false }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Cargo cannot evaluate build.rs aliases; this is `rename_noreplace`.
 [target.'cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))'.dependencies]
 rustix = { version = "1", features = ["fs"] }
+
+# This is `desktop`. Mobile hosts inject their storage paths and a
+# platform-owned credential store instead.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+dirs = "6"
+keyring = { version = "3", features = ["sync-secret-service", "apple-native", "windows-native"] }

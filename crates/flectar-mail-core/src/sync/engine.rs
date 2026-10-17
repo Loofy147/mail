@@ -2185,10 +2185,31 @@ async fn store_headers(
 
                 // Dedupe: same Message-ID already stored (e.g. our own sent
                 // message APPENDed earlier, or Gmail label duplication).
-                if let Some(mid) = &parsed.message_id
-                    && let Some(existing) = repo::messages::by_message_id(&tx, account_id, mid)?
+                let mut existing = match &parsed.message_id {
+                    Some(mid) => repo::messages::by_message_id(&tx, account_id, mid)?,
+                    None => None,
+                };
+                // A stable client marker survives providers rewriting Message-ID.
+                // Never guess identity from a subject or a timestamp.
+                if existing.is_none()
+                    && folder_role.as_deref() == Some(roles::SENT)
+                    && let Some(submission_id) = parsed.submission_id.as_deref()
                 {
-                    if existing.uid.is_none()
+                    existing = repo::messages::outgoing_sent_adoption_candidate(
+                        &tx, account_id, folder_id, submission_id,
+                    )?;
+                }
+                if let Some(existing) = existing {
+                    // SMTP and IMAP workers run concurrently: the server copy
+                    // can arrive before send_action commits local completion.
+                    let sending = folder_role.as_deref() == Some(roles::SENT)
+                        && existing.raw_path.is_some()
+                        && tx.query_row(
+                            "SELECT EXISTS(SELECT 1 FROM pending_actions a JOIN messages m ON m.id=a.message_id
+                             WHERE a.message_id=?1 AND a.kind='send' AND a.state='inflight' AND m.is_draft=1)",
+                            [existing.id], |r| r.get::<_, bool>(0),
+                        )?;
+                    if (existing.uid.is_none() || sending)
                         && !repo::actions::has_active_move_from(&tx, existing.id, folder_id)?
                     {
                         repo::messages::set_uid_and_folder(
@@ -4088,10 +4109,93 @@ async fn persist_body(
     Ok(())
 }
 
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(all(test, desktop))]
 #[path = "mime_recovery_tests.rs"]
 mod mime_recovery_tests;
 
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(all(test, desktop))]
 #[path = "sync_cycle_tests.rs"]
 mod sync_cycle_tests;
+
+#[cfg(test)]
+mod sent_identity_tests {
+    use super::*;
+    use crate::queue::sent_tests::local_outgoing;
+
+    #[tokio::test]
+    async fn sent_sync_uses_submission_identity_and_never_subject_time() {
+        for marker in ["", "X-Flectar-Submission-ID: submission@test.dev\r\n"] {
+            let (_temp, core, config, action) = local_outgoing().await;
+            let folder = core
+                .db
+                .read(|c| repo::folders::get(c, 1))
+                .await
+                .unwrap()
+                .unwrap();
+            let header = FetchedHeader {
+                uid: 99, flags: Default::default(), internal_date_ms: Some(1000), size: Some(100),
+                header_bytes: format!("Message-ID: <rewritten@server>\r\n{marker}Subject: Status\r\nFrom: me@test.dev\r\nTo: bob@test.dev\r\nDate: Thu, 1 Jan 1970 00:00:01 +0000\r\n\r\n").into_bytes(),
+                has_attachments: false, mime_plan: None,
+            };
+            store_headers(
+                &core.sync_ctx(),
+                &config,
+                &folder,
+                vec![header.clone()],
+                None,
+            )
+            .await
+            .unwrap();
+            store_headers(&core.sync_ctx(), &config, &folder, vec![header], None)
+                .await
+                .unwrap();
+            let id = action.message_id.unwrap();
+            let (count, uid) = core
+                .db
+                .read(move |c| {
+                    Ok((
+                        c.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get::<_, i64>(0))?,
+                        repo::messages::get_row(c, id)?.unwrap().uid,
+                    ))
+                })
+                .await
+                .unwrap();
+            assert_eq!(count, if marker.is_empty() { 2 } else { 1 });
+            assert_eq!(uid, if marker.is_empty() { None } else { Some(99) });
+        }
+    }
+
+    #[tokio::test]
+    async fn sent_sync_can_arrive_before_smtp_completion() {
+        let (_temp, core, config, action) = local_outgoing().await;
+        let id = action.message_id.unwrap();
+        core.db.write(move |c| {
+            c.execute("INSERT INTO folders(id,account_id,imap_name,role) VALUES (2,1,'Drafts','drafts')", [])?;
+            c.execute("UPDATE messages SET is_outgoing=0, is_draft=1, folder_id=2, uid=12 WHERE id=?1", [id])?;
+            c.execute("UPDATE pending_actions SET kind='send', state='inflight'", [])?;
+            Ok(())
+        }).await.unwrap();
+        let folder = core
+            .db
+            .read(|c| repo::folders::get(c, 1))
+            .await
+            .unwrap()
+            .unwrap();
+        let header = FetchedHeader {
+            uid: 99, flags: Default::default(), internal_date_ms: None, size: None,
+            header_bytes: b"Message-ID: <rewritten@server>\r\nX-Flectar-Submission-ID: submission@test.dev\r\nSubject: Status\r\n\r\n".to_vec(),
+            has_attachments: false, mime_plan: None,
+        };
+        store_headers(&core.sync_ctx(), &config, &folder, vec![header], None)
+            .await
+            .unwrap();
+        let row = core
+            .db
+            .read(move |c| repo::messages::get_row(c, id))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.uid, Some(99));
+        assert_eq!(row.folder_id, Some(1));
+    }
+}

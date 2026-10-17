@@ -368,6 +368,10 @@ export global I18n {
         if (key == "Account ordering requires local mail data.") { return @tr("Account ordering requires local mail data."); }
         if (key == "Could not find the account to reorder.") { return @tr("Could not find the account to reorder."); }
         if (key == "Saving account order…") { return @tr("Saving account order…"); }
+        if (key == "Sent copy settings require local mail data.") { return @tr("Sent copy settings require local mail data."); }
+        if (key == "Updating Sent copy settings…") { return @tr("Updating Sent copy settings…"); }
+        if (key == "Sent copy settings updated.") { return @tr("Sent copy settings updated."); }
+        if (key == "Could not update Sent copy settings: {}") { return @tr("Could not update Sent copy settings: {}", argument); }
         if (key == "Mail history requires local mail data.") { return @tr("Mail history requires local mail data."); }
         if (key == "Updating mail history…") { return @tr("Updating mail history…"); }
         if (key == "Remote images are unavailable in this minimal build.") { return @tr("Remote images are unavailable in this minimal build."); }
@@ -582,6 +586,7 @@ export component AppWindow inherits Window {
     pure callback settings-search-matches(string, string) -> bool;
     callback reorder_account(string, int, bool);
     callback save_account_mail_history(int, string);
+    callback save_account_sent_copy_policy(int, string);
     callback connect_account_calendar(int);
     callback set_account_calendar_enabled(int, bool);
     callback connect_caldav(int, string, string, string);
@@ -1796,6 +1801,7 @@ export component AppWindow inherits Window {
             settings-search-matches(haystack, query) => root.settings-search-matches(haystack, query);
             reorder_account(source, target, after) => { root.reorder_account(source, target, after); }
             save_account_mail_history(account-id, value) => { root.save_account_mail_history(account-id, value); }
+            save_account_sent_copy_policy(account-id, value) => { root.save_account_sent_copy_policy(account-id, value); }
             connect_account_calendar(account-id) => { root.connect_account_calendar(account-id); }
             set_account_calendar_enabled(account-id, enabled) => { root.set_account_calendar_enabled(account-id, enabled); }
             connect_caldav(account-id, url, username, password) => { root.connect_caldav(account-id, url, username, password); }

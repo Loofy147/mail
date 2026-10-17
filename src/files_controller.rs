@@ -19,10 +19,10 @@ impl Drop for SyncWorker {
         self.0.abort();
     }
 }
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 static SUSPEND: std::sync::OnceLock<Box<dyn Fn() + Send + Sync>> = std::sync::OnceLock::new();
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 pub(crate) fn suspend() {
     crate::pdf_preview::cancel_active();
     if let Some(suspend) = SUSPEND.get() {
@@ -38,7 +38,7 @@ pub(crate) fn register(
     scratch_root: std::path::PathBuf,
 ) {
     app.global::<FilesUi>().set_pdf_supported(true);
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(mobile)]
     {
         let weak = app.as_weak();
         let _ = SUSPEND.set(Box::new(move || {
@@ -48,10 +48,7 @@ pub(crate) fn register(
                 ui.set_preview_open(false);
             });
         }));
-        #[cfg(target_os = "ios")]
-        unsafe {
-            install_pdf_lifecycle_observers();
-        }
+        crate::platform::install_preview_lifecycle();
     }
     let view_active = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let directory = Arc::new(Mutex::new((
@@ -724,9 +721,4 @@ impl Snapshot {
         ui.set_query(self.query.into());
         ui.set_quota(self.quota.into());
     }
-}
-
-#[cfg(target_os = "ios")]
-unsafe extern "C" {
-    fn install_pdf_lifecycle_observers();
 }

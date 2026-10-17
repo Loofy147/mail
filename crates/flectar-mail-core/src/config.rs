@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use crate::error::Result;
-
 #[derive(Debug, Clone)]
 pub struct Paths {
     /// Durable application state. Databases, raw mail, drafts, queues, and
@@ -13,11 +11,11 @@ pub struct Paths {
 }
 
 impl Paths {
-    /// Resolve desktop directories. Mobile hosts must inject their sandbox
-    /// paths explicitly; silently using the process working directory is never
-    /// safe on Android or iOS.
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn default_dirs() -> Result<Self> {
+    /// Resolve desktop directories. Mobile hosts inject their sandbox paths
+    /// through `Paths::new`; silently using the process working directory is
+    /// never safe there.
+    #[cfg(desktop)]
+    pub fn default_dirs() -> crate::error::Result<Self> {
         let data_root = dirs::data_dir().ok_or_else(|| {
             crate::error::CoreError::Other(
                 "the operating system has no application data directory".into(),
@@ -31,23 +29,6 @@ impl Paths {
         Ok(Self::new(
             data_root.join("flectar-mail"),
             cache_root.join("flectar-mail"),
-        ))
-    }
-
-    #[cfg(target_os = "ios")]
-    pub fn default_dirs() -> Result<Self> {
-        let root = std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| {
-            crate::error::CoreError::Other("iOS did not supply the application sandbox.".into())
-        })?;
-        Ok(Self::new(
-            root.join("Library/Application Support/Flectar"),
-            root.join("Library/Caches/Flectar"),
-        ))
-    }
-    #[cfg(target_os = "android")]
-    pub fn default_dirs() -> Result<Self> {
-        Err(crate::error::CoreError::Other(
-            "mobile application storage must be supplied by the platform host".into(),
         ))
     }
 

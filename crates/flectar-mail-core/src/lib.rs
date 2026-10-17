@@ -35,7 +35,7 @@ pub mod smtp;
 pub mod sync;
 pub mod unsubscribe;
 
-use crate::accounts::credentials::{self, CredentialStoreHandle, Slot, SystemCredentialStore};
+use crate::accounts::credentials::{self, CredentialStoreHandle, Slot};
 use crate::config::Paths;
 use crate::db::Db;
 use crate::db::repo;
@@ -340,10 +340,11 @@ pub struct Core {
 }
 
 impl Core {
+    #[cfg(desktop)]
     pub async fn start(paths: Paths) -> Result<Core> {
         Self::start_with_platform(
             paths,
-            Arc::new(SystemCredentialStore),
+            Arc::new(credentials::SystemCredentialStore),
             Arc::new(LoopbackRedirectBroker::default()),
             true,
         )
@@ -354,8 +355,10 @@ impl Core {
     /// folder discovery, and keyword search stay fully enabled, while the
     /// optional local embedding model is left unloaded until a host that
     /// exposes semantic search asks for it.
+    #[cfg(desktop)]
     pub async fn start_mail_ui(paths: Paths) -> Result<Core> {
-        Self::start_mail_ui_with_credentials(paths, Arc::new(SystemCredentialStore)).await
+        Self::start_mail_ui_with_credentials(paths, Arc::new(credentials::SystemCredentialStore))
+            .await
     }
 
     /// Start a mail-only core with a host-provided credential backend. Mobile
@@ -941,6 +944,31 @@ impl Core {
             }
             self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
         }
+        Ok(())
+    }
+
+    /// Override SMTP Sent filing for providers with configurable auto-save.
+    pub async fn set_account_sent_copy_policy(
+        &self,
+        account_id: i64,
+        policy: SentCopyPolicy,
+    ) -> Result<()> {
+        let settings = self
+            .db
+            .write(move |conn| {
+                let tx = conn.transaction()?;
+                let mut config = repo::accounts::get_config(&tx, account_id)?
+                    .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))?;
+                config.settings.sent_copy_policy = policy;
+                repo::accounts::set_settings(&tx, account_id, &config.settings)?;
+                tx.commit()?;
+                Ok(config.settings)
+            })
+            .await?;
+        if let Some(handle) = self.handles.read().await.get(&account_id).cloned() {
+            handle.update_settings(settings);
+        }
+        self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
         Ok(())
     }
 

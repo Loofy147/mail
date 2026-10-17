@@ -14,8 +14,6 @@ pub mod documents;
 mod email_document;
 pub mod favicon;
 mod files_controller;
-#[cfg(target_os = "ios")]
-mod ios_documents;
 mod latest_load;
 mod mail;
 mod mail_groups;
@@ -27,6 +25,7 @@ mod mail_work;
 mod message_appearance;
 mod oauth_browser;
 pub mod pdf_preview;
+pub mod platform;
 mod preview_controls;
 mod reader_clipboard;
 #[cfg(test)]
@@ -327,12 +326,12 @@ fn reconcile_model_rows_by<T: Clone + 'static, K: Eq + std::hash::Hash>(
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn pick_compose_attachment_paths(title: String) -> Option<Vec<PathBuf>> {
     rfd::FileDialog::new().set_title(title).pick_files()
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 fn pick_compose_attachment_paths(_title: String) -> Option<Vec<PathBuf>> {
     None
 }
@@ -896,7 +895,7 @@ fn perform_mail_list_action(
     )
 }
 
-#[cfg(any(test, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(any(test, desktop))]
 fn parse_preview_window_size(value: &str) -> Result<slint::LogicalSize, String> {
     let normalized = value.trim().to_ascii_lowercase();
     let (width, height) = normalized
@@ -1077,6 +1076,9 @@ impl InboxState {
     }
 }
 
+/// Everything the shared application needs from its host. Desktop builds use
+/// `PlatformContext::desktop`; mobile hosts construct it from their own
+/// sandbox paths and native services. See platform/README.md.
 #[derive(Clone)]
 pub struct PlatformContext {
     pub paths: Paths,
@@ -1086,6 +1088,7 @@ pub struct PlatformContext {
 }
 
 impl PlatformContext {
+    #[cfg(desktop)]
     pub fn desktop() -> Result<Self, flectar_mail_core::error::CoreError> {
         let paths = Paths::default_dirs()?;
         let credentials = desktop_credential_store(&paths);
@@ -1099,25 +1102,29 @@ impl PlatformContext {
         })
     }
 
+    /// A host-owned sandbox: durable data below `data_root/data`, plus the
+    /// host's native document, credential and OAuth services.
     pub fn app_private(
         data_root: PathBuf,
         cache_dir: PathBuf,
+        documents: Arc<dyn documents::DocumentProvider>,
         credentials: flectar_mail_core::accounts::credentials::CredentialStoreHandle,
         oauth_redirects: flectar_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
     ) -> Self {
         Self {
             paths: Paths::new(data_root.join("data"), cache_dir),
-            documents: documents::default_provider(),
+            documents,
             credentials,
             oauth_redirects,
         }
     }
 }
 
+#[cfg(desktop)]
 fn desktop_credential_store(
     paths: &Paths,
 ) -> flectar_mail_core::accounts::credentials::CredentialStoreHandle {
-    #[cfg(all(target_os = "linux", debug_assertions))]
+    #[cfg(all(linux_desktop, debug_assertions))]
     if isolated_container_without_secret_service() {
         let path = paths.data_dir.join("credentials-v1.json");
         tracing::warn!(
@@ -1128,12 +1135,12 @@ fn desktop_credential_store(
             flectar_mail_core::accounts::credentials::DevelopmentFileCredentialStore::new(path),
         );
     }
-    #[cfg(not(all(target_os = "linux", debug_assertions)))]
+    #[cfg(not(all(linux_desktop, debug_assertions)))]
     let _ = paths;
     Arc::new(flectar_mail_core::accounts::credentials::SystemCredentialStore)
 }
 
-#[cfg(all(target_os = "linux", debug_assertions))]
+#[cfg(all(linux_desktop, debug_assertions))]
 fn isolated_container_without_secret_service() -> bool {
     let container = std::env::var("container")
         .unwrap_or_default()
@@ -1144,7 +1151,7 @@ fn isolated_container_without_secret_service() -> bool {
     )
 }
 
-#[cfg(all(target_os = "linux", any(debug_assertions, test)))]
+#[cfg(all(linux_desktop, any(debug_assertions, test)))]
 fn isolated_container_without_secret_service_values(
     container: &str,
     has_session_bus: bool,
@@ -1152,7 +1159,7 @@ fn isolated_container_without_secret_service_values(
     matches!(container, "podman" | "docker") && !has_session_bus
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, linux_desktop))]
 mod desktop_credential_store_tests {
     use super::isolated_container_without_secret_service_values;
 
@@ -1283,7 +1290,7 @@ fn spawn_startup_load(
 /// CPU process, releasing the failed device and keeping the saved choice intact.
 pub fn run_desktop(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> {
     let result = run(platform);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     if let Err(error) = &result
         && error.is::<renderer_preferences::GpuStartupError>()
         && std::env::var_os("FLECTAR_GPU_FALLBACK").is_none()
@@ -1320,22 +1327,14 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let window_frame = window_chrome::WindowFrame::parse(
         startup_presentation.window_frame.as_deref().unwrap_or_default(),
     );
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let use_wgpu = renderer_preferences::select_backend(requested_renderer, window_frame)?;
-
-    // Android installs its backend in android_main before entering this shared
-    // function. iOS uses Slint's documented winit + Skia combination.
-    #[cfg(target_os = "android")]
-    let use_wgpu = false;
-
-    #[cfg(target_os = "ios")]
-    let use_wgpu = {
-        slint::BackendSelector::new()
-            .backend_name("winit".to_owned())
-            .renderer_name("skia".to_owned())
-            .select()?;
-        false
-    };
+    #[cfg(desktop)]
+    let (use_wgpu, cpu_renderer) = (
+        renderer_preferences::select_backend(requested_renderer, window_frame)?,
+        "software",
+    );
+    // The platform layer installs the mobile backend and names its renderer.
+    #[cfg(mobile)]
+    let (use_wgpu, cpu_renderer) = (false, platform::select_renderer()?);
 
     eprintln!(
         "FLECTAR_RENDERER {}",
@@ -1343,7 +1342,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             "event": "selected", "pid": std::process::id(),
             "preferred": preferred_renderer.key(), "requested": requested_renderer.key(),
             "active": if use_wgpu { "gpu" } else { "cpu" },
-            "slint": if use_wgpu { "femtovg-wgpu" } else if cfg!(target_os = "ios") { "platform" } else { "software" },
+            "slint": if use_wgpu { "femtovg-wgpu" } else { cpu_renderer },
             "blitz": if use_wgpu { "vello-gpu" } else { "vello-cpu" },
             "wgpu_initialized": if use_wgpu { serde_json::Value::Null } else { serde_json::json!(false) },
             "shared_device": if use_wgpu { serde_json::Value::Null } else { serde_json::json!(false) },
@@ -1354,7 +1353,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     // window managers can associate the native window with the installed icon.
     #[cfg(all(
         unix,
-        not(any(target_os = "android", target_os = "ios", target_os = "macos"))
+        not(any(mobile, target_os = "macos"))
     ))]
     slint::set_xdg_app_id("com.flectar.mail")?;
 
@@ -1402,8 +1401,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             crate::preview_controls::zoom(&action, current, minimum, maximum)
         });
     theme::register_theme_utilities(&app);
-    app.set_print_supported(!cfg!(any(target_os = "android", target_os = "ios")));
-    app.set_document_apis_supported(!cfg!(any(target_os = "android", target_os = "ios")));
+    app.set_print_supported(!cfg!(mobile));
+    app.set_document_apis_supported(!cfg!(mobile));
     renderer_preferences::initialize_step(use_wgpu, || app.show())?;
     startup_metrics.emit(
         "window_shown",
@@ -1457,7 +1456,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     {
         eprintln!("email images unavailable: {error}");
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     if let Some(value) = std::env::var_os("FLECTAR_PREVIEW_SIZE") {
         match value.to_str().map(parse_preview_window_size) {
             Some(Ok(size)) => app.window().set_size(size),
@@ -3766,7 +3765,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
                     if let Some(settings) = settings.as_ref() {
                         apply_settings(&app, settings);
-                        #[cfg(any(target_os = "android", target_os = "ios", feature = "flatpak"))]
+                        #[cfg(any(mobile, feature = "flatpak"))]
                         app.set_close_to_tray(false);
                         if let Some(tray) =
                             startup_tray.as_ref().and_then(|tray| tray.upgrade())
@@ -4445,6 +4444,49 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     UiMessage::plain("Mail history updated. Background sync is adjusting now.")
                 }
                 Err(error) => UiMessage::detail("Could not update mail history: {}", error),
+            };
+            // Reload on both success and failure so the selector always shows
+            // the authoritative persisted value.
+            let accounts = core.load_account_snapshot().await.ok();
+            let _ = updates
+                .send(UiTaskUpdate {
+                    message,
+                    accounts,
+                    calendar_connections: None,
+                    carddav_connections: None,
+                    calendar_error: None,
+                    account_removal: None,
+                    clear_account_form: false,
+                    finishes_account_setup: false,
+                    finishes_oauth: false,
+                    close_to_tray: None,
+                })
+                .await;
+        });
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_sent_copy_policy = Rc::clone(&state);
+    let runtime_for_sent_copy_policy = Rc::clone(&runtime);
+    let ui_task_tx_for_sent_copy_policy = ui_task_tx.clone();
+    app.on_save_account_sent_copy_policy(move |account_id, value| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(core) = state_for_sent_copy_policy.borrow().core.clone() else {
+            app.set_sync_status(UiMessage::plain("Sent copy settings require local mail data."));
+            return;
+        };
+        let account_id = i64::from(account_id);
+        let value = value.to_string();
+        app.set_sync_status(UiMessage::plain("Updating Sent copy settings…"));
+        let updates = ui_task_tx_for_sent_copy_policy.clone();
+        runtime_for_sent_copy_policy.spawn(async move {
+            let message = match core.set_account_sent_copy_policy(account_id, &value).await {
+                Ok(_) => {
+                    UiMessage::plain("Sent copy settings updated.")
+                }
+                Err(error) => UiMessage::detail("Could not update Sent copy settings: {}", error),
             };
             // Reload on both success and failure so the selector always shows
             // the authoritative persisted value.
@@ -5671,7 +5713,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let Some(paths) = pick_compose_attachment_paths(
             translated(&app, &UiMessage::plain("Attach files to this email")).to_string(),
         ) else {
-            #[cfg(any(target_os = "android", target_os = "ios"))]
+            #[cfg(mobile)]
             {
                 app.set_compose_notice(UiMessage::plain(
                     "The platform host does not provide a document picker.",
@@ -7633,14 +7675,8 @@ mod tests {
 
 /// Mobile hosts release preview bytes/bitmaps and request cooperative native
 /// cancellation when backgrounded or under memory pressure.
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 pub fn suspend_file_preview() {
     files_controller::suspend();
     attachment_controller::suspend();
-}
-
-#[cfg(target_os = "ios")]
-#[unsafe(no_mangle)]
-extern "C" fn flectar_suspend_pdf_preview() {
-    suspend_file_preview();
 }

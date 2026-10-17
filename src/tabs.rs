@@ -255,6 +255,7 @@ impl Command {
         })
     }
 
+    #[cfg(any(test, desktop))]
     pub(crate) fn key(self) -> String {
         match self {
             Self::New => "new".into(),
@@ -269,7 +270,7 @@ impl Command {
 
 /// Map a key press to a tab command. `primary` is Command on macOS and
 /// Control elsewhere; Control+Tab cycles tabs on every platform.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn shortcut(
     key: &slint::winit_030::winit::keyboard::Key,
     modifiers: slint::winit_030::winit::keyboard::ModifiersState,
@@ -977,7 +978,7 @@ mod tests {
         assert_eq!(ui.get_rows().row_data(0).unwrap().title, "");
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     #[test]
     fn shortcuts_follow_browser_conventions() {
         use slint::winit_030::winit::keyboard::{Key, ModifiersState, NamedKey};

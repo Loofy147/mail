@@ -825,6 +825,21 @@ async fn smtp_implicit_tls_on_custom_port() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn smtp_delivery_does_not_wait_for_the_imap_sync_actor() {
+    smtp_sent_policy(Provider::Imap, SentCopyPolicy::Auto, 1).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn smtp_microsoft_auto_save_skips_append_and_client_override_restores_it() {
+    smtp_sent_policy(Provider::Microsoft, SentCopyPolicy::Auto, 0).await;
+    smtp_sent_policy(Provider::Microsoft, SentCopyPolicy::Client, 1).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn smtp_server_override_takes_effect_without_restarting_worker() {
+    smtp_sent_policy(Provider::Imap, SentCopyPolicy::Server, 0).await;
+}
+
+async fn smtp_sent_policy(provider: Provider, policy: SentCopyPolicy, expected_appends: i64) {
     let (imap_port, imap_task) = imap_server(false, false).await;
     let (smtp_port, delivered, smtp_task) = smtp_test_and_delivery_server().await;
     let temp = tempfile::tempdir().unwrap();
@@ -854,6 +869,22 @@ async fn smtp_delivery_does_not_wait_for_the_imap_sync_actor() {
     // The spawned sync actor is now offline, which used to leave this send in
     // `pending` until the composer's 60-second watchdog cancelled it.
     imap_task.await.unwrap();
+
+    // Settings edits must take effect without restarting the SMTP worker.
+    let account_id = account.id;
+    core.db
+        .write(move |conn| {
+            conn.execute(
+                "UPDATE accounts SET provider=?2 WHERE id=?1",
+                rusqlite::params![account_id, provider.as_str()],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    core.set_account_sent_copy_policy(account_id, policy)
+        .await
+        .unwrap();
 
     let draft_id = core
         .save_draft(SaveDraftArgs {
@@ -895,6 +926,7 @@ async fn smtp_delivery_does_not_wait_for_the_imap_sync_actor() {
         .unwrap()
         .unwrap();
     assert!(message.contains("Subject: Independent SMTP dispatch"));
+    assert!(message.contains("X-Flectar-Submission-ID:"));
     assert!(message.contains("The IMAP actor is intentionally offline."));
 
     core.db
@@ -911,7 +943,7 @@ async fn smtp_delivery_does_not_wait_for_the_imap_sync_actor() {
                 |row| row.get(0),
             )?;
             assert_eq!(state, "done");
-            assert_eq!(sent_follow_up, 1);
+            assert_eq!(sent_follow_up, expected_appends);
             Ok(())
         })
         .await

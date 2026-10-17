@@ -220,6 +220,7 @@ export component MailListPane inherits Rectangle {
 
     out property <int> keyboard-email-id: -1;
     out property <bool> keyboard-focused: list-keyboard.has-focus;
+    out property <bool> keyboard-focus-visible: list-keyboard.focus-visible;
     out property <length> scroll-y: mail-list-scroll.content-y;
     private property <int> keyboard-entry-index: -1;
     private property <length> message-row-height: root.dense ? 44px : 96px;
@@ -251,8 +252,11 @@ export component MailListPane inherits Rectangle {
         pagination.user-scrolled();
     }
 
-    public function focus-list() {
+    // Restoring focus after startup or a layout change stays quiet; the
+    // outline returns as soon as the user presses a key.
+    public function focus-list(show-focus: bool) {
         list-keyboard.focus();
+        if !show-focus { list-keyboard.pointer-activated(); }
         root.move-cursor("current", 1, false);
     }
 
@@ -534,7 +538,7 @@ export component MailListPane inherits Rectangle {
                                 private property <bool> long-press-triggered: false;
                                 private property <float> touch-start-x: 0;
                                 private property <float> touch-start-y: 0;
-                                width: mail-list-scroll.visible-width;
+                                width: max(0px, mail-list-scroll.visible-width - LayoutMetrics.list-scrollbar-gutter);
                                 height: entry.is_header ? (root.compact ? 44px : 40px)
                                     : entry.show_row && (mail-row.reveal-ready || !MotionSettings.enabled)
                                         ? (root.dense ? 44px : 96px) : 0px;
@@ -621,9 +625,9 @@ export component MailListPane inherits Rectangle {
                                     visible: !entry.is_header;
                                     x: root.show-avatars ? (root.dense ? 52px : 64px) : 14px;
                                     y: root.dense ? 0px : 8px;
-                                    // Leave 24px on the right: 12px row
-                                    // padding plus the overlaid 8px scrollbar.
-                                    width: max(0px, parent.width - self.x - 24px);
+                                    // The row already ends before the scrollbar
+                                    // gutter, so only its 12px padding remains.
+                                    width: max(0px, parent.width - self.x - 12px);
                                     height: root.dense ? 44px : 80px;
 
                                     sender-time := Text {

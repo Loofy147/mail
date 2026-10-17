@@ -229,6 +229,43 @@ pub struct MailConnectionSettings {
     pub trusted_certificate_pem: String,
 }
 
+/// Who files a copy after an SMTP submission. API transports own their filing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SentCopyPolicy {
+    #[default]
+    Auto,
+    Server,
+    Client,
+}
+
+impl SentCopyPolicy {
+    pub fn should_append(self, provider: Provider) -> bool {
+        match self {
+            Self::Auto => !matches!(provider, Provider::Gmail | Provider::Microsoft),
+            Self::Server => false,
+            Self::Client => true,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Server => "server",
+            Self::Client => "client",
+        }
+    }
+
+    pub fn from_storage(value: &str) -> Option<Self> {
+        match value {
+            "auto" => Some(Self::Auto),
+            "server" => Some(Self::Server),
+            "client" => Some(Self::Client),
+            _ => None,
+        }
+    }
+}
+
 /// Typed contents of `accounts.settings_json`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -246,6 +283,8 @@ pub struct AccountSettings {
     /// authenticated account address remains the account/login identity.
     #[serde(default)]
     pub default_sender_email: Option<String>,
+    #[serde(default)]
+    pub sent_copy_policy: SentCopyPolicy,
 }
 
 impl Default for AccountSettings {
@@ -255,6 +294,7 @@ impl Default for AccountSettings {
             security: Default::default(),
             connection: MailConnectionSettings::default(),
             default_sender_email: None,
+            sent_copy_policy: SentCopyPolicy::Auto,
         }
     }
 }
@@ -266,6 +306,27 @@ const fn default_mail_history() -> MailHistory {
 #[cfg(test)]
 mod account_settings_tests {
     use super::*;
+
+    #[test]
+    fn sent_copy_defaults_and_overrides_survive_serialization() {
+        let mut settings: AccountSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(settings.sent_copy_policy, SentCopyPolicy::Auto);
+        assert!(!settings.sent_copy_policy.should_append(Provider::Microsoft));
+        assert!(settings.sent_copy_policy.should_append(Provider::Imap));
+        for policy in [
+            SentCopyPolicy::Auto,
+            SentCopyPolicy::Server,
+            SentCopyPolicy::Client,
+        ] {
+            settings.sent_copy_policy = policy;
+            let restored: AccountSettings =
+                serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+            assert_eq!(restored.sent_copy_policy, policy);
+            assert_eq!(SentCopyPolicy::from_storage(policy.as_str()), Some(policy));
+        }
+        assert!(SentCopyPolicy::Client.should_append(Provider::Microsoft));
+        assert!(!SentCopyPolicy::Server.should_append(Provider::Imap));
+    }
 
     #[test]
     fn new_missing_and_imported_settings_share_the_bounded_default() {

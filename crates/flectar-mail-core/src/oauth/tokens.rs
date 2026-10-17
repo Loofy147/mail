@@ -585,7 +585,7 @@ fn token_error_is_transient(body: &str) -> bool {
 mod tests {
     use super::*;
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     #[tokio::test]
     async fn initial_oauth_tokens_persist_in_development_container_store() {
         let directory = tempfile::tempdir().unwrap();
@@ -629,7 +629,7 @@ mod tests {
         );
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     #[tokio::test]
     async fn legacy_oauth_entries_migrate_to_one_atomic_bundle() {
         let directory = tempfile::tempdir().unwrap();
@@ -691,7 +691,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     #[tokio::test]
     async fn missing_refresh_token_never_creates_or_mixes_registrations() {
         let directory = tempfile::tempdir().unwrap();

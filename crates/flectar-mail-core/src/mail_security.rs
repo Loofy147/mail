@@ -66,7 +66,7 @@ pub struct Gpg {
 }
 impl Gpg {
     async fn run(&self, args: &[String], input: Option<&[u8]>) -> Result<(Vec<u8>, String)> {
-        if cfg!(any(target_os = "android", target_os = "ios")) {
+        if cfg!(mobile) {
             return Err(error("OpenPGP requires desktop GnuPG"));
         }
         if input.is_some_and(|data| data.len() > MAX_CRYPTO_BYTES) {

@@ -597,6 +597,7 @@ export component SettingsDialog inherits Rectangle {
     pure callback read_account_transfer(data-transfer) -> string;
     callback reorder_account(string, int, bool);
     callback save_account_mail_history(int, string);
+    callback save_account_sent_copy_policy(int, string);
     callback connect_account_calendar(int);
     callback set_account_calendar_enabled(int, bool);
     callback connect_caldav(int, string, string, string);
@@ -1696,7 +1697,8 @@ export component SettingsDialog inherits Rectangle {
                             }
                             for account in root.connected_accounts : drop-target := DropArea {
                                 private property <length> divider-y: account.sync_error != "" ? 112px : root.compact ? 92px : 88px;
-                                height: self.divider-y + (root.compact ? (account.provider == "imap" ? 266px : 212px) : 129px);
+                                private property <length> sent-copy-height: account.provider != "gmail" && account.mail_protocol == "imap" ? (root.compact ? 145px : 70px) : 0px;
+                                height: self.divider-y + self.sent-copy-height + (root.compact ? (account.provider == "imap" ? 266px : 212px) : 129px);
                                 can-drop(event) => root.read_account_transfer(event.data) != "" ? DragAction.move : DragAction.none;
                                 dropped(event) => {
                                     let source = root.read_account_transfer(event.data);
@@ -1845,9 +1847,25 @@ export component SettingsDialog inherits Rectangle {
                                         description-color: root.faint-text;
                                         selected(index, value) => { root.select-mail-history(account.id, index); }
                                     }
+                                    if drop-target.sent-copy-height > 0px : SettingsSelectRow {
+                                        x: root.compact ? 24px : 32px;
+                                        y: drop-target.divider-y + (root.compact ? 153px : 70px);
+                                        width: parent.width - (root.compact ? 48px : 64px);
+                                        compact: root.compact;
+                                        title: @tr("Sent copies");
+                                        compact-description-height: 51px;
+                                        description: @tr("Choose who saves sent mail. Use Flectar if your server does not save a copy.");
+                                        choices: [@tr("Provider default"), @tr("Server saves a copy"), @tr("Flectar saves a copy")];
+                                        selected-index: account.sent_copy_policy == "server" ? 1 : account.sent_copy_policy == "client" ? 2 : 0;
+                                        title-color: root.body-text;
+                                        description-color: root.faint-text;
+                                        selected(index, value) => {
+                                            root.save_account_sent_copy_policy(account.id, index == 1 ? "server" : index == 2 ? "client" : "auto");
+                                        }
+                                    }
                                     Rectangle {
                                         x: root.compact ? 24px : 32px;
-                                        y: drop-target.divider-y + (root.compact ? 70px : 66px);
+                                        y: drop-target.divider-y + drop-target.sent-copy-height + (root.compact ? 155px : 66px);
                                         width: parent.width - (root.compact ? 48px : 64px);
                                         height: 50px;
                                         background: transparent;
@@ -1891,7 +1909,7 @@ export component SettingsDialog inherits Rectangle {
                                     }
                                     if root.compact && account.provider == "imap" : HorizontalBox {
                                         x: 24px;
-                                        y: drop-target.divider-y + 197px;
+                                        y: drop-target.divider-y + drop-target.sent-copy-height + 219px;
                                         width: parent.width - 48px;
                                         height: 36px;
                                         spacing: 10px;

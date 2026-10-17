@@ -19,11 +19,11 @@
 use crate::{AppWindow, WindowChrome};
 use flectar_mail_core::models::normalized_window_frame;
 use slint::ComponentHandle;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 use std::cell::Cell;
 
-#[cfg(target_os = "linux")]
+#[cfg(linux_desktop)]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -56,7 +56,7 @@ impl WindowFrame {
 /// What a title-bar gesture does, in the vocabulary GNOME and KWin share.
 /// Linux follows every configurable action; Windows and macOS only map the
 /// gestures their own title bars support.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[cfg_attr(not(linux_desktop), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TitleBarAction {
     ToggleMaximize,
@@ -72,7 +72,7 @@ const PLATFORM: &str = if cfg!(target_os = "windows") {
     "windows"
 } else if cfg!(target_os = "macos") {
     "macos"
-} else if cfg!(target_os = "linux") {
+} else if cfg!(linux_desktop) {
     "linux"
 } else {
     ""
@@ -129,21 +129,21 @@ pub(crate) fn register(app: &AppWindow, runtime: &tokio::runtime::Runtime) {
         }
     });
 
-    #[cfg(target_os = "linux")]
+    #[cfg(linux_desktop)]
     linux::register(app, runtime);
     #[cfg(target_os = "windows")]
     windows::register(app);
     #[cfg(target_os = "macos")]
     macos::register(app);
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(linux_desktop))]
     let _ = runtime;
     apply_preference(app, STARTUP_FRAME.get());
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     register_desktop_events(app);
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn register_desktop_events(app: &AppWindow) {
     let chrome = app.global::<WindowChrome>();
     let weak = app.as_weak();
@@ -180,7 +180,7 @@ fn register_desktop_events(app: &AppWindow) {
             winit::event::WindowEvent::Focused(focused) => {
                 let chrome = app.global::<WindowChrome>();
                 chrome.set_active(*focused);
-                #[cfg(target_os = "linux")]
+                #[cfg(linux_desktop)]
                 if *focused && chrome.get_integrated() {
                     linux::refresh(&app);
                 }
@@ -203,7 +203,7 @@ pub(crate) fn apply_preference(app: &AppWindow, frame: WindowFrame) {
     chrome.set_preference(frame.key().into());
     let integrated = !PLATFORM.is_empty() && frame == WindowFrame::Integrated;
     chrome.set_integrated(integrated);
-    #[cfg(target_os = "linux")]
+    #[cfg(linux_desktop)]
     if integrated {
         linux::refresh(app);
     }
@@ -213,10 +213,10 @@ pub(crate) fn apply_preference(app: &AppWindow, frame: WindowFrame) {
     macos::set_integrated(app, integrated);
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+#[cfg(desktop)]
+#[cfg_attr(not(linux_desktop), allow(unused_variables))]
 fn title_bar_action(app: &AppWindow, gesture: &str) -> Option<TitleBarAction> {
-    #[cfg(target_os = "linux")]
+    #[cfg(linux_desktop)]
     return linux::title_bar_action(app, gesture);
     #[cfg(target_os = "windows")]
     return windows::title_bar_action(gesture);
@@ -226,7 +226,7 @@ fn title_bar_action(app: &AppWindow, gesture: &str) -> Option<TitleBarAction> {
     None
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn perform(app: &AppWindow, action: TitleBarAction, x: f32, y: f32) {
     let window = app.window();
     match action {
@@ -235,17 +235,17 @@ fn perform(app: &AppWindow, action: TitleBarAction, x: f32, y: f32) {
         TitleBarAction::Close => close(window),
         TitleBarAction::Menu => show_window_menu(window, x, y),
         TitleBarAction::Lower => {
-            #[cfg(target_os = "linux")]
+            #[cfg(linux_desktop)]
             linux::lower(window);
         }
     }
 }
 
 /// Open the window manager's window menu at a window-relative position.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn show_window_menu(window: &slint::Window, x: f32, y: f32) {
     // Winit implements the window menu on Windows and Wayland.
-    #[cfg(target_os = "linux")]
+    #[cfg(linux_desktop)]
     if linux::show_x11_window_menu(window) {
         return;
     }
