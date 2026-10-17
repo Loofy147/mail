@@ -237,14 +237,21 @@ jobs:
       - name: Install pinned cargo-audit
         run: cargo install cargo-audit --locked --version 0.22.2
       - name: Audit the locked dependency graph
-        # These four advisories are unmaintained notices in optional/build or
-        # Slint/Blitz typography dependencies. Deny every new warning while the
-        # upstream replacements are tracked explicitly here.
+        # These advisories are maintenance notices, not vulnerability exceptions.
+        # The first four cover optional/build or Slint/Blitz typography crates.
+        # RUSTSEC-2026-0370/0371/0372 cover zvariant, zbus_names and zvariant_derive,
+        # merged into zbus 6: https://github.com/z-galaxy/zbus/issues/2043.
+        # Slint 1.18.1 (including ksni) and ashpd 0.11 (including rfd) still
+        # require zbus 5. Remove these three exceptions when those upstreams
+        # migrate. Continue denying every other warning and vulnerability.
         run: |
           for lockfile in Cargo.lock platform/android/Cargo.lock; do
             cargo audit --file "$lockfile" --deny warnings \
               --ignore RUSTSEC-2025-0141 \
               --ignore RUSTSEC-2024-0436 \
               --ignore RUSTSEC-2026-0206 \
-              --ignore RUSTSEC-2026-0192
+              --ignore RUSTSEC-2026-0192 \
+              --ignore RUSTSEC-2026-0370 \
+              --ignore RUSTSEC-2026-0371 \
+              --ignore RUSTSEC-2026-0372
           done
