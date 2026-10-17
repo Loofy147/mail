@@ -1,5 +1,8 @@
 //! Mail list/detail projection, paging, avatars, and rendered-email bridge.
 
+#[cfg(test)]
+mod removal_tests;
+
 use super::*;
 use chrono::Datelike;
 
@@ -113,6 +116,15 @@ pub(super) fn apply_background_mail_page(
         let mut state = state.borrow_mut();
         state.labels = labels;
         let mut old_messages = std::mem::take(&mut state.messages);
+        let old_order = filtered_messages(
+            &old_messages,
+            &state.scope,
+            if state.using_core { "" } else { &state.query },
+            &state.search_filter,
+        )
+        .into_iter()
+        .map(|message| message.id)
+        .collect::<Vec<_>>();
         carry_selected_detail(&mut old_messages, &mut messages, state.selected_id);
 
         let old_counts = state
@@ -144,16 +156,33 @@ pub(super) fn apply_background_mail_page(
         // message is in fact gone.
         let removed = state
             .rendered_id
-            .is_some_and(|rendered_id| !state.messages.iter().any(|row| row.id == rendered_id));
-        if removed {
-            state.selected_id = None;
+            .filter(|rendered_id| !state.messages.iter().any(|row| row.id == *rendered_id));
+        if let Some(removed_id) = removed {
+            // Archiving or trashing the open message should advance to the
+            // row that took its place, not jump back to the top of the list.
+            let visible = filtered_messages(
+                &state.messages,
+                &state.scope,
+                if state.using_core { "" } else { &state.query },
+                &state.search_filter,
+            )
+            .into_iter()
+            .map(|message| message.id)
+            .collect::<HashSet<_>>();
+            state.selected_id = successor_selection(&old_order, removed_id, &visible);
             state.preview_closed = false;
         }
-        removed
+        removed.is_some()
     };
 
     if selection_removed {
-        if let Err(error) = render_current(app, state, runtime) {
+        // Normal selection also reveals a successor in a collapsed date group.
+        let selected_id = state.borrow().selected_id;
+        let result = match selected_id {
+            Some(id) => select_message(app, state, runtime, id),
+            None => render_current(app, state, runtime),
+        };
+        if let Err(error) = result {
             app.set_render_status(UiMessage::detail(
                 "Background mail refresh failed: {}",
                 error,
@@ -225,6 +254,17 @@ pub(super) fn select_message(
         state.preview_closed = false;
     }
     render_current(app, state, runtime)
+}
+
+/// The next surviving row below `removed_id` in the previous list order, or
+/// the nearest surviving row above it when it was the last one.
+fn successor_selection(old_order: &[i32], removed_id: i32, visible: &HashSet<i32>) -> Option<i32> {
+    let index = old_order.iter().position(|id| *id == removed_id)?;
+    old_order[index + 1..]
+        .iter()
+        .chain(old_order[..index].iter().rev())
+        .find(|id| visible.contains(id))
+        .copied()
 }
 
 fn adjacent_message_ids<M: std::borrow::Borrow<MailMessage>>(
@@ -1606,7 +1646,7 @@ mod tests {
         assert!(rows[1].selected);
     }
 
-    fn message(id: i32) -> MailMessage {
+    pub(super) fn message(id: i32) -> MailMessage {
         MailMessage {
             id,
             thread_id: Some(i64::from(id)),
@@ -1839,6 +1879,20 @@ mod tests {
         assert_eq!(adjacent_message_ids(&messages, Some(30)), (20, -1));
         assert_eq!(adjacent_message_ids(&messages, None), (-1, -1));
         assert_eq!(adjacent_message_ids(&messages, Some(99)), (-1, -1));
+    }
+
+    #[test]
+    fn removed_selection_advances_to_the_next_surviving_row() {
+        let order = [10, 20, 30, 40];
+        let visible = |ids: &[i32]| ids.iter().copied().collect::<HashSet<_>>();
+
+        assert_eq!(successor_selection(&order, 20, &visible(&[10, 30, 40])), Some(30));
+        // Rows removed in the same batch are skipped.
+        assert_eq!(successor_selection(&order, 20, &visible(&[10, 40])), Some(40));
+        // The last row falls back to the nearest row above it.
+        assert_eq!(successor_selection(&order, 40, &visible(&[10, 20])), Some(20));
+        assert_eq!(successor_selection(&order, 20, &visible(&[])), None);
+        assert_eq!(successor_selection(&order, 99, &visible(&[10])), None);
     }
 
     #[test]
