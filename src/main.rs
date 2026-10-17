@@ -4,7 +4,7 @@ mod account_mail_preferences;
 mod account_removal_tests;
 mod attachment_controller;
 mod browser;
-pub use browser::set_external_url_opener;
+pub use browser::ExternalUrlOpener;
 mod calendar;
 mod compose_controller;
 mod compose_editor;
@@ -1082,6 +1082,8 @@ impl InboxState {
 /// sandbox paths and native services. See platform/README.md.
 #[derive(Clone)]
 pub struct PlatformContext {
+    /// Host URL dispatch for mail links and browser-based authorization.
+    pub external_urls: ExternalUrlOpener,
     pub paths: Paths,
     pub documents: Arc<dyn documents::DocumentProvider>,
     pub credentials: flectar_mail_core::accounts::credentials::CredentialStoreHandle,
@@ -1095,6 +1097,7 @@ impl PlatformContext {
         let credentials = desktop_credential_store(&paths);
         Ok(Self {
             paths,
+            external_urls: ExternalUrlOpener::default(),
             documents: documents::default_provider(),
             credentials,
             oauth_redirects: Arc::new(
@@ -1114,6 +1117,7 @@ impl PlatformContext {
     ) -> Self {
         Self {
             paths: Paths::new(data_root.join("data"), cache_dir),
+            external_urls: ExternalUrlOpener::default(),
             documents,
             credentials,
             oauth_redirects,
@@ -6239,7 +6243,11 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_account = Rc::clone(&state);
     let runtime_for_account = Rc::clone(&runtime);
     let ui_task_tx_for_account = ui_task_tx.clone();
-    oauth_browser::register(&app, platform.oauth_redirects.clone());
+    oauth_browser::register(
+        &app,
+        platform.oauth_redirects.clone(),
+        platform.external_urls.clone(),
+    );
     mail_setup::register(&app, &runtime);
 
     let suggestion_app = app.as_weak();
@@ -6433,6 +6441,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_oauth = Rc::clone(&state);
     let runtime_for_oauth = Rc::clone(&runtime);
     let ui_task_tx_for_oauth = ui_task_tx.clone();
+    let opener_for_oauth = platform.external_urls.clone();
     app.on_start_oauth(move |provider| {
         let Some(app) = app_weak.upgrade() else {
             return;
@@ -6473,10 +6482,11 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         ));
         let updates = ui_task_tx_for_oauth.clone();
         let browser_app = app.as_weak();
+        let opener = opener_for_oauth.clone();
         runtime_for_oauth.spawn(async move {
             let result = core
                 .start_oauth_with_calendar(provider, connect_calendar, move |url| {
-                    oauth_browser::begin(browser_app.clone(), url)
+                    oauth_browser::begin(browser_app.clone(), url, opener.clone())
                 })
                 .await;
             let update = match result {
@@ -6519,6 +6529,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_reauth = Rc::clone(&state);
     let runtime_for_reauth = Rc::clone(&runtime);
     let ui_task_tx_for_reauth = ui_task_tx.clone();
+    let opener_for_reauth = platform.external_urls.clone();
     app.on_reauth_account(move |account_id| {
         let Some(app) = app_weak.upgrade() else {
             return;
@@ -6546,10 +6557,11 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         ));
         let updates = ui_task_tx_for_reauth.clone();
         let browser_app = app.as_weak();
+        let opener = opener_for_reauth.clone();
         runtime_for_reauth.spawn(async move {
             let result = core
                 .reauth_account(i64::from(account_id), move |url| {
-                    oauth_browser::begin(browser_app.clone(), url)
+                    oauth_browser::begin(browser_app.clone(), url, opener.clone())
                 })
                 .await;
             let update = match result {
@@ -6604,6 +6616,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_calendar_connect = Rc::clone(&state);
     let runtime_for_calendar_connect = Rc::clone(&runtime);
     let updates_for_calendar_connect = ui_task_tx.clone();
+    let opener_for_calendar_connect = platform.external_urls.clone();
     app.on_connect_account_calendar(move |account_id| {
         let Some(app) = app_weak.upgrade() else {
             return;
@@ -6642,10 +6655,11 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         ));
         let updates = updates_for_calendar_connect.clone();
         let browser_app = app.as_weak();
+        let opener = opener_for_calendar_connect.clone();
         runtime_for_calendar_connect.spawn(async move {
             let result = core
                 .connect_provider_calendar(i64::from(account_id), provider, move |url| {
-                    oauth_browser::begin(browser_app.clone(), url)
+                    oauth_browser::begin(browser_app.clone(), url, opener.clone())
                 })
                 .await;
             let connections = core.load_calendar_connections().await.ok();
@@ -6899,7 +6913,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         &calendar_state,
     );
 
-    register_renderer_input_callbacks(&app, &email_renderer, use_wgpu);
+    register_renderer_input_callbacks(
+        &app,
+        &email_renderer,
+        use_wgpu,
+        platform.external_urls.clone(),
+    );
 
     let app_weak = app.as_weak();
     let state_for_search = Rc::clone(&state);

@@ -69,7 +69,30 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
         .borrow_mut()
         .configure_resources(runtime.handle().clone(), false)
         .unwrap();
-    register_renderer_input_callbacks(&app, &renderer, false);
+    let opened_urls = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let recorded_urls = opened_urls.clone();
+    register_renderer_input_callbacks(
+        &app,
+        &renderer,
+        false,
+        ExternalUrlOpener::new(move |url| {
+            recorded_urls.lock().unwrap().push(url.to_owned());
+            Err("test host unavailable".into())
+        }),
+    );
+    app.invoke_open_email_link("https://example.com/external".into());
+    assert_eq!(
+        *opened_urls.lock().unwrap(),
+        ["https://example.com/external"]
+    );
+    assert_eq!(app.get_render_message().key, "Could not open link: {}");
+    assert_eq!(app.get_render_message().argument, "test host unavailable");
+    app.invoke_open_email_link("javascript:alert(1)".into());
+    app.invoke_open_email_link("#fragment".into());
+    app.invoke_open_email_link("mailto:person@example.com?subject=Hello%20there".into());
+    assert_eq!(app.get_compose_to(), "person@example.com");
+    assert_eq!(app.get_compose_subject(), "Hello there");
+    assert_eq!(opened_urls.lock().unwrap().len(), 1);
     let requests = Rc::new(RefCell::new(Vec::new()));
     let requests2 = requests.clone();
     app.global::<EmailReader>()

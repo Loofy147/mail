@@ -51,12 +51,30 @@ host-provided service:
 | `documents` | Native file dialogs | Implements `documents::DocumentProvider` with the system picker |
 | `credentials` | System keychain (`SystemCredentialStore`) | Implements `CredentialStore` with the platform keystore |
 | `oauth_redirects` | Loopback redirect broker | Implements `OAuthRedirectBroker` (app links, custom schemes) |
+| `external_urls` | System URL launcher | `ExternalUrlOpener::new` with the host's native URL bridge |
 
 Mobile hosts use `PlatformContext::app_private(data_root, cache_dir, documents,
 credentials, oauth_redirects)`, which keeps durable data below
 `data_root/data`. A host without secure storage yet must pass
 `UnavailableCredentialStore` so account setup reports the gap. Never fall back
 to a plaintext store.
+
+The constructors default `external_urls` to the system URL launcher. A host
+without desktop launchers configures its context before calling `run`:
+
+```rust,ignore
+platform.external_urls = flectar_mail::ExternalUrlOpener::new(bridge::open_url);
+```
+
+This replaces the process-global `set_external_url_opener` registration. The
+callback may capture host state; cloned contexts share it. Mail links invoke it
+on the application event loop, and browser-based OAuth (including retries)
+invokes it on a worker thread. The host must marshal calls onto any thread its
+native API requires and return promptly after submitting the request. Errors
+reach the UI without falling back to a desktop launcher. Email links retain
+their `http`/`https`/`mailto`/`tel` allowlist, while browser authorization requires
+a parsed HTTPS URL with a host. The existing in-app `mailto` compose route and
+native OAuth broker flows remain in place.
 
 Each mobile operating system also has a module in `src/platform/` that
 provides these crate-internal items, which shared code calls without a `cfg`:
