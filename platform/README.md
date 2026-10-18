@@ -77,6 +77,11 @@ staged as one zip in `snapshot-staging` beside the data directory because Core
 refuses to write snapshots inside the data and cache roots. A host that
 restricts export sources must accept both.
 
+Shared code starts every picker and export through `documents::run_request`,
+which runs the provider future on the Tokio runtime while the UI event loop
+keeps going. A host that needs another threading policy while its picker is
+up changes that one function.
+
 ### Known gaps
 
 - iOS has no Keychain-backed `CredentialStore` yet and uses

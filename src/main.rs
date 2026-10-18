@@ -5722,27 +5722,17 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         if picking_for_picker.replace(true) {
             return;
         }
-        // Providers rely on Tokio timers and file I/O, so the request runs on
-        // the runtime and the composer awaits it on the UI thread.
         let dialog = documents::DocumentDialog::titled(translated(
             &app,
             &UiMessage::plain("Attach files to this email"),
         ));
-        let request = runtime_for_picker.spawn(
-            documents_for_picker.import_many(MAX_COMPOSE_ATTACHMENT_FILES, dialog),
-        );
-        let abort_request = request.abort_handle();
+        let request = documents_for_picker.import_many(MAX_COMPOSE_ATTACHMENT_FILES, dialog);
         let app_weak = app.as_weak();
         let files = Rc::clone(&files_for_picker);
         let session = Rc::clone(&session_for_picker);
         let picked_in = session.get();
         let picking = Rc::clone(&picking_for_picker);
-        let picking_for_error = Rc::clone(&picking_for_picker);
-        let spawned = slint::spawn_local(async move {
-            let imported = match request.await {
-                Ok(result) => result,
-                Err(error) => Err(error.to_string()),
-            };
+        documents::run_request(&runtime_for_picker, request, move |imported| {
             picking.set(false);
             let Some(app) = app_weak.upgrade() else {
                 return;
@@ -5819,15 +5809,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 app.set_compose_notice_is_error(added == 0);
             }
         });
-        if let Err(error) = spawned {
-            abort_request.abort();
-            picking_for_error.set(false);
-            app.set_compose_notice(UiMessage::detail(
-                "Could not add attachments: {}",
-                error,
-            ));
-            app.set_compose_notice_is_error(true);
-        }
     });
 
     let app_weak = app.as_weak();

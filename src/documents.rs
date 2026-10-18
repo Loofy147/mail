@@ -82,6 +82,34 @@ pub trait DocumentProvider: Send + Sync {
         Box::pin(async move { Ok(import.await?.into_iter().collect()) })
     }
 }
+/// Runs one document request and hands its result to `on_ready` on the UI
+/// thread. Providers rely on Tokio timers and file I/O, so the request runs on
+/// the runtime while the event loop keeps going, which desktop dialogs need.
+/// Every picker and export goes through here, so a host that must keep the
+/// presentation thread idle while its picker covers the window changes only
+/// this function.
+pub(crate) fn run_request<T: Send + 'static>(
+    runtime: &tokio::runtime::Runtime,
+    request: DocumentFuture<T>,
+    on_ready: impl FnOnce(Result<T, String>) + 'static,
+) {
+    let request = runtime.spawn(request);
+    let abort = request.abort_handle();
+    let on_ready = std::rc::Rc::new(std::cell::Cell::new(Some(on_ready)));
+    let pending = std::rc::Rc::clone(&on_ready);
+    let spawned = slint::spawn_local(async move {
+        let result = request.await.unwrap_or_else(|error| Err(error.to_string()));
+        if let Some(on_ready) = pending.take() {
+            on_ready(result);
+        }
+    });
+    if let Err(error) = spawned {
+        abort.abort();
+        if let Some(on_ready) = on_ready.take() {
+            on_ready(Err(error.to_string()));
+        }
+    }
+}
 /// Desktop file dialogs. Mobile hosts inject their own provider through
 /// `PlatformContext::app_private`.
 #[cfg(desktop)]
