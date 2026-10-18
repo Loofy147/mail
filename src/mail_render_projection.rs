@@ -384,13 +384,13 @@ pub(super) fn apply_cpu_frame(app: &AppWindow, rendered: RenderedEmail) {
     }
 }
 
-pub(super) fn open_email_link(url: &str) -> Result<(), String> {
+pub(super) fn open_email_link(opener: &ExternalUrlOpener, url: &str) -> Result<(), String> {
     let Some((scheme, _)) = url.trim().split_once(':') else {
         return Err("only absolute links can be opened".into());
     };
     match scheme.to_ascii_lowercase().as_str() {
         "http" | "https" | "mailto" | "tel" => {
-            webbrowser::open(url.trim()).map_err(|error| error.to_string())?;
+            opener.open_external(url.trim())?;
             Ok(())
         }
         _ => Err("unsupported link type".into()),
