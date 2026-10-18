@@ -71,10 +71,18 @@ provides these crate-internal items, which shared code calls without a `cfg`:
 Hosts that launch through `src/desktop.rs` (desktop and iOS) also provide
 `platform::launch_context()`.
 
+`DocumentProvider::export()` receives files from two app-private places:
+generated files below the cache directory, and database snapshots, which are
+staged as one zip in `snapshot-staging` beside the data directory because Core
+refuses to write snapshots inside the data and cache roots. A host that
+restricts export sources must accept both.
+
 ### Known gaps
 
 - iOS has no Keychain-backed `CredentialStore` yet and uses
   `UnavailableCredentialStore`.
+- The Android document bridge caps each transfer at 512 MiB, so it cannot
+  export database snapshots of larger mailboxes yet.
 
 ## Adding a platform
 
