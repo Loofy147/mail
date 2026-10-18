@@ -3181,7 +3181,7 @@ msgstr "Copiar código fuente"
 msgid "Report issue"
 msgstr "Informar de un problema"
 
-#: ui/dialogs/settings-dialog.slint:59
+#: ui/dialogs/settings-dialog.slint:59 ui/dialogs/settings-dialog.slint:2167
 msgid "Sync"
 msgstr "Sincronizar"
 
@@ -4170,12 +4170,11 @@ msgstr "Sin iniciar sesión"
 
 #: ui/dialogs/settings-dialog.slint:2150
 msgid ""
-"Services are managed with your Flectar account on base.flectar.com. Signing "
-"in will open your browser, and no mail passwords are shared."
+"A Flectar account is only needed for these optional services. Learn more at "
+"flectar.com/mail."
 msgstr ""
-"Los servicios se gestionan con tu cuenta de Flectar en base.flectar.com. Al "
-"iniciar sesión se abrirá el navegador y no se compartirán contraseñas de "
-"correo."
+"Solo necesitas una cuenta de Flectar para estos servicios opcionales. Más "
+"información en flectar.com/mail."
 
 #: ui/dialogs/settings-dialog.slint:2155
 msgid "Sign in with Flectar"
@@ -4184,10 +4183,6 @@ msgstr "Iniciar sesión con Flectar"
 #: ui/dialogs/settings-dialog.slint:2155
 msgid "Sign-in coming soon"
 msgstr "Acceso próximamente"
-
-#: ui/dialogs/settings-dialog.slint:2167
-msgid "Flectar Mail Sync"
-msgstr "Flectar Mail Sync"
 
 #: ui/dialogs/settings-dialog.slint:2168
 msgid "Your setup on every device"
@@ -4227,7 +4222,7 @@ msgstr ""
 "transfiere la configuración de Flectar Mail."
 
 #: ui/dialogs/settings-dialog.slint:2191
-msgid "Business Email"
+msgid "Business email"
 msgstr "Correo empresarial"
 
 #: ui/dialogs/settings-dialog.slint:2192
@@ -4235,12 +4230,8 @@ msgid "Mailboxes on your own domain"
 msgstr "Buzones con tu propio dominio"
 
 #: ui/dialogs/settings-dialog.slint:2193
-msgid ""
-"Professional addresses such as you@yourcompany.com, hosted on Flectar "
-"infrastructure and managed from Flectar Base."
-msgstr ""
-"Direcciones profesionales como tu@tuempresa.com, alojadas en la "
-"infraestructura de Flectar y gestionadas desde Flectar Base."
+msgid "Professional addresses such as you@yourcompany.com, hosted by Flectar."
+msgstr "Direcciones profesionales como tu@tuempresa.com, alojadas en Flectar."
 
 #: ui/dialogs/settings-dialog.slint:2195
 msgid "Connect a domain you already own"
@@ -4255,16 +4246,16 @@ msgid "New mailboxes appear in Flectar Mail automatically"
 msgstr "Los nuevos buzones aparecen automáticamente en Flectar Mail"
 
 #: ui/dialogs/settings-dialog.slint:2199
-msgid "Billed per mailbox through Flectar Base."
-msgstr "Facturación por buzón a través de Flectar Base."
+msgid "Billed per mailbox."
+msgstr "Facturación por buzón."
 
 #: ui/dialogs/settings-dialog.slint:2211
 msgid ""
 "These services are in development. Plans and availability will be announced "
-"on flectar.com."
+"on flectar.com/mail."
 msgstr ""
 "Estos servicios están en desarrollo. Los planes y la disponibilidad se "
-"anunciarán en flectar.com."
+"anunciarán en flectar.com/mail."
 
 #: ui/dialogs/settings-dialog.slint:2230
 msgid "Flectar Mail, its makers, and its community."

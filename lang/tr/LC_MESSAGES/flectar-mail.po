@@ -3129,7 +3129,7 @@ msgstr "Kaynağı kopyala"
 msgid "Report issue"
 msgstr "Sorun bildir"
 
-#: ui/dialogs/settings-dialog.slint:59
+#: ui/dialogs/settings-dialog.slint:59 ui/dialogs/settings-dialog.slint:2167
 msgid "Sync"
 msgstr "Eşitle"
 
@@ -4093,8 +4093,8 @@ msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2150
 msgid ""
-"Services are managed with your Flectar account on base.flectar.com. Signing "
-"in will open your browser, and no mail passwords are shared."
+"A Flectar account is only needed for these optional services. Learn more at "
+"flectar.com/mail."
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2155
@@ -4103,10 +4103,6 @@ msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2155
 msgid "Sign-in coming soon"
-msgstr ""
-
-#: ui/dialogs/settings-dialog.slint:2167
-msgid "Flectar Mail Sync"
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2168
@@ -4142,7 +4138,7 @@ msgid ""
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2191
-msgid "Business Email"
+msgid "Business email"
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2192
@@ -4150,9 +4146,7 @@ msgid "Mailboxes on your own domain"
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2193
-msgid ""
-"Professional addresses such as you@yourcompany.com, hosted on Flectar "
-"infrastructure and managed from Flectar Base."
+msgid "Professional addresses such as you@yourcompany.com, hosted by Flectar."
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2195
@@ -4168,13 +4162,13 @@ msgid "New mailboxes appear in Flectar Mail automatically"
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2199
-msgid "Billed per mailbox through Flectar Base."
+msgid "Billed per mailbox."
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2211
 msgid ""
 "These services are in development. Plans and availability will be announced "
-"on flectar.com."
+"on flectar.com/mail."
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2230

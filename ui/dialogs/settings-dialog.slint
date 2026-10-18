@@ -16,7 +16,7 @@ import { ProviderButton } from "../components/provider-button.slint";
 import { FormField, SettingsCard, SettingsLinkRow, SettingsNavItem, SettingsSelectRow, SettingsSwitchRow, ShortcutRow } from "../components/settings-components.slint";
 import { RuntimeColorPicker, ThemeEditor } from "../components/theme-editor.slint";
 import { TypeScale } from "../typography.slint";
-import { AppTheme, LayoutMetrics, SettingsIconPalette } from "../design-system.slint";
+import { AppTheme, LayoutMetrics, SettingsIconPalette, ServiceIconPalette } from "../design-system.slint";
 import { CompactPageHeader, WorkspaceSidebarSurface } from "../components/workspace-layout.slint";
 
 // Use the same focusable controls in both account-card layouts.
@@ -389,7 +389,7 @@ component ServicePreviewCard inherits Rectangle {
                 height: 38px;
                 border-radius: 9px;
                 background: root.accent-soft;
-                Image { width: LayoutMetrics.icon-size; height: LayoutMetrics.icon-size; source: root.icon; colorize: root.accent; image-fit: contain; accessible-role: none; }
+                Image { width: 24px; height: 24px; source: root.icon; colorize: root.accent; image-fit: contain; accessible-role: none; }
             }
             VerticalBox {
                 padding: 0px;
@@ -416,7 +416,7 @@ component ServicePreviewCard inherits Rectangle {
             ServiceBadge { text: @tr("Coming soon"); foreground: root.accent; fill: root.accent-soft; }
         }
 
-        Text { height: root.compact ? 51px : 34px; text: root.description; color: root.body-text; font-size: TypeScale.secondary; wrap: word-wrap; }
+        Text { height: max(root.compact ? 51px : 34px, self.preferred-height); text: root.description; color: root.body-text; font-size: TypeScale.secondary; wrap: word-wrap; }
 
         VerticalBox {
             padding: 0px;
@@ -432,7 +432,7 @@ component ServicePreviewCard inherits Rectangle {
 
         Rectangle { height: 1px; background: root.card-border-color; }
 
-        if root.compact : Text { height: 34px; text: root.note; color: root.faint-text; font-size: TypeScale.caption; wrap: word-wrap; }
+        if root.compact : Text { height: max(34px, self.preferred-height); text: root.note; color: root.faint-text; font-size: TypeScale.caption; wrap: word-wrap; }
         HorizontalBox {
             padding: 0px;
             spacing: 16px;
@@ -935,7 +935,7 @@ export component SettingsDialog inherits Rectangle {
                         if root.settings-section-visible("Notifications") : SettingsNavItem { text: @tr("Notifications"); icon: @image-url("../icons/lucide/filled/bell.svg"); icon-color: root.settings-icon-color("Notifications"); selected: root.settings_tab == "Notifications"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Notifications"; } }
                         if root.settings-section-visible("Shortcuts") : SettingsNavItem { text: @tr("Shortcuts"); icon: @image-url("../icons/lucide/filled/keyboard.svg"); icon-color: root.settings-icon-color("Shortcuts"); selected: root.settings_tab == "Shortcuts"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Shortcuts"; } }
                         if root.settings-section-visible("Data") : SettingsNavItem { text: @tr("Storage"); icon: @image-url("../icons/lucide/filled/database.svg"); icon-color: root.settings-icon-color("Data"); selected: root.settings_tab == "Data"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Data"; } }
-                        if root.settings-section-visible("Services") : SettingsNavItem { text: @tr("Services"); icon: @image-url("../icons/lucide/filled/stack.svg"); icon-color: root.settings-icon-color("Services"); selected: root.settings_tab == "Services"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Services"; } }
+                        if root.settings-section-visible("Services") : SettingsNavItem { text: @tr("Services"); icon: @image-url("../icons/lucide/filled/cloud.svg"); icon-color: root.settings-icon-color("Services"); selected: root.settings_tab == "Services"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Services"; } }
                         if root.settings-section-visible("About") : SettingsNavItem { text: @tr("About"); icon: @image-url("../icons/lucide/filled/info.svg"); icon-color: root.settings-icon-color("About"); selected: root.settings_tab == "About"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "About"; } }
                         Rectangle { vertical-stretch: 1; }
                     }
@@ -2147,7 +2147,7 @@ export component SettingsDialog inherits Rectangle {
                                 vertical-stretch: 0;
                                 SettingsCard { title: @tr("Flectar account"); description: @tr("Not signed in"); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
                                 Image { x: 20px; y: 72px + (42px - self.height) / 2; width: LayoutMetrics.icon-size; height: LayoutMetrics.icon-size; source: @image-url("../icons/lucide/outline/lock.svg"); colorize: root.accent; image-fit: contain; accessible-role: none; }
-                                Text { x: 48px; y: 72px; width: root.compact ? parent.width - 68px : parent.width - 300px; height: root.compact ? 68px : 42px; text: @tr("Services are managed with your Flectar account on base.flectar.com. Signing in will open your browser, and no mail passwords are shared."); color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
+                                Text { x: 48px; y: 72px; width: root.compact ? parent.width - 68px : parent.width - 300px; height: root.compact ? 68px : 42px; text: @tr("A Flectar account is only needed for these optional services. Learn more at flectar.com/mail."); color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
                                 Button {
                                     x: root.compact ? 20px : parent.width - self.width - 20px;
                                     y: root.compact ? 158px : 77px;
@@ -2163,8 +2163,8 @@ export component SettingsDialog inherits Rectangle {
 
                             ServicePreviewCard {
                                 compact: root.compact;
-                                icon: @image-url("../icons/lucide/outline/sync.svg");
-                                title: @tr("Flectar Mail Sync");
+                                icon: @image-url("../icons/lucide/filled/cloud-sync.svg");
+                                title: @tr("Sync");
                                 tagline: @tr("Your setup on every device");
                                 description: @tr("Sign in on a new phone or computer and your accounts, calendars, contacts, and preferences are ready without setting them up again.");
                                 features: [
@@ -2180,35 +2180,35 @@ export component SettingsDialog inherits Rectangle {
                                 body-text: root.body-text;
                                 secondary-text: root.secondary-text;
                                 faint-text: root.faint-text;
-                                accent: root.accent;
-                                accent-soft: root.accent-soft;
-                                learn-more => { root.open-link("https://flectar.com/base"); }
+                                accent: ServiceIconPalette.sync;
+                                accent-soft: ServiceIconPalette.sync.with-alpha(AppTheme.dark ? 0.16 : 0.10);
+                                learn-more => { root.open-link("https://flectar.com/mail"); }
                             }
 
                             ServicePreviewCard {
                                 compact: root.compact;
-                                icon: @image-url("../icons/lucide/outline/mail.svg");
-                                title: @tr("Business Email");
+                                icon: @image-url("../icons/lucide/filled/building.svg");
+                                title: @tr("Business email");
                                 tagline: @tr("Mailboxes on your own domain");
-                                description: @tr("Professional addresses such as you@yourcompany.com, hosted on Flectar infrastructure and managed from Flectar Base.");
+                                description: @tr("Professional addresses such as you@yourcompany.com, hosted by Flectar.");
                                 features: [
                                     @tr("Connect a domain you already own"),
                                     @tr("Create and manage mailboxes for your team"),
                                     @tr("New mailboxes appear in Flectar Mail automatically"),
                                 ];
-                                note: @tr("Billed per mailbox through Flectar Base.");
+                                note: @tr("Billed per mailbox.");
                                 surface: root.surface;
                                 card-border-color: root.border-subtle;
                                 heading: root.heading;
                                 body-text: root.body-text;
                                 secondary-text: root.secondary-text;
                                 faint-text: root.faint-text;
-                                accent: root.accent;
-                                accent-soft: root.accent-soft;
-                                learn-more => { root.open-link("https://flectar.com/base"); }
+                                accent: ServiceIconPalette.business;
+                                accent-soft: ServiceIconPalette.business.with-alpha(AppTheme.dark ? 0.16 : 0.10);
+                                learn-more => { root.open-link("https://flectar.com/mail"); }
                             }
 
-                            Text { height: root.compact ? 34px : 17px; text: @tr("These services are in development. Plans and availability will be announced on flectar.com."); color: root.faint-text; font-size: TypeScale.caption; vertical-alignment: center; wrap: word-wrap; }
+                            Text { height: root.compact ? 34px : 17px; text: @tr("These services are in development. Plans and availability will be announced on flectar.com/mail."); color: root.faint-text; font-size: TypeScale.caption; vertical-alignment: center; wrap: word-wrap; }
                         }
                     }
 
@@ -2419,7 +2419,7 @@ export component SettingsDialog inherits Rectangle {
                     if root.settings-section-visible("Notifications") : SettingsNavItem { text: @tr("Notifications"); icon: @image-url("../icons/lucide/filled/bell.svg"); icon-color: root.settings-icon-color("Notifications"); selected: root.settings_tab == "Notifications"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Notifications"; root.compact-nav-open = false; } }
                     if root.settings-section-visible("Shortcuts") : SettingsNavItem { text: @tr("Shortcuts"); icon: @image-url("../icons/lucide/filled/keyboard.svg"); icon-color: root.settings-icon-color("Shortcuts"); selected: root.settings_tab == "Shortcuts"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Shortcuts"; root.compact-nav-open = false; } }
                     if root.settings-section-visible("Data") : SettingsNavItem { text: @tr("Storage"); icon: @image-url("../icons/lucide/filled/database.svg"); icon-color: root.settings-icon-color("Data"); selected: root.settings_tab == "Data"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Data"; root.compact-nav-open = false; } }
-                    if root.settings-section-visible("Services") : SettingsNavItem { text: @tr("Services"); icon: @image-url("../icons/lucide/filled/stack.svg"); icon-color: root.settings-icon-color("Services"); selected: root.settings_tab == "Services"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Services"; root.compact-nav-open = false; } }
+                    if root.settings-section-visible("Services") : SettingsNavItem { text: @tr("Services"); icon: @image-url("../icons/lucide/filled/cloud.svg"); icon-color: root.settings-icon-color("Services"); selected: root.settings_tab == "Services"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Services"; root.compact-nav-open = false; } }
                     if root.settings-section-visible("About") : SettingsNavItem { text: @tr("About"); icon: @image-url("../icons/lucide/filled/info.svg"); icon-color: root.settings-icon-color("About"); selected: root.settings_tab == "About"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "About"; root.compact-nav-open = false; } }
                     Rectangle { vertical-stretch: 1; }
                 }

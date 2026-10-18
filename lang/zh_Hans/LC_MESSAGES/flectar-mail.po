@@ -5,8 +5,8 @@ msgstr ""
 "POT-Creation-Date: 2026-10-16 12:17+0000\n"
 "PO-Revision-Date: 2026-09-24 11:59+0000\n"
 "Last-Translator: 6uu1 <translate.flectar.com@696988.xyz>\n"
-"Language-Team: Chinese (Simplified Han script) <https://translate.flectar."
-"com/projects/flectar-mail/mail/zh_Hans/>\n"
+"Language-Team: Chinese (Simplified Han script) <https://"
+"translate.flectar.com/projects/flectar-mail/mail/zh_Hans/>\n"
 "Language: zh_Hans\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -3087,7 +3087,7 @@ msgstr "复制源码"
 msgid "Report issue"
 msgstr "报告问题"
 
-#: ui/dialogs/settings-dialog.slint:59
+#: ui/dialogs/settings-dialog.slint:59 ui/dialogs/settings-dialog.slint:2167
 msgid "Sync"
 msgstr "同步"
 
@@ -4005,8 +4005,8 @@ msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2150
 msgid ""
-"Services are managed with your Flectar account on base.flectar.com. Signing "
-"in will open your browser, and no mail passwords are shared."
+"A Flectar account is only needed for these optional services. Learn more at "
+"flectar.com/mail."
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2155
@@ -4015,10 +4015,6 @@ msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2155
 msgid "Sign-in coming soon"
-msgstr ""
-
-#: ui/dialogs/settings-dialog.slint:2167
-msgid "Flectar Mail Sync"
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2168
@@ -4054,7 +4050,7 @@ msgid ""
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2191
-msgid "Business Email"
+msgid "Business email"
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2192
@@ -4062,9 +4058,7 @@ msgid "Mailboxes on your own domain"
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2193
-msgid ""
-"Professional addresses such as you@yourcompany.com, hosted on Flectar "
-"infrastructure and managed from Flectar Base."
+msgid "Professional addresses such as you@yourcompany.com, hosted by Flectar."
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2195
@@ -4080,13 +4074,13 @@ msgid "New mailboxes appear in Flectar Mail automatically"
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2199
-msgid "Billed per mailbox through Flectar Base."
+msgid "Billed per mailbox."
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2211
 msgid ""
 "These services are in development. Plans and availability will be announced "
-"on flectar.com."
+"on flectar.com/mail."
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:2230

@@ -3159,7 +3159,7 @@ msgstr "Копировать исходный код"
 msgid "Report issue"
 msgstr "Сообщить о проблеме"
 
-#: ui/dialogs/settings-dialog.slint:59
+#: ui/dialogs/settings-dialog.slint:59 ui/dialogs/settings-dialog.slint:2167
 msgid "Sync"
 msgstr "Синхронизация"
 
@@ -4140,11 +4140,11 @@ msgstr "Вход не выполнен"
 
 #: ui/dialogs/settings-dialog.slint:2150
 msgid ""
-"Services are managed with your Flectar account on base.flectar.com. Signing "
-"in will open your browser, and no mail passwords are shared."
+"A Flectar account is only needed for these optional services. Learn more at "
+"flectar.com/mail."
 msgstr ""
-"Сервисы управляются через ваш аккаунт Flectar на base.flectar.com. Для входа "
-"откроется браузер; пароли от почты не передаются."
+"Аккаунт Flectar нужен только для этих дополнительных сервисов. Подробнее на "
+"flectar.com/mail."
 
 #: ui/dialogs/settings-dialog.slint:2155
 msgid "Sign in with Flectar"
@@ -4153,10 +4153,6 @@ msgstr "Войти с Flectar"
 #: ui/dialogs/settings-dialog.slint:2155
 msgid "Sign-in coming soon"
 msgstr "Вход — скоро"
-
-#: ui/dialogs/settings-dialog.slint:2167
-msgid "Flectar Mail Sync"
-msgstr "Flectar Mail Sync"
 
 #: ui/dialogs/settings-dialog.slint:2168
 msgid "Your setup on every device"
@@ -4196,7 +4192,7 @@ msgstr ""
 "настройки Flectar Mail."
 
 #: ui/dialogs/settings-dialog.slint:2191
-msgid "Business Email"
+msgid "Business email"
 msgstr "Корпоративная почта"
 
 #: ui/dialogs/settings-dialog.slint:2192
@@ -4204,12 +4200,8 @@ msgid "Mailboxes on your own domain"
 msgstr "Почтовые ящики на вашем домене"
 
 #: ui/dialogs/settings-dialog.slint:2193
-msgid ""
-"Professional addresses such as you@yourcompany.com, hosted on Flectar "
-"infrastructure and managed from Flectar Base."
-msgstr ""
-"Рабочие адреса, например вы@вашакомпания.com, на инфраструктуре Flectar с "
-"управлением через Flectar Base."
+msgid "Professional addresses such as you@yourcompany.com, hosted by Flectar."
+msgstr "Рабочие адреса, например вы@вашакомпания.com, с хостингом от Flectar."
 
 #: ui/dialogs/settings-dialog.slint:2195
 msgid "Connect a domain you already own"
@@ -4224,16 +4216,16 @@ msgid "New mailboxes appear in Flectar Mail automatically"
 msgstr "Новые почтовые ящики автоматически появляются в Flectar Mail"
 
 #: ui/dialogs/settings-dialog.slint:2199
-msgid "Billed per mailbox through Flectar Base."
-msgstr "Оплата за каждый почтовый ящик через Flectar Base."
+msgid "Billed per mailbox."
+msgstr "Оплата за каждый почтовый ящик."
 
 #: ui/dialogs/settings-dialog.slint:2211
 msgid ""
 "These services are in development. Plans and availability will be announced "
-"on flectar.com."
+"on flectar.com/mail."
 msgstr ""
 "Эти сервисы находятся в разработке. Тарифы и сроки доступности будут "
-"объявлены на flectar.com."
+"объявлены на flectar.com/mail."
 
 #: ui/dialogs/settings-dialog.slint:2230
 msgid "Flectar Mail, its makers, and its community."
