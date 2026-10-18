@@ -1051,12 +1051,10 @@ pub(super) fn register_data_management_callbacks(
                 }
             }
         });
-        if spawned.is_err() {
+        if let Err(error) = spawned {
             abort_export.abort();
             exporting_backup.set(false);
-            app.set_sync_status(UiMessage::plain(
-                "The platform host does not provide document export.",
-            ));
+            app.set_sync_status(UiMessage::detail("Could not export backup: {}", error));
         }
     });
 
@@ -1203,12 +1201,10 @@ pub(super) fn register_data_management_callbacks(
             };
             import_account_backup_document(&app, document.path(), &core, &state, &runtime);
         });
-        if spawned.is_err() {
+        if let Err(error) = spawned {
             abort_request.abort();
             importing_backup.set(false);
-            app.set_sync_status(UiMessage::plain(
-                "The platform host does not provide document import.",
-            ));
+            app.set_sync_status(UiMessage::detail("Could not import backup: {}", error));
         }
     });
 

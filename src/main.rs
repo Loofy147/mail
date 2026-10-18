@@ -5756,8 +5756,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 Ok(documents) => documents,
                 Err(error) => {
                     tracing::warn!(%error, "compose attachment picker failed");
-                    app.set_compose_notice(UiMessage::plain(
-                        "The platform host does not provide a document picker.",
+                    app.set_compose_notice(UiMessage::detail(
+                        "Could not add attachments: {}",
+                        error,
                     ));
                     app.set_compose_notice_is_error(true);
                     return;
@@ -5818,11 +5819,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 app.set_compose_notice_is_error(added == 0);
             }
         });
-        if spawned.is_err() {
+        if let Err(error) = spawned {
             abort_request.abort();
             picking_for_error.set(false);
-            app.set_compose_notice(UiMessage::plain(
-                "The platform host does not provide a document picker.",
+            app.set_compose_notice(UiMessage::detail(
+                "Could not add attachments: {}",
+                error,
             ));
             app.set_compose_notice_is_error(true);
         }
