@@ -81,8 +81,9 @@ restricts export sources must accept both.
 
 - iOS has no Keychain-backed `CredentialStore` yet and uses
   `UnavailableCredentialStore`.
-- The Android document bridge caps each transfer at 512 MiB, so it cannot
-  export database snapshots of larger mailboxes yet.
+- Mobile document transfers are capped at 512 MiB, so Android and iOS cannot
+  export database snapshots of larger mailboxes yet. The export fails before
+  the picker opens.
 
 ## Adding a platform
 

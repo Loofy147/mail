@@ -686,16 +686,23 @@ fn pick_database_snapshot_path(title: String) -> Option<PathBuf> {
 /// verified snapshot is staged beside the data directory (Core refuses
 /// destinations inside the data and cache roots) and archived as one zip.
 #[cfg(mobile)]
+fn snapshot_staging_root(paths: &Paths) -> Result<PathBuf, String> {
+    Ok(paths
+        .data_dir
+        .parent()
+        .ok_or("the data directory has no parent for snapshot staging")?
+        .join("snapshot-staging"))
+}
+
+#[cfg(mobile)]
 async fn export_database_snapshot(
     core: &CoreMailSource,
     documents: &std::sync::Arc<dyn documents::DocumentProvider>,
     paths: &Paths,
+    staging: &tokio::sync::Mutex<()>,
 ) -> Result<Option<String>, String> {
-    let root = paths
-        .data_dir
-        .parent()
-        .ok_or("the data directory has no parent for snapshot staging")?
-        .join("snapshot-staging");
+    let _staging = staging.lock().await;
+    let root = snapshot_staging_root(paths)?;
     // The root only ever holds this export, so clearing it also removes what
     // an interrupted export left behind.
     let _ = tokio::fs::remove_dir_all(&root).await;
@@ -715,7 +722,11 @@ async fn export_database_snapshot(
         let archive = root.join(&name);
         let archive_for_zip = archive.clone();
         tokio::task::spawn_blocking(move || {
-            archive_snapshot_directory(&directory, &archive_for_zip)
+            archive_snapshot_directory(
+                &directory,
+                &archive_for_zip,
+                flectar_mail_core::files::MAX_TRANSFER as u64,
+            )
         })
         .await
         .map_err(|error| error.to_string())??;
@@ -729,57 +740,93 @@ async fn export_database_snapshot(
 
 /// Archives a snapshot directory without compression: the stores are dense
 /// SQLite files plus already-compressed attachments. Symlinks are skipped so
-/// nothing outside the snapshot enters the archive.
+/// nothing outside the snapshot enters the archive. Hosts transfer at most
+/// `limit` bytes, so a larger snapshot fails before the archive is written.
 #[cfg(any(mobile, test))]
 fn archive_snapshot_directory(
     directory: &std::path::Path,
     archive: &std::path::Path,
+    limit: u64,
 ) -> Result<(), String> {
-    fn append(
-        zip: &mut zip::ZipWriter<std::fs::File>,
+    /// Archive name, source path and, for files, the size.
+    type Entry = (String, PathBuf, Option<u64>);
+    fn collect(
         root: &std::path::Path,
         directory: &std::path::Path,
+        entries: &mut Vec<Entry>,
     ) -> Result<(), String> {
-        let mut entries = std::fs::read_dir(directory)
+        let mut children = std::fs::read_dir(directory)
             .map_err(|error| format!("reading {}: {error}", directory.display()))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| error.to_string())?;
-        entries.sort_by_key(|entry| entry.file_name());
-        for entry in entries {
+        children.sort_by_key(|entry| entry.file_name());
+        for entry in children {
             let path = entry.path();
             let kind = entry.file_type().map_err(|error| error.to_string())?;
-            if kind.is_symlink() {
-                continue;
-            }
             let name = path
                 .strip_prefix(root)
                 .map_err(|error| error.to_string())?
                 .to_string_lossy()
                 .replace('\\', "/");
-            let options = zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored);
             if kind.is_dir() {
-                zip.add_directory(format!("{name}/"), options)
-                    .map_err(|error| error.to_string())?;
-                append(zip, root, &path)?;
-            } else {
-                let mut source = std::fs::File::open(&path)
-                    .map_err(|error| format!("reading {}: {error}", path.display()))?;
-                let size = source.metadata().map_err(|error| error.to_string())?.len();
-                // Stores past 4 GiB need ZIP64 entries.
-                zip.start_file(name, options.large_file(size >= u64::from(u32::MAX)))
-                    .map_err(|error| error.to_string())?;
-                std::io::copy(&mut source, zip).map_err(|error| error.to_string())?;
+                entries.push((format!("{name}/"), path.clone(), None));
+                collect(root, &path, entries)?;
+            } else if kind.is_file() {
+                let size = entry.metadata().map_err(|error| error.to_string())?.len();
+                entries.push((name, path, Some(size)));
             }
         }
         Ok(())
     }
+    let too_large = |size| {
+        format!(
+            "the snapshot is {}, more than the {} this device can export",
+            format_storage_size(size),
+            format_storage_size(limit)
+        )
+    };
+    let mut entries = Vec::new();
+    collect(directory, directory, &mut entries)?;
+    let size = entries.iter().filter_map(|(_, _, size)| *size).sum::<u64>();
+    if size > limit {
+        return Err(too_large(size));
+    }
     let file = std::fs::File::create(archive)
         .map_err(|error| format!("creating {}: {error}", archive.display()))?;
     let mut zip = zip::ZipWriter::new(file);
-    append(&mut zip, directory, directory)?;
-    zip.finish().map_err(|error| error.to_string())?;
+    let options =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    for (name, path, size) in entries {
+        let Some(size) = size else {
+            zip.add_directory(name, options)
+                .map_err(|error| error.to_string())?;
+            continue;
+        };
+        let mut source = std::fs::File::open(&path)
+            .map_err(|error| format!("reading {}: {error}", path.display()))?;
+        // Stores past 4 GiB need ZIP64 entries.
+        zip.start_file(name, options.large_file(size >= u64::from(u32::MAX)))
+            .map_err(|error| error.to_string())?;
+        std::io::copy(&mut source, &mut zip).map_err(|error| error.to_string())?;
+    }
+    let size = zip
+        .finish()
+        .and_then(|file| Ok(file.metadata()?.len()))
+        .map_err(|error| error.to_string())?;
+    // Entry headers can still push the archive past the limit.
+    if size > limit {
+        return Err(too_large(size));
+    }
     Ok(())
+}
+
+/// Clears the in-progress flag when the snapshot task ends, even by panic.
+struct SnapshotRunning(Arc<AtomicBool>);
+
+impl Drop for SnapshotRunning {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -862,10 +909,16 @@ pub(super) fn register_data_management_callbacks(
     let runtime_for_backup = Rc::clone(runtime);
     let documents_for_backup = documents.clone();
     let paths_for_backup = paths.clone();
+    let exporting_backup = Rc::new(Cell::new(false));
     app.on_export_account_backup(move || {
         let Some(app) = app_weak.upgrade() else {
             return;
         };
+        // The dialog does not block the window; a second click while it is
+        // open would start a second export.
+        if exporting_backup.get() {
+            return;
+        }
         let (core, configs) = {
             let state = state_for_backup.borrow();
             (state.core.clone(), state.account_configs.clone())
@@ -977,11 +1030,14 @@ pub(super) fn register_data_management_callbacks(
         });
         let abort_export = export.abort_handle();
         let app_weak = app.as_weak();
+        let exporting = Rc::clone(&exporting_backup);
+        exporting.set(true);
         let spawned = slint::spawn_local(async move {
             let result = match export.await {
                 Ok(result) => result,
                 Err(error) => Err(error.to_string()),
             };
+            exporting.set(false);
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
@@ -997,6 +1053,7 @@ pub(super) fn register_data_management_callbacks(
         });
         if spawned.is_err() {
             abort_export.abort();
+            exporting_backup.set(false);
             app.set_sync_status(UiMessage::plain(
                 "The platform host does not provide document export.",
             ));
@@ -1011,6 +1068,18 @@ pub(super) fn register_data_management_callbacks(
     let documents_for_database_snapshot = documents.clone();
     #[cfg(mobile)]
     let paths_for_database_snapshot = paths.clone();
+    #[cfg(mobile)]
+    let snapshot_staging = Arc::new(tokio::sync::Mutex::new(()));
+    // A killed export leaves a full copy of the stores in staging; reclaim it
+    // now instead of at the next export.
+    #[cfg(mobile)]
+    if let Ok(root) = snapshot_staging_root(paths) {
+        let staging = Arc::clone(&snapshot_staging);
+        runtime.spawn(async move {
+            let _staging = staging.lock().await;
+            let _ = tokio::fs::remove_dir_all(root).await;
+        });
+    }
     let database_snapshot_running = Arc::new(AtomicBool::new(false));
     app.on_export_database_snapshot(move || {
         let Some(app) = app_weak.upgrade() else {
@@ -1044,7 +1113,9 @@ pub(super) fn register_data_management_callbacks(
         let documents = documents_for_database_snapshot.clone();
         #[cfg(mobile)]
         let paths = paths_for_database_snapshot.clone();
-        let running = Arc::clone(&database_snapshot_running);
+        #[cfg(mobile)]
+        let staging = Arc::clone(&snapshot_staging);
+        let running = SnapshotRunning(Arc::clone(&database_snapshot_running));
         runtime_for_database_snapshot.spawn(async move {
             #[cfg(desktop)]
             let message = {
@@ -1057,13 +1128,14 @@ pub(super) fn register_data_management_callbacks(
                 }
             };
             #[cfg(mobile)]
-            let message = match export_database_snapshot(&core, &documents, &paths).await {
+            let message = match export_database_snapshot(&core, &documents, &paths, &staging).await
+            {
                 Ok(Some(name)) => UiMessage::detail("Database snapshot exported to {}.", name),
                 // Cancelled at the picker: return the status line to idle.
                 Ok(None) => UiMessage::plain("Local data ready."),
                 Err(error) => UiMessage::detail("Could not export database snapshot: {}", error),
             };
-            running.store(false, Ordering::Release);
+            drop(running);
             let _ = updates
                 .send(UiTaskUpdate {
                     message,
@@ -1085,10 +1157,15 @@ pub(super) fn register_data_management_callbacks(
     let state_for_backup_import = Rc::clone(state);
     let runtime_for_backup_import = Rc::clone(runtime);
     let documents_for_backup_import = documents.clone();
+    let importing_backup = Rc::new(Cell::new(false));
     app.on_import_account_backup(move || {
         let Some(app) = app_weak.upgrade() else {
             return;
         };
+        // A second click while the picker is open would apply two backups.
+        if importing_backup.get() {
+            return;
+        }
         let Some(core) = state_for_backup_import.borrow().core.clone() else {
             app.set_sync_status(UiMessage::plain(
                 "Local data storage is unavailable. Retry startup.",
@@ -1105,11 +1182,14 @@ pub(super) fn register_data_management_callbacks(
         let app_weak = app.as_weak();
         let state = Rc::clone(&state_for_backup_import);
         let runtime = Rc::clone(&runtime_for_backup_import);
+        let importing = Rc::clone(&importing_backup);
+        importing.set(true);
         let spawned = slint::spawn_local(async move {
             let imported = match request.await {
                 Ok(result) => result,
                 Err(error) => Err(error.to_string()),
             };
+            importing.set(false);
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
@@ -1125,6 +1205,7 @@ pub(super) fn register_data_management_callbacks(
         });
         if spawned.is_err() {
             abort_request.abort();
+            importing_backup.set(false);
             app.set_sync_status(UiMessage::plain(
                 "The platform host does not provide document import.",
             ));
@@ -1492,7 +1573,7 @@ mod tests {
         std::os::unix::fs::symlink(&outside, snapshot.join("link")).unwrap();
         let archive = staging.path().join("snapshot.zip");
 
-        archive_snapshot_directory(&snapshot, &archive).unwrap();
+        archive_snapshot_directory(&snapshot, &archive, u64::MAX).unwrap();
 
         let mut zip = zip::ZipArchive::new(std::fs::File::open(&archive).unwrap()).unwrap();
         let mut names = zip
@@ -1508,5 +1589,22 @@ mod tests {
         std::io::Read::read_to_string(&mut zip.by_name("mail.sqlite3").unwrap(), &mut contents)
             .unwrap();
         assert_eq!(contents, "mail");
+    }
+
+    #[test]
+    fn snapshot_archive_refuses_stores_over_the_transfer_limit() {
+        let staging = tempfile::tempdir().unwrap();
+        let snapshot = staging.path().join("snapshot");
+        std::fs::create_dir_all(&snapshot).unwrap();
+        std::fs::write(snapshot.join("mail.sqlite3"), [0; 64]).unwrap();
+        let archive = staging.path().join("snapshot.zip");
+
+        let error = archive_snapshot_directory(&snapshot, &archive, 63).unwrap_err();
+
+        assert!(error.contains("64 B"), "{error}");
+        assert!(!archive.exists());
+        // Headers alone push an archive of a store at the limit past it.
+        assert!(archive_snapshot_directory(&snapshot, &archive, 64).is_err());
+        archive_snapshot_directory(&snapshot, &archive, 4096).unwrap();
     }
 }
