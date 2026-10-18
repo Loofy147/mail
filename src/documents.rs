@@ -39,19 +39,16 @@ impl Drop for DocumentRequestGuard {
         (std::mem::replace(&mut self.0, Box::new(|| {})))();
     }
 }
-pub trait DocumentProvider: Send + Sync + 'static {
+pub trait DocumentProvider: Send + Sync {
     fn import(&self) -> DocumentFuture<Option<ImportedDocument>>;
     fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool>;
-    /// Import several documents for one user action (compose attachments).
-    /// Hosts whose picker selects multiple files at once override this; the
-    /// default imports one document per request, so a single-document picker
-    /// never opens twice for one action. Each returned document owns its copy,
-    /// so the caller must keep them alive until Core has staged the files.
-    fn import_many(
-        self: std::sync::Arc<Self>,
-        _limit: usize,
-    ) -> DocumentFuture<Vec<ImportedDocument>> {
-        Box::pin(async move { Ok(self.import().await?.into_iter().collect()) })
+    /// Imports the documents for one user action (compose attachments). The
+    /// default opens a single-document picker once; hosts with a multi-select
+    /// picker override it. `limit` bounds how many copies a host makes;
+    /// hosts that return source paths need not apply it.
+    fn import_many(&self, _limit: usize) -> DocumentFuture<Vec<ImportedDocument>> {
+        let import = self.import();
+        Box::pin(async move { Ok(import.await?.into_iter().collect()) })
     }
 }
 /// Desktop file dialogs. Mobile hosts inject their own provider through
@@ -81,23 +78,16 @@ impl DocumentProvider for DesktopDocuments {
                 .map(|f| ImportedDocument::source(f.path().to_owned())))
         })
     }
-    fn import_many(
-        self: std::sync::Arc<Self>,
-        limit: usize,
-    ) -> DocumentFuture<Vec<ImportedDocument>> {
-        Box::pin(async move {
+    fn import_many(&self, _limit: usize) -> DocumentFuture<Vec<ImportedDocument>> {
+        Box::pin(async {
             Ok(rfd::AsyncFileDialog::new()
                 .set_title("Upload files")
                 .pick_files()
                 .await
-                .map(|files| {
-                    files
-                        .into_iter()
-                        .take(limit)
-                        .map(|file| ImportedDocument::source(file.path().to_owned()))
-                        .collect()
-                })
-                .unwrap_or_default())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|file| ImportedDocument::source(file.path().to_owned()))
+                .collect())
         })
     }
     fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool> {
@@ -220,7 +210,7 @@ mod tests {
             imports: AtomicUsize::new(0),
             cancel_after: usize::MAX,
         });
-        let documents = provider.clone().import_many(20).await.unwrap();
+        let documents = provider.import_many(20).await.unwrap();
         assert_eq!(documents.len(), 1);
         assert_eq!(provider.imports.load(Ordering::SeqCst), 1);
         drop(documents);
@@ -235,7 +225,7 @@ mod tests {
             imports: AtomicUsize::new(0),
             cancel_after: 0,
         });
-        let documents = provider.clone().import_many(20).await.unwrap();
+        let documents = provider.import_many(20).await.unwrap();
         assert!(documents.is_empty());
         assert_eq!(provider.imports.load(Ordering::SeqCst), 1);
     }
