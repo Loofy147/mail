@@ -645,6 +645,7 @@ async fn export_document_bytes(
     staging_root: PathBuf,
     bytes: Vec<u8>,
     name: String,
+    dialog: documents::DocumentDialog,
 ) -> Result<bool, String> {
     tokio::fs::create_dir_all(&staging_root)
         .await
@@ -655,7 +656,17 @@ async fn export_document_bytes(
     tokio::fs::write(&path, bytes)
         .await
         .map_err(|error| format!("writing {}: {error}", path.display()))?;
-    documents.export(path, name).await
+    documents.export_with(path, name, dialog).await
+}
+
+fn backup_dialog(app: &AppWindow, title: UiMessage) -> documents::DocumentDialog {
+    documents::DocumentDialog {
+        title: translated(app, &title).to_string(),
+        filter: Some((
+            translated(app, &UiMessage::plain("Flectar Mail backup")).to_string(),
+            &["json"],
+        )),
+    }
 }
 
 #[cfg(desktop)]
@@ -958,10 +969,11 @@ pub(super) fn register_data_management_callbacks(
         );
         let documents = documents_for_backup.clone();
         let staging_root = paths_for_backup.temp_dir();
+        let dialog = backup_dialog(&app, UiMessage::plain("Export Flectar Mail account backup"));
         // Providers rely on Tokio timers and file I/O, so the export runs on
         // the runtime and the result is reported from the UI thread.
         let export = runtime_for_backup.spawn(async move {
-            export_document_bytes(&documents, staging_root, bytes, name).await
+            export_document_bytes(&documents, staging_root, bytes, name, dialog).await
         });
         let abort_export = export.abort_handle();
         let app_weak = app.as_weak();
@@ -1086,7 +1098,9 @@ pub(super) fn register_data_management_callbacks(
         // The picker runs on the runtime (providers rely on Tokio timers);
         // the import keeps its synchronous shape on the UI thread so the
         // existing state updates stay on the main loop.
-        let request = runtime_for_backup_import.spawn(documents_for_backup_import.import());
+        let dialog = backup_dialog(&app, UiMessage::plain("Import Flectar Mail account backup"));
+        let request =
+            runtime_for_backup_import.spawn(documents_for_backup_import.import_with(dialog));
         let abort_request = request.abort_handle();
         let app_weak = app.as_weak();
         let state = Rc::clone(&state_for_backup_import);

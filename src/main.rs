@@ -5724,8 +5724,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
         // Providers rely on Tokio timers and file I/O, so the request runs on
         // the runtime and the composer awaits it on the UI thread.
-        let request = runtime_for_picker
-            .spawn(documents_for_picker.import_many(MAX_COMPOSE_ATTACHMENT_FILES));
+        let dialog = documents::DocumentDialog::titled(translated(
+            &app,
+            &UiMessage::plain("Attach files to this email"),
+        ));
+        let request = runtime_for_picker.spawn(
+            documents_for_picker.import_many(MAX_COMPOSE_ATTACHMENT_FILES, dialog),
+        );
         let abort_request = request.abort_handle();
         let app_weak = app.as_weak();
         let files = Rc::clone(&files_for_picker);

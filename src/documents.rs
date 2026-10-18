@@ -39,15 +39,46 @@ impl Drop for DocumentRequestGuard {
         (std::mem::replace(&mut self.0, Box::new(|| {})))();
     }
 }
+/// How a desktop file dialog presents one request. Hosts whose system picker
+/// has no title or file-type filter ignore it.
+#[derive(Clone, Default)]
+pub struct DocumentDialog {
+    pub title: String,
+    /// Filter name and the extensions it offers.
+    pub filter: Option<(String, &'static [&'static str])>,
+}
+impl DocumentDialog {
+    pub fn titled(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            filter: None,
+        }
+    }
+}
 pub trait DocumentProvider: Send + Sync {
     fn import(&self) -> DocumentFuture<Option<ImportedDocument>>;
     fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool>;
+    fn import_with(&self, _dialog: DocumentDialog) -> DocumentFuture<Option<ImportedDocument>> {
+        self.import()
+    }
+    fn export_with(
+        &self,
+        path: PathBuf,
+        name: String,
+        _dialog: DocumentDialog,
+    ) -> DocumentFuture<bool> {
+        self.export(path, name)
+    }
     /// Imports the documents for one user action (compose attachments). The
     /// default opens a single-document picker once; hosts with a multi-select
     /// picker override it. `limit` bounds how many copies a host makes;
     /// hosts that return source paths need not apply it.
-    fn import_many(&self, _limit: usize) -> DocumentFuture<Vec<ImportedDocument>> {
-        let import = self.import();
+    fn import_many(
+        &self,
+        _limit: usize,
+        dialog: DocumentDialog,
+    ) -> DocumentFuture<Vec<ImportedDocument>> {
+        let import = self.import_with(dialog);
         Box::pin(async move { Ok(import.await?.into_iter().collect()) })
     }
 }
@@ -68,20 +99,40 @@ pub(crate) fn safe_name(name: &str) -> String {
 #[cfg(desktop)]
 struct DesktopDocuments;
 #[cfg(desktop)]
+impl DocumentDialog {
+    fn file_dialog(&self) -> rfd::AsyncFileDialog {
+        let dialog = rfd::AsyncFileDialog::new().set_title(&self.title);
+        match &self.filter {
+            Some((name, extensions)) => dialog.add_filter(name, extensions),
+            None => dialog,
+        }
+    }
+}
+#[cfg(desktop)]
 impl DocumentProvider for DesktopDocuments {
     fn import(&self) -> DocumentFuture<Option<ImportedDocument>> {
-        Box::pin(async {
-            Ok(rfd::AsyncFileDialog::new()
-                .set_title("Upload file")
+        self.import_with(DocumentDialog::titled("Upload file"))
+    }
+    fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool> {
+        self.export_with(path, name, DocumentDialog::titled("Download file"))
+    }
+    fn import_with(&self, dialog: DocumentDialog) -> DocumentFuture<Option<ImportedDocument>> {
+        Box::pin(async move {
+            Ok(dialog
+                .file_dialog()
                 .pick_file()
                 .await
                 .map(|f| ImportedDocument::source(f.path().to_owned())))
         })
     }
-    fn import_many(&self, _limit: usize) -> DocumentFuture<Vec<ImportedDocument>> {
-        Box::pin(async {
-            Ok(rfd::AsyncFileDialog::new()
-                .set_title("Upload files")
+    fn import_many(
+        &self,
+        _limit: usize,
+        dialog: DocumentDialog,
+    ) -> DocumentFuture<Vec<ImportedDocument>> {
+        Box::pin(async move {
+            Ok(dialog
+                .file_dialog()
                 .pick_files()
                 .await
                 .unwrap_or_default()
@@ -90,14 +141,14 @@ impl DocumentProvider for DesktopDocuments {
                 .collect())
         })
     }
-    fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool> {
+    fn export_with(
+        &self,
+        path: PathBuf,
+        name: String,
+        dialog: DocumentDialog,
+    ) -> DocumentFuture<bool> {
         Box::pin(async move {
-            let Some(file) = rfd::AsyncFileDialog::new()
-                .set_title("Download file")
-                .set_file_name(name)
-                .save_file()
-                .await
-            else {
+            let Some(file) = dialog.file_dialog().set_file_name(name).save_file().await else {
                 return Ok(false);
             };
             flectar_mail_core::files::save_cached_file(&path, file.path())
@@ -210,7 +261,7 @@ mod tests {
             imports: AtomicUsize::new(0),
             cancel_after: usize::MAX,
         });
-        let documents = provider.import_many(20).await.unwrap();
+        let documents = provider.import_many(20, DocumentDialog::default()).await.unwrap();
         assert_eq!(documents.len(), 1);
         assert_eq!(provider.imports.load(Ordering::SeqCst), 1);
         drop(documents);
@@ -225,7 +276,7 @@ mod tests {
             imports: AtomicUsize::new(0),
             cancel_after: 0,
         });
-        let documents = provider.import_many(20).await.unwrap();
+        let documents = provider.import_many(20, DocumentDialog::default()).await.unwrap();
         assert!(documents.is_empty());
         assert_eq!(provider.imports.load(Ordering::SeqCst), 1);
     }
