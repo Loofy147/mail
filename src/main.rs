@@ -327,11 +327,15 @@ fn reconcile_model_rows_by<T: Clone + 'static, K: Eq + std::hash::Hash>(
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ComposeFile {
     path: PathBuf,
     filename: String,
     size: u64,
+    /// Host-owned import copy behind `path`. Removing the attachment or
+    /// clearing the composer releases it; drafts and sends stage the file in
+    /// Core first.
+    _import: Option<Rc<documents::ImportedDocument>>,
 }
 
 struct FaviconUpdate {
@@ -5200,9 +5204,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     register_settings_preference_callbacks(&app, &state, &runtime);
 
     let compose_files = Rc::new(RefCell::new(Vec::<ComposeFile>::new()));
-    let compose_imports = Rc::new(RefCell::new(
-        Vec::<Option<documents::ImportedDocument>>::new(),
-    ));
+    let compose_session = Rc::new(Cell::new(0u64));
     let compose_document = Rc::new(RefCell::new(RichComposeDocument::default()));
     let compose_editor = Rc::new(RefCell::new(LazyComposeEditor::default()));
     let compose_contacts = Rc::new(RefCell::new(
@@ -5456,7 +5458,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_message_compose = Rc::clone(&state);
     let runtime_for_message_compose = Rc::clone(&runtime);
     let files_for_message_compose = Rc::clone(&compose_files);
-    let imports_for_message_compose = Rc::clone(&compose_imports);
+    let session_for_message_compose = Rc::clone(&compose_session);
     let document_for_message_compose = Rc::clone(&compose_document);
     let editor_for_message_compose = Rc::clone(&compose_editor);
     let contacts_for_message_compose = Rc::clone(&compose_contacts);
@@ -5542,7 +5544,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             clear_compose(
                 &app,
                 &files_for_message_compose,
-                &imports_for_message_compose,
+                &session_for_message_compose,
                 &document_for_message_compose,
                 &editor_for_message_compose,
                 &contacts_for_message_compose,
@@ -5566,11 +5568,10 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         path,
                         filename: attachment.filename.clone(),
                         size,
+                        _import: None,
                     }
                 })
                 .collect::<Vec<_>>();
-            *imports_for_message_compose.borrow_mut() =
-                loaded_files.iter().map(|_| None).collect();
             *files_for_message_compose.borrow_mut() = loaded_files;
             apply_compose_files(&app, &files_for_message_compose.borrow());
 
@@ -5645,7 +5646,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         clear_compose(
             &app,
             &files_for_message_compose,
-            &imports_for_message_compose,
+            &session_for_message_compose,
             &document_for_message_compose,
             &editor_for_message_compose,
             &contacts_for_message_compose,
@@ -5685,7 +5686,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
     let app_weak = app.as_weak();
     let files_for_close = Rc::clone(&compose_files);
-    let imports_for_close = Rc::clone(&compose_imports);
+    let session_for_close = Rc::clone(&compose_session);
     let document_for_close = Rc::clone(&compose_document);
     let editor_for_close = Rc::clone(&compose_editor);
     let contacts_for_close = Rc::clone(&compose_contacts);
@@ -5699,7 +5700,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             clear_compose(
                 &app,
                 &files_for_close,
-                &imports_for_close,
+                &session_for_close,
                 &document_for_close,
                 &editor_for_close,
                 &contacts_for_close,
@@ -5710,8 +5711,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
     let app_weak = app.as_weak();
     let files_for_picker = Rc::clone(&compose_files);
-    let imports_for_picker = Rc::clone(&compose_imports);
+    let session_for_picker = Rc::clone(&compose_session);
     let documents_for_picker = platform.documents.clone();
+    let runtime_for_picker = Rc::clone(&runtime);
     let picking_for_picker = Rc::new(Cell::new(false));
     app.on_pick_compose_attachments(move || {
         let Some(app) = app_weak.upgrade() else {
@@ -5720,18 +5722,31 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         if picking_for_picker.replace(true) {
             return;
         }
-        let documents = documents_for_picker.clone();
+        // Providers rely on Tokio timers and file I/O, so the request runs on
+        // the runtime and the composer awaits it on the UI thread.
+        let request = runtime_for_picker
+            .spawn(documents_for_picker.import_many(MAX_COMPOSE_ATTACHMENT_FILES));
+        let abort_request = request.abort_handle();
         let app_weak = app.as_weak();
         let files = Rc::clone(&files_for_picker);
-        let imports = Rc::clone(&imports_for_picker);
+        let session = Rc::clone(&session_for_picker);
+        let picked_in = session.get();
         let picking = Rc::clone(&picking_for_picker);
         let picking_for_error = Rc::clone(&picking_for_picker);
         let spawned = slint::spawn_local(async move {
-            let imported = documents.import_many(MAX_COMPOSE_ATTACHMENT_FILES).await;
+            let imported = match request.await {
+                Ok(result) => result,
+                Err(error) => Err(error.to_string()),
+            };
             picking.set(false);
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
+            // The composer was sent, discarded or replaced while the picker
+            // was open; dropping the documents releases their copies.
+            if session.get() != picked_in {
+                return;
+            }
             let documents = match imported {
                 Ok(documents) => documents,
                 Err(error) => {
@@ -5747,7 +5762,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 return;
             }
             let mut compose_files = files.borrow_mut();
-            let mut compose_imports = imports.borrow_mut();
             let mut total_size = compose_files.iter().map(|file| file.size).sum::<u64>();
             let mut added = 0usize;
             let mut skipped = 0usize;
@@ -5778,8 +5792,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     path,
                     filename,
                     size: metadata.len(),
+                    _import: Some(Rc::new(document)),
                 });
-                compose_imports.push(Some(document));
                 added += 1;
             }
             apply_compose_files(&app, &compose_files);
@@ -5800,6 +5814,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             }
         });
         if spawned.is_err() {
+            abort_request.abort();
             picking_for_error.set(false);
             app.set_compose_notice(UiMessage::plain(
                 "The platform host does not provide a document picker.",
@@ -5810,7 +5825,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
     let app_weak = app.as_weak();
     let files_for_remove = Rc::clone(&compose_files);
-    let imports_for_remove = Rc::clone(&compose_imports);
     app.on_remove_compose_attachment(move |index| {
         let Some(app) = app_weak.upgrade() else {
             return;
@@ -5821,10 +5835,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let mut files = files_for_remove.borrow_mut();
         if index < files.len() {
             files.remove(index);
-            let mut imports = imports_for_remove.borrow_mut();
-            if index < imports.len() {
-                imports.remove(index);
-            }
             apply_compose_files(&app, &files);
             app.set_compose_notice(UiMessage::plain("Attachment removed."));
             app.set_compose_notice_is_error(false);
@@ -6079,7 +6089,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_compose = Rc::clone(&state);
     let runtime_for_compose = Rc::clone(&runtime);
     let files_for_save = Rc::clone(&compose_files);
-    let imports_for_save = Rc::clone(&compose_imports);
+    let session_for_save = Rc::clone(&compose_session);
     let document_for_save = Rc::clone(&compose_document);
     let editor_for_save = Rc::clone(&compose_editor);
     let contacts_for_save = Rc::clone(&compose_contacts);
@@ -6204,7 +6214,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 clear_compose(
                     &app,
                     &files_for_save,
-                    &imports_for_save,
+                    &session_for_save,
                     &document_for_save,
                     &editor_for_save,
                     &contacts_for_save,
@@ -6228,7 +6238,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_send_result = Rc::clone(&state);
     let runtime_for_send_result = Rc::clone(&runtime);
     let files_for_send_result = Rc::clone(&compose_files);
-    let imports_for_send_result = Rc::clone(&compose_imports);
+    let session_for_send_result = Rc::clone(&compose_session);
     let document_for_send_result = Rc::clone(&compose_document);
     let editor_for_send_result = Rc::clone(&compose_editor);
     let contacts_for_send_result = Rc::clone(&compose_contacts);
@@ -6249,7 +6259,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     clear_compose(
                         &app,
                         &files_for_send_result,
-                        &imports_for_send_result,
+                        &session_for_send_result,
                         &document_for_send_result,
                         &editor_for_send_result,
                         &contacts_for_send_result,
