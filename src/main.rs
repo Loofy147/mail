@@ -133,6 +133,7 @@ const SENDER_AVATAR_REGULAR_SIDE: f32 = 38.0;
 const ACCOUNT_AVATAR_SMALL_SIDE: f32 = 22.0;
 const ACCOUNT_AVATAR_REGULAR_SIDE: f32 = 38.0;
 const MAX_COMPOSE_ATTACHMENT_BYTES: u64 = 25 * 1024 * 1024;
+const MAX_COMPOSE_ATTACHMENT_FILES: usize = 20;
 
 fn favicon_retry_delay(attempts: u8) -> Duration {
     let exponent = attempts.saturating_sub(1).min(6);
@@ -327,21 +328,15 @@ fn reconcile_model_rows_by<T: Clone + 'static, K: Eq + std::hash::Hash>(
     }
 }
 
-#[cfg(desktop)]
-fn pick_compose_attachment_paths(title: String) -> Option<Vec<PathBuf>> {
-    rfd::FileDialog::new().set_title(title).pick_files()
-}
-
-#[cfg(mobile)]
-fn pick_compose_attachment_paths(_title: String) -> Option<Vec<PathBuf>> {
-    None
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ComposeFile {
     path: PathBuf,
     filename: String,
     size: u64,
+    /// Host-owned import copy behind `path`. Removing the attachment or
+    /// clearing the composer releases it; drafts and sends stage the file in
+    /// Core first.
+    _import: Option<Rc<documents::ImportedDocument>>,
 }
 
 struct FaviconUpdate {
@@ -1407,7 +1402,10 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         });
     theme::register_theme_utilities(&app);
     app.set_print_supported(!cfg!(mobile));
-    app.set_document_apis_supported(!cfg!(mobile));
+    // Every host provides a document provider now: desktop dialogs on desktop,
+    // the system picker on mobile. The document entry points (compose
+    // attachments, account backups, database snapshots) stay available.
+    app.set_document_apis_supported(true);
     renderer_preferences::initialize_step(use_wgpu, || app.show())?;
     startup_metrics.emit(
         "window_shown",
@@ -5211,6 +5209,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     register_settings_preference_callbacks(&app, &state, &runtime);
 
     let compose_files = Rc::new(RefCell::new(Vec::<ComposeFile>::new()));
+    let compose_session = Rc::new(Cell::new(0u64));
     let compose_document = Rc::new(RefCell::new(RichComposeDocument::default()));
     let compose_editor = Rc::new(RefCell::new(LazyComposeEditor::default()));
     let compose_contacts = Rc::new(RefCell::new(
@@ -5464,6 +5463,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_message_compose = Rc::clone(&state);
     let runtime_for_message_compose = Rc::clone(&runtime);
     let files_for_message_compose = Rc::clone(&compose_files);
+    let session_for_message_compose = Rc::clone(&compose_session);
     let document_for_message_compose = Rc::clone(&compose_document);
     let editor_for_message_compose = Rc::clone(&compose_editor);
     let contacts_for_message_compose = Rc::clone(&compose_contacts);
@@ -5549,6 +5549,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             clear_compose(
                 &app,
                 &files_for_message_compose,
+                &session_for_message_compose,
                 &document_for_message_compose,
                 &editor_for_message_compose,
                 &contacts_for_message_compose,
@@ -5572,6 +5573,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         path,
                         filename: attachment.filename.clone(),
                         size,
+                        _import: None,
                     }
                 })
                 .collect::<Vec<_>>();
@@ -5649,6 +5651,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         clear_compose(
             &app,
             &files_for_message_compose,
+            &session_for_message_compose,
             &document_for_message_compose,
             &editor_for_message_compose,
             &contacts_for_message_compose,
@@ -5688,6 +5691,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
     let app_weak = app.as_weak();
     let files_for_close = Rc::clone(&compose_files);
+    let session_for_close = Rc::clone(&compose_session);
     let document_for_close = Rc::clone(&compose_document);
     let editor_for_close = Rc::clone(&compose_editor);
     let contacts_for_close = Rc::clone(&compose_contacts);
@@ -5701,6 +5705,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             clear_compose(
                 &app,
                 &files_for_close,
+                &session_for_close,
                 &document_for_close,
                 &editor_for_close,
                 &contacts_for_close,
@@ -5711,72 +5716,104 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
     let app_weak = app.as_weak();
     let files_for_picker = Rc::clone(&compose_files);
+    let session_for_picker = Rc::clone(&compose_session);
+    let documents_for_picker = platform.documents.clone();
+    let runtime_for_picker = Rc::clone(&runtime);
+    let picking_for_picker = Rc::new(Cell::new(false));
     app.on_pick_compose_attachments(move || {
         let Some(app) = app_weak.upgrade() else {
             return;
         };
-        let Some(paths) = pick_compose_attachment_paths(
-            translated(&app, &UiMessage::plain("Attach files to this email")).to_string(),
-        ) else {
-            #[cfg(mobile)]
-            {
-                app.set_compose_notice(UiMessage::plain(
-                    "The platform host does not provide a document picker.",
-                ));
-                app.set_compose_notice_is_error(true);
-            }
+        if picking_for_picker.replace(true) {
             return;
-        };
-
-        let mut compose_files = files_for_picker.borrow_mut();
-        let mut total_size = compose_files.iter().map(|file| file.size).sum::<u64>();
-        let mut added = 0usize;
-        let mut skipped = 0usize;
-        for path in paths {
-            let path = std::fs::canonicalize(&path).unwrap_or(path);
-            if compose_files.iter().any(|file| file.path == path) {
-                skipped += 1;
-                continue;
-            }
-            let Ok(metadata) = std::fs::metadata(&path) else {
-                skipped += 1;
-                continue;
-            };
-            if !metadata.is_file()
-                || total_size.saturating_add(metadata.len()) > MAX_COMPOSE_ATTACHMENT_BYTES
-            {
-                skipped += 1;
-                continue;
-            }
-            let Some(filename) = path.file_name().map(|name| name.to_string_lossy().into_owned())
-            else {
-                skipped += 1;
-                continue;
-            };
-            total_size += metadata.len();
-            compose_files.push(ComposeFile {
-                path,
-                filename,
-                size: metadata.len(),
-            });
-            added += 1;
         }
-        apply_compose_files(&app, &compose_files);
-        if skipped == 0 {
-            app.set_compose_notice(if added == 1 {
-                UiMessage::plain("Added 1 attachment.")
+        let dialog = documents::DocumentDialog::titled(translated(
+            &app,
+            &UiMessage::plain("Attach files to this email"),
+        ));
+        let request = documents_for_picker.import_many(MAX_COMPOSE_ATTACHMENT_FILES, dialog);
+        let app_weak = app.as_weak();
+        let files = Rc::clone(&files_for_picker);
+        let session = Rc::clone(&session_for_picker);
+        let picked_in = session.get();
+        let picking = Rc::clone(&picking_for_picker);
+        documents::run_request(&runtime_for_picker, request, move |imported| {
+            picking.set(false);
+            let Some(app) = app_weak.upgrade() else {
+                return;
+            };
+            // The composer was sent, discarded or replaced while the picker
+            // was open; dropping the documents releases their copies.
+            if session.get() != picked_in {
+                return;
+            }
+            let documents = match imported {
+                Ok(documents) => documents,
+                Err(error) => {
+                    tracing::warn!(%error, "compose attachment picker failed");
+                    app.set_compose_notice(UiMessage::detail(
+                        "Could not add attachments: {}",
+                        error,
+                    ));
+                    app.set_compose_notice_is_error(true);
+                    return;
+                }
+            };
+            if documents.is_empty() {
+                return;
+            }
+            let mut compose_files = files.borrow_mut();
+            let mut total_size = compose_files.iter().map(|file| file.size).sum::<u64>();
+            let mut added = 0usize;
+            let mut skipped = 0usize;
+            for document in documents {
+                let path = std::fs::canonicalize(document.path())
+                    .unwrap_or_else(|_| document.path().to_path_buf());
+                if compose_files.iter().any(|file| file.path == path) {
+                    skipped += 1;
+                    continue;
+                }
+                let Ok(metadata) = std::fs::metadata(&path) else {
+                    skipped += 1;
+                    continue;
+                };
+                if !metadata.is_file()
+                    || total_size.saturating_add(metadata.len()) > MAX_COMPOSE_ATTACHMENT_BYTES
+                {
+                    skipped += 1;
+                    continue;
+                }
+                let Some(filename) = path.file_name().map(|name| name.to_string_lossy().into_owned())
+                else {
+                    skipped += 1;
+                    continue;
+                };
+                total_size += metadata.len();
+                compose_files.push(ComposeFile {
+                    path,
+                    filename,
+                    size: metadata.len(),
+                    _import: Some(Rc::new(document)),
+                });
+                added += 1;
+            }
+            apply_compose_files(&app, &compose_files);
+            if skipped == 0 {
+                app.set_compose_notice(if added == 1 {
+                    UiMessage::plain("Added 1 attachment.")
+                } else {
+                    UiMessage::detail("Added {} attachments.", added)
+                });
+                app.set_compose_notice_is_error(false);
             } else {
-                UiMessage::detail("Added {} attachments.", added)
-            });
-            app.set_compose_notice_is_error(false);
-        } else {
-            app.set_compose_notice(UiMessage::arguments(
-                "Attachments added: {}. Skipped: {} (duplicate, unreadable, or over the 25 MB total limit).",
-                added,
-                skipped,
-            ));
-            app.set_compose_notice_is_error(added == 0);
-        }
+                app.set_compose_notice(UiMessage::arguments(
+                    "Attachments added: {}. Skipped: {} (duplicate, unreadable, or over the 25 MB total limit).",
+                    added,
+                    skipped,
+                ));
+                app.set_compose_notice_is_error(added == 0);
+            }
+        });
     });
 
     let app_weak = app.as_weak();
@@ -6045,6 +6082,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_compose = Rc::clone(&state);
     let runtime_for_compose = Rc::clone(&runtime);
     let files_for_save = Rc::clone(&compose_files);
+    let session_for_save = Rc::clone(&compose_session);
     let document_for_save = Rc::clone(&compose_document);
     let editor_for_save = Rc::clone(&compose_editor);
     let contacts_for_save = Rc::clone(&compose_contacts);
@@ -6169,6 +6207,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 clear_compose(
                     &app,
                     &files_for_save,
+                    &session_for_save,
                     &document_for_save,
                     &editor_for_save,
                     &contacts_for_save,
@@ -6192,6 +6231,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_send_result = Rc::clone(&state);
     let runtime_for_send_result = Rc::clone(&runtime);
     let files_for_send_result = Rc::clone(&compose_files);
+    let session_for_send_result = Rc::clone(&compose_session);
     let document_for_send_result = Rc::clone(&compose_document);
     let editor_for_send_result = Rc::clone(&compose_editor);
     let contacts_for_send_result = Rc::clone(&compose_contacts);
@@ -6212,6 +6252,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     clear_compose(
                         &app,
                         &files_for_send_result,
+                        &session_for_send_result,
                         &document_for_send_result,
                         &editor_for_send_result,
                         &contacts_for_send_result,
@@ -6903,6 +6944,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     register_data_management_callbacks(
         &app,
         &platform.paths,
+        &platform.documents,
         &state,
         &runtime,
         &ui_task_tx,
