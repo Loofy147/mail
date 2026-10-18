@@ -341,7 +341,6 @@ fn read_account_backup(path: &std::path::Path) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-
 /// Applies an account backup the host already imported. The caller keeps the
 /// imported document alive until this returns.
 fn import_account_backup_document(
@@ -436,12 +435,9 @@ fn import_account_backup_document(
                 .get("workspaceListPaneWidth")
                 .and_then(|value| value.as_i64())
             {
-                settings.workspace_list_pane_width =
-                    normalized_workspace_list_pane_width(width);
+                settings.workspace_list_pane_width = normalized_workspace_list_pane_width(width);
             }
-            if let Some(language) = preferences
-                .get("language")
-                .and_then(|value| value.as_str())
+            if let Some(language) = preferences.get("language").and_then(|value| value.as_str())
                 && language.len() <= 32
             {
                 settings.language = language.to_owned();
@@ -529,8 +525,7 @@ fn import_account_backup_document(
             }
         }
 
-        let imported = runtime
-            .block_on(core.import_account_configs(configs))?;
+        let imported = runtime.block_on(core.import_account_configs(configs))?;
         runtime.block_on(core.save_settings(settings.clone()))?;
         let accounts = runtime.block_on(core.load_accounts())?;
         let configs = runtime.block_on(core.load_account_configs())?;
@@ -541,22 +536,19 @@ fn import_account_backup_document(
         if has_portable_colors {
             for email in &imported_emails {
                 if let Some(account_id) = account_ids.get(email) {
-                    runtime
-                        .block_on(core.set_account_color(*account_id, None))?;
+                    runtime.block_on(core.set_account_color(*account_id, None))?;
                 }
             }
             for (email, color) in portable_colors {
                 if let Some(account_id) = account_ids.get(&email) {
-                    runtime
-                        .block_on(core.set_account_color(*account_id, Some(color)))?;
+                    runtime.block_on(core.set_account_color(*account_id, Some(color)))?;
                 }
             }
         }
         if has_portable_profiles {
             for email in &imported_emails {
                 if let Some(account_id) = account_ids.get(email) {
-                    runtime
-                        .block_on(core.assign_account_profile(*account_id, None))?;
+                    runtime.block_on(core.assign_account_profile(*account_id, None))?;
                 }
             }
         }
@@ -574,10 +566,9 @@ fn import_account_backup_document(
             ))?;
             for email in profile.account_emails {
                 if let Some(account_id) = account_ids.get(&email.trim().to_ascii_lowercase()) {
-                    runtime.block_on(core.assign_account_profile(
-                        *account_id,
-                        Some(saved.id.clone()),
-                    ))?;
+                    runtime.block_on(
+                        core.assign_account_profile(*account_id, Some(saved.id.clone())),
+                    )?;
                 }
             }
         }
@@ -591,13 +582,7 @@ fn import_account_backup_document(
             apply_language(app, &settings.language);
             state.borrow_mut().account_presentation =
                 AccountPresentationSettings::from_settings(&settings);
-            update_connected_accounts(
-                app,
-                state,
-                runtime,
-                accounts,
-                configs,
-            );
+            update_connected_accounts(app, state, runtime, accounts, configs);
             refresh_rows_only(app, state, runtime);
             app.set_theme_mode(
                 match settings.theme.as_str() {
@@ -617,10 +602,9 @@ fn import_account_backup_document(
                 crate::window_chrome::WindowFrame::parse(&settings.window_frame),
             );
             app.set_workspace_layout(settings.workspace_layout.clone().into());
-            app.set_workspace_list_pane_width(
-                normalized_workspace_list_pane_width(settings.workspace_list_pane_width)
-                    as f32,
-            );
+            app.set_workspace_list_pane_width(normalized_workspace_list_pane_width(
+                settings.workspace_list_pane_width,
+            ) as f32);
             app.set_notifications_enabled(settings.notifications_enabled);
             app.set_notification_sound_enabled(settings.sound_enabled);
             app.set_notification_scope(settings.notification_scope.clone().into());
@@ -630,8 +614,7 @@ fn import_account_backup_document(
             app.set_collect_incoming_contacts(settings.collect_incoming_contacts);
             app.set_contact_suggest_all_accounts(settings.contact_suggest_all_accounts);
             app.set_suggest_learned_contacts(settings.suggest_learned_contacts);
-            state.borrow_mut().mark_read_on_open =
-                settings.mark_read_on_open;
+            state.borrow_mut().mark_read_on_open = settings.mark_read_on_open;
             app.set_remote_images_enabled(
                 settings.load_remote_images && cfg!(feature = "remote-content"),
             );
@@ -651,9 +634,7 @@ fn import_account_backup_document(
                 )
             });
         }
-        Err(error) => {
-            app.set_sync_status(UiMessage::detail("Could not import backup: {}", error))
-        }
+        Err(error) => app.set_sync_status(UiMessage::detail("Could not import backup: {}", error)),
     }
 }
 
@@ -722,9 +703,11 @@ async fn export_database_snapshot(
         let name = format!("{name}.zip");
         let archive = root.join(&name);
         let archive_for_zip = archive.clone();
-        tokio::task::spawn_blocking(move || archive_snapshot_directory(&directory, &archive_for_zip))
-            .await
-            .map_err(|error| error.to_string())??;
+        tokio::task::spawn_blocking(move || {
+            archive_snapshot_directory(&directory, &archive_for_zip)
+        })
+        .await
+        .map_err(|error| error.to_string())??;
         let exported = documents.export(archive, name.clone()).await?;
         Ok(exported.then_some(name))
     }
@@ -1120,10 +1103,7 @@ pub(super) fn register_data_management_callbacks(
                 Ok(Some(document)) => document,
                 Ok(None) => return,
                 Err(error) => {
-                    app.set_sync_status(UiMessage::detail(
-                        "Could not import backup: {}",
-                        error,
-                    ));
+                    app.set_sync_status(UiMessage::detail("Could not import backup: {}", error));
                     return;
                 }
             };
