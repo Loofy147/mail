@@ -2673,6 +2673,112 @@ fn selective_fetch_batches(
 #[cfg(test)]
 mod content_batch_tests {
     use super::*;
+    use crate::db::testutil;
+
+    #[test]
+    fn content_retries_escalate_at_exact_boundaries_and_reset_when_cleared() {
+        let mut conn = testutil::conn();
+        testutil::seed_account(&conn);
+        let (_, id) = testutil::seed_message(&conn, "sender@test.dev", "Retry", false);
+        let mut now = 1_000;
+        let delays = [60_000; 5]
+            .into_iter()
+            .chain([900_000; 15])
+            .chain([86_400_000; 2]);
+        for (index, delay) in delays.enumerate() {
+            record_content_failure_details_at(&mut conn, vec![(id, "decode".into())], now).unwrap();
+            let deadline = now + delay;
+            assert!(
+                repo::sync_failures::due_content(&conn, 1, deadline - 1, 10)
+                    .unwrap()
+                    .is_empty()
+            );
+            let due = repo::sync_failures::due_content(&conn, 1, deadline, 10).unwrap();
+            assert_eq!(due.len(), 1);
+            assert_eq!(due[0].message_id, Some(id));
+            assert_eq!(due[0].attempts, index as i64 + 1);
+            assert_eq!(due[0].next_retry_at, Some(deadline));
+            assert_eq!(due[0].created_at, 1_000);
+            assert_eq!(due[0].updated_at, now);
+            now = deadline;
+        }
+
+        // Retry counts are per message, and clearing a recovered message
+        // restarts the short delay without affecting other messages.
+        let (_, fresh) = testutil::seed_message(&conn, "sender@test.dev", "Fresh", false);
+        record_content_failure_details_at(&mut conn, vec![(fresh, "fetch".into())], now).unwrap();
+        assert_eq!(
+            repo::sync_failures::content_attempts(&conn, id).unwrap(),
+            22
+        );
+        repo::sync_failures::clear_content(&conn, id).unwrap();
+        record_content_failure_details_at(&mut conn, vec![(id, "fetch".into())], now).unwrap();
+        let due = repo::sync_failures::due_content(&conn, 1, now + 60_000, 10).unwrap();
+        assert_eq!(due.len(), 2);
+        for failure in due {
+            assert_eq!(failure.attempts, 1);
+            assert_eq!(failure.next_retry_at, Some(now + 60_000));
+            assert_eq!(failure.last_error, "fetch");
+        }
+    }
+
+    #[test]
+    fn content_failure_batch_rolls_back_when_attempt_count_cannot_be_read() {
+        let mut conn = testutil::conn();
+        testutil::seed_account(&conn);
+        let (_, first) = testutil::seed_message(&conn, "sender@test.dev", "First", false);
+        let (_, second) = testutil::seed_message(&conn, "sender@test.dev", "Second", false);
+        let failure =
+            repo::sync_failures::record_content_at(&conn, second, Some(123), "old", 1).unwrap();
+        // SQLite permits a non-integer value in this column. Reading it must
+        // fail rather than silently scheduling a new one-minute retry.
+        conn.execute(
+            "UPDATE sync_failures SET attempts = 'invalid' WHERE id = ?1",
+            [failure],
+        )
+        .unwrap();
+        assert!(
+            record_content_failure_details_at(
+                &mut conn,
+                vec![(first, "new".into()), (second, "new".into())],
+                1_000,
+            )
+            .is_err()
+        );
+        assert_eq!(
+            repo::sync_failures::content_attempts(&conn, first).unwrap(),
+            0
+        );
+        let stored: (String, i64, String) = conn
+            .query_row(
+                "SELECT attempts, next_retry_at, last_error FROM sync_failures WHERE id = ?1",
+                [failure],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(stored, ("invalid".into(), 123, "old".into()));
+    }
+
+    #[test]
+    fn late_content_failures_skip_cached_and_deleted_messages() {
+        let mut conn = testutil::conn();
+        testutil::seed_account(&conn);
+        let (_, cached) = testutil::seed_message(&conn, "sender@test.dev", "Cached", false);
+        let (_, deleted) = testutil::seed_message(&conn, "sender@test.dev", "Deleted", false);
+        repo::messages::set_body_state(&conn, cached, "cached").unwrap();
+        repo::messages::delete(&conn, deleted).unwrap();
+        record_content_failure_details_at(
+            &mut conn,
+            vec![(cached, "late".into()), (deleted, "late".into())],
+            1_000,
+        )
+        .unwrap();
+        assert!(
+            repo::sync_failures::due_content(&conn, 1, i64::MAX, 10)
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     #[tokio::test]
     async fn background_planning_pages_are_shared_and_waiters_cancel_cleanly() {
@@ -3528,20 +3634,38 @@ async fn record_content_failure_details(ctx: &SyncCtx, failures: Vec<(i64, Strin
     if failures.is_empty() {
         return Ok(());
     }
-    let retry_at = now_ms() + 60_000;
     ctx.db
-        .write(move |conn| {
-            let tx = conn.transaction()?;
-            for (message_id, detail) in failures {
-                if current_body_row(&tx, message_id)?.is_none() {
-                    continue;
-                }
-                repo::sync_failures::record_content(&tx, message_id, Some(retry_at), &detail)?;
-            }
-            tx.commit()?;
-            Ok(())
-        })
+        .write(move |conn| record_content_failure_details_at(conn, failures, now_ms()))
         .await
+}
+
+fn record_content_failure_details_at(
+    conn: &mut rusqlite::Connection,
+    failures: Vec<(i64, String)>,
+    now: i64,
+) -> Result<()> {
+    let tx = conn.transaction()?;
+    for (message_id, detail) in failures {
+        let Some(row) = current_body_row(&tx, message_id)? else {
+            continue;
+        };
+        // A concurrent fetch may have succeeded while this failure was in flight.
+        if row.body_state == "cached" {
+            continue;
+        }
+        // The count excludes this failure: failures 1–5 wait one minute,
+        // 6–20 wait fifteen minutes, and 21 onward wait a day. These deadlines
+        // gate background work only; opening a message can still retry now.
+        let attempts = repo::sync_failures::content_attempts(&tx, message_id)?;
+        let delay = match attempts {
+            0..=4 => 60_000,
+            5..=19 => 15 * 60_000,
+            _ => 24 * 60 * 60_000,
+        };
+        repo::sync_failures::record_content_at(&tx, message_id, Some(now + delay), &detail, now)?;
+    }
+    tx.commit()?;
+    Ok(())
 }
 
 fn decode_selective_content(
