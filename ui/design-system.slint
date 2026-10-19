@@ -70,8 +70,14 @@ export global SettingsIconPalette {
     out property <color> notifications: #f59e0b;
     out property <color> shortcuts: #22a06b;
     out property <color> storage: #a855f7;
-    out property <color> services: #0ea5e9;
+    out property <color> services: AppTheme.dark ? #a5b4fc : #6366f1;
     out property <color> about: #ec4899;
+}
+
+// Hosted services keep distinct identities in both light and dark palettes.
+export global ServiceIconPalette {
+    out property <color> sync: AppTheme.dark ? #60a5fa : #2563eb;
+    out property <color> business: AppTheme.dark ? #2dd4bf : #0f766e;
 }
 
 // Application colors live here instead of being re-declared by every custom

@@ -118,7 +118,7 @@ pub(super) fn apply_background_mail_page(
         let mut old_messages = std::mem::take(&mut state.messages);
         let old_order = filtered_messages(
             &old_messages,
-            &state.scope,
+            state.scope,
             if state.using_core { "" } else { &state.query },
             &state.search_filter,
         )
@@ -130,11 +130,11 @@ pub(super) fn apply_background_mail_page(
         let old_counts = state
             .mailboxes
             .iter()
-            .map(|mailbox| (mailbox.scope.clone(), mailbox.count.clone()))
+            .filter_map(|mailbox| Some((mailbox.scope?, mailbox.count.clone())))
             .collect::<HashMap<_, _>>();
         let mut mailboxes = mailboxes;
         for mailbox in &mut mailboxes {
-            if let Some(count) = old_counts.get(&mailbox.scope) {
+            if let Some(count) = mailbox.scope.and_then(|scope| old_counts.get(&scope)) {
                 mailbox.count.clone_from(count);
             }
         }
@@ -162,7 +162,7 @@ pub(super) fn apply_background_mail_page(
             // row that took its place, not jump back to the top of the list.
             let visible = filtered_messages(
                 &state.messages,
-                &state.scope,
+                state.scope,
                 if state.using_core { "" } else { &state.query },
                 &state.search_filter,
             )
@@ -329,7 +329,6 @@ pub(super) fn render_current(
         visible_count,
         total_count,
         mailboxes,
-        unified_mailboxes,
         next_cursor,
         using_core,
         favicon_icons,
@@ -341,7 +340,7 @@ pub(super) fn render_current(
         let state = state.borrow();
         let messages = filtered_messages(
             &state.messages,
-            &state.scope,
+            state.scope,
             if state.using_core { "" } else { &state.query },
             &state.search_filter,
         );
@@ -360,14 +359,13 @@ pub(super) fn render_current(
                 .or_else(|| visible.first().map(|email| email.id))
         };
         (
-            state.scope.clone(),
+            state.scope,
             state.query.clone(),
             selected_id,
             visible.iter().map(|email| email.id).collect::<HashSet<_>>(),
             visible_count,
             messages.len(),
             state.mailboxes.clone(),
-            state.unified_mailboxes.clone(),
             state.next_cursor,
             state.using_core,
             state.favicon_icons.clone(),
@@ -418,7 +416,7 @@ pub(super) fn render_current(
         let state = state.borrow();
         let messages = filtered_messages(
             &state.messages,
-            &state.scope,
+            state.scope,
             if state.using_core { "" } else { &state.query },
             &state.search_filter,
         );
@@ -470,10 +468,8 @@ pub(super) fn render_current(
     );
     app.set_mail_selection_count(checked_ids.len() as i32);
     refresh_sidebar(state);
-    app.set_selected_scope_title(
-        mailbox_scope_title(&scope, &mailboxes, &unified_mailboxes, &labels).into(),
-    );
-    app.set_trash_view(is_trash_scope(&scope, &mailboxes, &unified_mailboxes));
+    app.set_selected_scope_title(mailbox_scope_title(scope, &mailboxes, &labels).into());
+    app.set_trash_view(is_trash_scope(scope));
     app.set_selected_scope(scope.into());
     app.set_search_query(query.clone().into());
     app.set_unified_count(sidebar_badge_text(inbox_count).into());
@@ -802,7 +798,7 @@ pub(super) fn release_unselected_bodies(messages: &mut [MailMessage], selected: 
 
 pub(super) fn filtered_messages<'a>(
     messages: &'a [MailMessage],
-    scope: &str,
+    scope: Scope,
     query: &str,
     search_filter: &str,
 ) -> Vec<&'a MailMessage> {
@@ -834,39 +830,23 @@ pub(super) fn filtered_messages<'a>(
         .collect()
 }
 
-pub(super) fn scope_matches(email: &MailMessage, scope: &str) -> bool {
-    if matches!(scope, "Important" | "Other") || scope.starts_with("Folder:") {
+pub(super) fn scope_matches(email: &MailMessage, scope: Scope) -> bool {
+    let in_mailbox = |mailbox: StandardMailbox| match mailbox {
+        StandardMailbox::Starred => email.starred,
+        mailbox => email.folder == mailbox.label(),
+    };
+    match scope {
+        Scope::Unified(mailbox) => in_mailbox(mailbox),
+        Scope::Account {
+            account_id,
+            mailbox,
+        } => email.account_id == account_id && in_mailbox(mailbox),
+        Scope::Label { id, .. } => email.labels.contains(&id),
         // These scopes are filtered by the core query before projection. Their
         // stable route/folder ids are intentionally not duplicated in every UI
         // row.
-        return true;
+        Scope::Important | Scope::Other | Scope::Folder(_) => true,
     }
-    if let Some(label_id) = ["AccountLabel:", "GlobalLabel:", "Category:", "Label:"]
-        .into_iter()
-        .find_map(|prefix| scope.strip_prefix(prefix))
-        .and_then(|id| id.parse::<i64>().ok())
-    {
-        return email.labels.contains(&label_id);
-    }
-    if scope == "Unified Inbox" {
-        return email.folder == "Inbox";
-    }
-    if let Some(folder) = scope.strip_prefix("Unified ") {
-        return match folder {
-            "Starred" => email.starred,
-            "Sent" | "Archive" | "Spam" | "Trash" | "Drafts" => email.folder == folder,
-            _ => false,
-        };
-    }
-    if let Some((account, folder)) = scope.split_once(" / ") {
-        return email.account == account
-            && if folder == "Starred" {
-                email.starred
-            } else {
-                email.folder == folder
-            };
-    }
-    email.account == scope
 }
 
 // Compare visible contents: empty Slint images are not reflexively equal,
@@ -1061,7 +1041,7 @@ pub(super) fn refresh_rows_only(
         let state = state.borrow();
         let messages = filtered_messages(
             &state.messages,
-            &state.scope,
+            state.scope,
             if state.using_core { "" } else { &state.query },
             &state.search_filter,
         );
@@ -1193,7 +1173,6 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
         query,
         scope,
         mailboxes,
-        unified_mailboxes,
         search_filter,
         inbox_count,
         labels,
@@ -1204,7 +1183,7 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
         } else {
             let total = filtered_messages(
                 &state.messages,
-                &state.scope,
+                state.scope,
                 &state.query,
                 &state.search_filter,
             )
@@ -1214,9 +1193,8 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
         (
             can_load_more,
             state.query.clone(),
-            state.scope.clone(),
+            state.scope,
             state.mailboxes.clone(),
-            state.unified_mailboxes.clone(),
             state.search_filter.clone(),
             state.inbox_count,
             state.labels.clone(),
@@ -1224,10 +1202,8 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
     };
 
     refresh_sidebar(state);
-    app.set_selected_scope_title(
-        mailbox_scope_title(&scope, &mailboxes, &unified_mailboxes, &labels).into(),
-    );
-    app.set_trash_view(is_trash_scope(&scope, &mailboxes, &unified_mailboxes));
+    app.set_selected_scope_title(mailbox_scope_title(scope, &mailboxes, &labels).into());
+    app.set_trash_view(is_trash_scope(scope));
     app.set_selected_scope(scope.into());
     app.set_search_query(query.clone().into());
     app.set_unified_count(sidebar_badge_text(inbox_count).into());
@@ -1467,7 +1443,7 @@ pub(super) fn make_mailbox_rows(
                 can_delete: mailbox.can_delete,
                 label_has_emoji: contains_emoji(&mailbox.label),
                 label: mailbox.label.clone().into(),
-                scope: mailbox.scope.clone().into(),
+                scope: mailbox.scope.map(slint::SharedString::from).unwrap_or_default(),
                 context: mailbox.context.clone().into(),
                 detail: mailbox.detail.clone().into(),
                 avatar: mailbox.avatar.clone().into(),
@@ -1485,42 +1461,38 @@ pub(super) fn make_mailbox_rows(
 }
 
 fn mailbox_scope_title(
-    scope: &str,
+    scope: Scope,
     mailboxes: &[MailboxEntry],
-    unified_mailboxes: &[MailboxEntry],
     labels: &[flectar_mail_core::models::Label],
 ) -> String {
-    if scope.starts_with("Folder:") {
+    let mailbox = || {
         mailboxes
             .iter()
-            .chain(unified_mailboxes)
-            .find(|mailbox| mailbox.scope == scope)
-            .map(|mailbox| mailbox.label.clone())
-            .unwrap_or_else(|| "Folder".into())
-    } else if let Some(label_id) = ["AccountLabel:", "GlobalLabel:", "Category:", "Label:"]
-        .into_iter()
-        .find_map(|prefix| scope.strip_prefix(prefix))
-        .and_then(|id| id.parse::<i64>().ok())
-    {
-        labels
+            .find(|mailbox| mailbox.scope == Some(scope))
+    };
+    match scope {
+        Scope::Unified(_) | Scope::Important | Scope::Other => scope.to_string(),
+        Scope::Folder(_) => mailbox().map_or_else(|| "Folder".into(), |mailbox| mailbox.label.clone()),
+        Scope::Label { id, .. } => labels
             .iter()
-            .find(|label| label.id == label_id)
-            .map(|label| label.name.clone())
-            .unwrap_or_else(|| "Label".into())
-    } else {
-        scope.to_owned()
+            .find(|label| label.id == id)
+            .map_or_else(|| "Label".into(), |label| label.name.clone()),
+        Scope::Account { mailbox: label, .. } => mailbox().map_or_else(
+            || label.label().to_owned(),
+            |mailbox| format!("{} / {}", mailbox.context, label.label()),
+        ),
     }
 }
 
-fn is_trash_scope(
-    scope: &str,
-    mailboxes: &[MailboxEntry],
-    unified_mailboxes: &[MailboxEntry],
-) -> bool {
-    scope == "Unified Trash"
-        || mailboxes.iter().chain(unified_mailboxes).any(|mailbox| {
-            mailbox.scope == scope && mailbox.is_standard && mailbox.label == "Trash"
-        })
+fn is_trash_scope(scope: Scope) -> bool {
+    matches!(
+        scope,
+        Scope::Unified(StandardMailbox::Trash)
+            | Scope::Account {
+                mailbox: StandardMailbox::Trash,
+                ..
+            }
+    )
 }
 
 #[cfg(test)]
@@ -1646,6 +1618,30 @@ mod tests {
         assert!(rows[1].selected);
     }
 
+    #[test]
+    fn account_scopes_match_by_id_whatever_the_display_name() {
+        let mut row = message(1);
+        row.starred = true;
+        let scope = |account_id, mailbox| Scope::Account {
+            account_id,
+            mailbox,
+        };
+        for account in ["Work / Personal", "Unified Work", "Folder:Work"] {
+            row.account = account.into();
+            for mailbox in StandardMailbox::ALL {
+                row.folder = mailbox.label().into();
+                assert!(scope_matches(&row, scope(1, mailbox)));
+                assert!(scope_matches(&row, Scope::Unified(mailbox)));
+                assert!(!scope_matches(&row, scope(2, mailbox)));
+                assert!(scope_matches(&row, scope(1, StandardMailbox::Starred)));
+            }
+        }
+        row.starred = false;
+        row.folder = "Inbox".into();
+        assert!(!scope_matches(&row, scope(1, StandardMailbox::Starred)));
+        assert!(!scope_matches(&row, scope(1, StandardMailbox::Sent)));
+    }
+
     pub(super) fn message(id: i32) -> MailMessage {
         MailMessage {
             id,
@@ -1759,7 +1755,7 @@ mod tests {
         messages[0].folder = "Inbox".into();
         messages[1].folder = "Archive".into();
         messages[0].html = Some("large selected body".repeat(1_000));
-        let filtered = filtered_messages(&messages, "Unified Inbox", "", "All mail");
+        let filtered = filtered_messages(&messages, Scope::UNIFIED_INBOX, "", "All mail");
         assert_eq!(filtered.len(), 1);
         assert!(std::ptr::eq(filtered[0], &messages[0]));
         assert_eq!(filtered[0].html.as_ref().unwrap().as_ptr(), messages[0].html.as_ref().unwrap().as_ptr());
@@ -2032,7 +2028,7 @@ mod tests {
             can_rename: true,
             can_delete: true,
             label: "Projects".into(),
-            scope: "Folder:7".into(),
+            scope: Some(Scope::Folder(7)),
             context: "Account".into(),
             detail: String::new(),
             avatar: String::new(),
@@ -2053,7 +2049,7 @@ mod tests {
         assert!(rows[0].has_custom_color);
         assert_eq!(rows[0].color, slint::Color::from_rgb_u8(0x22, 0xc5, 0x5e));
         assert_eq!(
-            mailbox_scope_title("Folder:7", &mailboxes, &[], &labels),
+            mailbox_scope_title(Scope::Folder(7), &mailboxes, &labels),
             "Projects"
         );
     }
@@ -2072,7 +2068,7 @@ mod tests {
             can_rename: true,
             can_delete: true,
             label: label.into(),
-            scope: format!("Folder:{folder_id}"),
+            scope: Some(Scope::Folder(folder_id)),
             context: "Account".into(),
             detail: String::new(),
             avatar: String::new(),

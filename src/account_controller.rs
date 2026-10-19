@@ -47,7 +47,7 @@ pub(super) fn reusable_mail_transport<'a>(
 pub(super) struct AccountRemovalUpdate {
     pub account_id: i64,
     pub removed: bool,
-    pub scope: String,
+    pub scope: Scope,
     pub query: String,
     pub metadata: Option<mail::MailMetadata>,
     pub page: Option<mail::MailPage>,
@@ -78,18 +78,28 @@ pub(super) fn snapshot_is_current(state: &Rc<RefCell<InboxState>>, revision: u64
         .is_some_and(|core| core.account_revision() == revision)
 }
 
-pub(super) fn account_owns_scope(mailboxes: &[MailboxEntry], scope: &str, account_id: i64) -> bool {
-    mailboxes
-        .iter()
-        .any(|mailbox| mailbox.account_id == account_id && mailbox.scope == scope)
+/// Whether the selected scope shows only mail of `account_id`.
+pub(super) fn account_owns_scope(state: &InboxState, account_id: i64) -> bool {
+    match state.scope {
+        Scope::Account {
+            account_id: owner, ..
+        } => owner == account_id,
+        Scope::Folder(_) => state
+            .mailboxes
+            .iter()
+            .any(|mailbox| mailbox.account_id == account_id && mailbox.scope == Some(state.scope)),
+        Scope::Label { id, .. } => state
+            .labels
+            .iter()
+            .any(|label| label.id == id && label.owner_account_id == Some(account_id)),
+        Scope::Unified(_) | Scope::Important | Scope::Other => false,
+    }
 }
 
 /// Apply the local half of deletion before projecting any account or mail
 /// models. Even if reloading fails after deletion, no deleted rows survive.
 pub(super) fn reconcile_removed_account(state: &mut InboxState, account_id: i64) {
-    if account_owns_scope(&state.mailboxes, &state.scope, account_id) {
-        state.scope = "Unified Inbox".into();
-    }
+    let selection_removed = account_owns_scope(state, account_id);
     if state
         .messages
         .iter()
@@ -105,9 +115,15 @@ pub(super) fn reconcile_removed_account(state: &mut InboxState, account_id: i64)
     state
         .mailboxes
         .retain(|mailbox| mailbox.account_id != account_id);
-    state
-        .connected_accounts
-        .retain(|account| account.id != account_id);
+    let accounts = std::mem::take(&mut state.connected_accounts)
+        .into_iter()
+        .filter(|account| account.id != account_id)
+        .collect();
+    // Paging and the worker generation are reset below either way.
+    let _ = state.set_connected_accounts(accounts);
+    if selection_removed {
+        state.set_scope(Scope::UNIFIED_INBOX);
+    }
     state
         .account_configs
         .retain(|config| config.id != account_id);
@@ -150,7 +166,7 @@ pub(super) fn reconcile_removed_account(state: &mut InboxState, account_id: i64)
         state.mailboxes.clear();
         state.unified_mailboxes.clear();
         state.labels.clear();
-        state.scope = "Unified Inbox".into();
+        state.set_scope(Scope::UNIFIED_INBOX);
         state.query.clear();
         state.selected_id = None;
     }
@@ -326,7 +342,7 @@ pub(super) fn update_connected_accounts(
     accounts: Vec<Account>,
     configs: Vec<AccountConfig>,
 ) {
-    {
+    let scope_changed = {
         let mut state = state.borrow_mut();
         let previous_urls = state
             .connected_accounts
@@ -347,10 +363,24 @@ pub(super) fn update_connected_accounts(
         state.profile_avatar_images.retain(|id, _| unchanged(id));
         state.profile_avatar_missing.retain(unchanged);
         state.profile_avatar_pending.retain(unchanged);
-        state.connected_accounts = accounts;
         state.account_configs = configs;
-    }
+        state.set_connected_accounts(accounts)
+    };
     refresh_connected_accounts(app, state);
+    // Adding or removing an account can make the selected mailbox invisible.
+    // Reload as a navigation so pages for the previous selection are retired.
+    if scope_changed {
+        {
+            let mut state = state.borrow_mut();
+            state.page = 1;
+            state.next_cursor = None;
+            state.checked_ids.clear();
+        }
+        if let Err(error) = refresh_from_source(app, state, runtime, false, &[]) {
+            app.set_render_status(UiMessage::detail("Mail refresh failed: {}", error));
+        }
+    }
+    refresh_sidebar(state);
     schedule_profile_avatar_fetches(app, state, runtime);
 }
 

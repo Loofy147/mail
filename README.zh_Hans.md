@@ -307,7 +307,7 @@ Flectar Mail 目前仍在开发中，尚未稳定。
 
 Windows 预览版未签名；macOS 预览版采用临时签名（ad-hoc）且未经过公证，因此出现操作系统安全提示属于正常现象。更新需要手动安装。
 
-Flatpak 预览版以独立测试包的形式提供。它目前还不是 Flathub 软件包，因此不会获得 Flathub 的自动更新。在托盘后端能够使用沙箱安全的 D-Bus 名称之前，其「关闭到托盘」选项处于禁用状态。
+Flatpak 预览版以独立测试包的形式提供。它目前还不是 Flathub 软件包，因此不会获得 Flathub 的自动更新。在托盘后端能够使用沙箱安全的 D-Bus 名称之前，其「关闭到托盘」选项处于禁用状态。登录时自动启动通过桌面的后台门户实现，由于没有托盘可用，会直接打开窗口。
 
 使用 `sudo dnf install ./flectar-mail-<version>-linux-x64.rpm` 或 `flatpak install --user ./flectar-mail-<version>-linux-x64.flatpak` 安装下载的 Linux 软件包。用 `flatpak run com.flectar.mail` 启动 Flatpak 版本。
 
