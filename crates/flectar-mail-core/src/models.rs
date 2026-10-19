@@ -1647,6 +1647,9 @@ pub fn normalized_window_frame(frame: &str) -> &'static str {
 pub struct StartupPresentation {
     pub workspace_list_pane_width: Option<i64>,
     pub window_frame: Option<String>,
+    /// Whether a background launch may stay in the system tray without
+    /// first showing the window.
+    pub close_to_tray: bool,
 }
 fn default_theme_preset() -> String {
     "default".into()

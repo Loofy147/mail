@@ -6047,6 +6047,32 @@
     {
         "type": "archive",
         "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/objc2-security/objc2-security-0.3.2.crate",
+        "sha256": "709fe137109bd1e8b5a99390f77a7d8b2961dafc1a1c5db8f2e60329ad6d895a",
+        "dest": "cargo/vendor/objc2-security-0.3.2"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"709fe137109bd1e8b5a99390f77a7d8b2961dafc1a1c5db8f2e60329ad6d895a\", \"files\": {}}",
+        "dest": "cargo/vendor/objc2-security-0.3.2",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/objc2-service-management/objc2-service-management-0.3.2.crate",
+        "sha256": "b213642d6959cc6023ceb1217aa595eaaf09b8094ce95127c103cab611fe65e8",
+        "dest": "cargo/vendor/objc2-service-management-0.3.2"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"b213642d6959cc6023ceb1217aa595eaaf09b8094ce95127c103cab611fe65e8\", \"files\": {}}",
+        "dest": "cargo/vendor/objc2-service-management-0.3.2",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
         "url": "https://static.crates.io/crates/objc2-symbols/objc2-symbols-0.2.2.crate",
         "sha256": "0a684efe3dec1b305badae1a28f6555f6ddd3bb2c2267896782858d5a78404dc",
         "dest": "cargo/vendor/objc2-symbols-0.2.2"

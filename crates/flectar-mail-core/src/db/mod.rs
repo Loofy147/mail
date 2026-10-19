@@ -213,6 +213,10 @@ pub(crate) fn startup_presentation(path: &Path) -> StartupPresentation {
             .get("windowFrame")
             .and_then(serde_json::Value::as_str)
             .map(|frame| normalized_window_frame(frame).to_owned()),
+        close_to_tray: value
+            .get("closeToTray")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or_default(),
     }
 }
 
@@ -803,5 +807,29 @@ mod startup_preference_tests {
             startup_presentation(&path).window_frame.as_deref(),
             Some("system")
         );
+    }
+
+    #[test]
+    fn startup_close_to_tray_requires_an_explicit_boolean() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("mail.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO app_settings (key, value)
+             VALUES ('settings', '{\"closeToTray\": true}');",
+        )
+        .unwrap();
+        assert!(startup_presentation(&path).close_to_tray);
+
+        for value in [
+            "{}",
+            "{\"closeToTray\": \"true\"}",
+            "{\"closeToTray\": false}",
+        ] {
+            conn.execute("UPDATE app_settings SET value = ?1", [value])
+                .unwrap();
+            assert!(!startup_presentation(&path).close_to_tray, "{value}");
+        }
     }
 }

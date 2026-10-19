@@ -405,7 +405,8 @@ manually.
 The Flatpak preview is provided as a standalone test bundle. It is not yet a
 Flathub package and therefore does not receive automatic Flathub updates. Its
 close-to-tray option is disabled until the tray backend can use a sandbox-safe
-D-Bus name.
+D-Bus name. Starting automatically at sign-in goes through the desktop's
+Background portal and opens the window, because there is no tray to start into.
 
 Install the downloaded Linux package with either
 `sudo dnf install ./flectar-mail-<version>-linux-x64.rpm` or

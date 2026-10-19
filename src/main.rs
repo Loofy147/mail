@@ -3,6 +3,8 @@ mod account_mail_preferences;
 #[cfg(test)]
 mod account_removal_tests;
 mod attachment_controller;
+#[cfg(desktop)]
+mod autostart;
 mod browser;
 pub use browser::ExternalUrlOpener;
 mod calendar;
@@ -50,6 +52,8 @@ mod retained_model;
 mod rich_compose;
 mod settings_controller;
 mod sidebar_model;
+#[cfg(desktop)]
+mod single_instance;
 mod startup;
 mod startup_metrics;
 mod tabs;
@@ -1348,6 +1352,46 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         std::env::var("FLECTAR_BENCHMARK_DISABLE_SYNC").as_deref() == Ok("1");
     normalize_appimage_environment();
 
+    // Created before the backend: claiming the profile uses its reactor, and
+    // a launch that only forwards to a running instance should exit before
+    // any renderer or window is initialized.
+    let runtime = Rc::new(
+        tokio::runtime::Builder::new_multi_thread()
+            // Mail sync is I/O-bound. Avoid reserving one Tokio worker per
+            // logical CPU in a desktop shell while leaving room for the UI,
+            // Blitz renderer, and the core's dedicated DB threads.
+            .worker_threads(2)
+            .max_blocking_threads(2)
+            .enable_all()
+            .build()?,
+    );
+    #[cfg(desktop)]
+    let background_launch = autostart::launched_in_background();
+    #[cfg(desktop)]
+    let mut instance = {
+        use single_instance::{Acquired, Request};
+        let request = if background_launch {
+            Request::Nothing
+        } else {
+            Request::Show {
+                activation_token: window_chrome::launch_activation_token(),
+            }
+        };
+        match single_instance::acquire(&runtime, &platform.paths.data_dir, request) {
+            Ok(Acquired::Primary(primary)) => Some(primary),
+            Ok(Acquired::Forwarded) => return Ok(()),
+            Ok(Acquired::Unresponsive(error)) => {
+                return Err(
+                    format!("Flectar Mail is already running but did not respond: {error}").into(),
+                );
+            }
+            Err(error) => {
+                eprintln!("could not coordinate with other Flectar Mail processes: {error}");
+                None
+            }
+        }
+    };
+
     let renderer_preference_path = platform.paths.data_dir.join("renderer.json");
     let tabs_path = platform.paths.data_dir.join("tabs.json");
     let preferred_renderer = renderer_preferences::load(&renderer_preference_path);
@@ -1397,17 +1441,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     ))]
     slint::set_xdg_app_id("com.flectar.mail")?;
 
-    let runtime = Rc::new(
-        tokio::runtime::Builder::new_multi_thread()
-            // Mail sync is I/O-bound. Avoid reserving one Tokio worker per
-            // logical CPU in a desktop shell while leaving room for the UI,
-            // Blitz renderer, and the core's dedicated DB threads.
-            .worker_threads(2)
-            .max_blocking_threads(2)
-            .enable_all()
-            .build()?,
-    );
-
     // Register the deterministic emoji face before any initial text is measured.
     configure_emoji_font_fallback()?;
 
@@ -1446,16 +1479,28 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     // the system picker on mobile. The document entry points (compose
     // attachments, account backups, database snapshots) stay available.
     app.set_document_apis_supported(true);
-    renderer_preferences::initialize_step(use_wgpu, || app.show())?;
-    startup_metrics.emit(
-        "window_shown",
-        serde_json::json!({
-            "renderer": if use_wgpu { "wgpu" } else { "software" },
-            "slint_backend": std::env::var("SLINT_BACKEND").ok(),
-            "display": std::env::var("DISPLAY").ok(),
-            "wayland_display": std::env::var("WAYLAND_DISPLAY").ok(),
-        }),
-    );
+    // A sign-in launch stays in the tray only when the user keeps the app
+    // there and a tray can actually show it; otherwise the window opens.
+    #[cfg(desktop)]
+    let start_hidden = background_launch
+        && startup_presentation.close_to_tray
+        && window_controller::tray_host_available(&runtime);
+    #[cfg(mobile)]
+    let start_hidden = false;
+    if start_hidden {
+        startup_metrics.emit("started_in_tray", serde_json::Value::Null);
+    } else {
+        renderer_preferences::initialize_step(use_wgpu, || app.show())?;
+        startup_metrics.emit(
+            "window_shown",
+            serde_json::json!({
+                "renderer": if use_wgpu { "wgpu" } else { "software" },
+                "slint_backend": std::env::var("SLINT_BACKEND").ok(),
+                "display": std::env::var("DISPLAY").ok(),
+                "wayland_display": std::env::var("WAYLAND_DISPLAY").ok(),
+            }),
+        );
+    }
     startup_metrics.schedule_rendered_frame(app.as_weak(), "first_frame");
     let favicon_wake = UiWake::new(app.as_weak(), |app| app.invoke_drain_favicon_updates());
     let profile_avatar_wake = UiWake::new(app.as_weak(), |app| {
@@ -1516,7 +1561,21 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     app.set_microsoft_oauth_bundled(
         flectar_mail_core::oauth::providers::has_bundled_credentials(Provider::Microsoft),
     );
+    // A start in the tray needs its icon now; a visible start registers it
+    // once full settings are applied, after the first frame.
+    if start_hidden {
+        app.set_close_to_tray(true);
+    }
     let tray = create_and_register_window_lifecycle(&app)?;
+    #[cfg(desktop)]
+    if let Some(instance) = instance.as_mut() {
+        let app = app.as_weak();
+        instance.serve(&runtime, move |activation_token| {
+            let _ = app.upgrade_in_event_loop(move |app| {
+                window_controller::activate(&app, activation_token);
+            });
+        });
+    }
     let email_renderer = Rc::clone(&initial_state.email_renderer);
 
     let gpu_startup_error = Rc::new(RefCell::new(None::<String>));
@@ -3915,6 +3974,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     refresh_connected_accounts(&app, &startup_state);
                 }
             }
+        }
+        if let Some(app) = startup_app.upgrade() {
+            window_controller::trim_while_hidden(&app);
         }
     });
 
@@ -7257,15 +7319,18 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         // Slint can retain a deferred window-surface error without
         // immediately exiting its event loop. Bound that otherwise blank-window
         // startup; normal GPU rendering marks completion in the notifier above.
+        // A start in the tray creates the surface when the window first opens.
         let completed = gpu_startup_completed.clone();
         let error = gpu_startup_error.clone();
-        Timer::single_shot(Duration::from_secs(15), move || {
-            if !completed.get() {
-                error.borrow_mut().get_or_insert_with(|| {
-                    "GPU did not produce its first frame within 15 seconds".into()
-                });
-                let _ = slint::quit_event_loop();
-            }
+        window_controller::when_first_shown(&app, move || {
+            Timer::single_shot(Duration::from_secs(15), move || {
+                if !completed.get() {
+                    error.borrow_mut().get_or_insert_with(|| {
+                        "GPU did not produce its first frame within 15 seconds".into()
+                    });
+                    let _ = slint::quit_event_loop();
+                }
+            });
         });
     }
 
@@ -7347,12 +7412,17 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
     });
 
+    if start_hidden {
+        app.invoke_suspend_rendering(true);
+    }
+
     // The main window is already shown above and the independently compiled
     // tray participates in the same process-wide event loop. This is Slint's
     // documented multi-component pattern; calling AppWindow::run() here would
-    // redundantly show the main window a second time.
+    // redundantly show the main window a second time. A start in the tray has
+    // no visible window, so only an explicit quit may end the loop.
     startup_metrics.emit("event_loop_entered", serde_json::Value::Null);
-    let event_loop_result = if benchmark_tray {
+    let event_loop_result = if benchmark_tray || start_hidden {
         slint::run_event_loop_until_quit()
     } else {
         slint::run_event_loop()
