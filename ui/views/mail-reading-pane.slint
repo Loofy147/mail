@@ -360,6 +360,8 @@ export component MailReadingPane inherits Rectangle {
         { id: "reply", title: @tr("Reply"), icon: @image-url("../icons/lucide/outline/reply.svg") },
         { id: "reply_all", title: @tr("Reply all"), icon: @image-url("../icons/lucide/outline/reply-all.svg") },
         { id: "forward", title: @tr("Forward"), icon: @image-url("../icons/lucide/outline/forward.svg") },
+        { id: "star", title: root.selected_starred ? @tr("Remove star") : @tr("Star message"), icon: root.selected_starred ? @image-url("../icons/lucide/filled/star.svg") : @image-url("../icons/lucide/outline/star.svg") },
+        { id: "labels", title: @tr("Manage labels"), icon: root.selected-account-uses-labels ? @image-url("../icons/lucide/filled/tag.svg") : @image-url("../icons/lucide/filled/file-directory.svg") },
         { id: "openpgp", title: @tr("Decrypt / verify OpenPGP"), icon: @image-url("../icons/lucide/outline/lock.svg") },
         { id: "print", title: @tr("Print message"), icon: @image-url("../icons/lucide/outline/printer.svg") },
         { id: "browser", title: @tr("Open in browser"), icon: @image-url("../icons/lucide/outline/browser.svg") },
@@ -376,6 +378,8 @@ export component MailReadingPane inherits Rectangle {
         { id: "reply", title: @tr("Reply"), icon: @image-url("../icons/lucide/outline/reply.svg") },
         { id: "reply_all", title: @tr("Reply all"), icon: @image-url("../icons/lucide/outline/reply-all.svg") },
         { id: "forward", title: @tr("Forward"), icon: @image-url("../icons/lucide/outline/forward.svg") },
+        { id: "star", title: root.selected_starred ? @tr("Remove star") : @tr("Star message"), icon: root.selected_starred ? @image-url("../icons/lucide/filled/star.svg") : @image-url("../icons/lucide/outline/star.svg") },
+        { id: "labels", title: @tr("Manage labels"), icon: root.selected-account-uses-labels ? @image-url("../icons/lucide/filled/tag.svg") : @image-url("../icons/lucide/filled/file-directory.svg") },
         { id: "openpgp", title: @tr("Decrypt / verify OpenPGP"), icon: @image-url("../icons/lucide/outline/lock.svg") },
         { id: "browser", title: @tr("Open in browser"), icon: @image-url("../icons/lucide/outline/browser.svg") },
         { id: "rendering_info", title: @tr("About email rendering"), icon: @image-url("../icons/lucide/outline/info.svg") },
@@ -391,13 +395,26 @@ export component MailReadingPane inherits Rectangle {
     // integrated window controls or a narrow pane leave too little room.
     private property <length> toolbar-room: 1000px;
     private property <length> toolbar-button: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
-    private property <bool> show-navigation: root.toolbar-room >= 10 * root.toolbar-button + 9 * 6px;
+    private property <length> toolbar-spacing: 6px;
+    private property <length> toolbar-slot: root.toolbar-button + root.toolbar-spacing;
+    // Integrated caption buttons can leave room for only Close, Reply and
+    // More at the minimum window width. Keep all other actions in the menu.
+    private property <bool> show-label-action: root.toolbar-room >= 4 * root.toolbar-slot;
+    private property <bool> show-star-action: root.toolbar-room >= 5 * root.toolbar-slot;
+    // Reply stays available even in compact panes. Reserve space for the
+    // other compose actions before adding message management or navigation.
+    // Each count includes one gap per button (there is also a stretch spacer).
+    private property <bool> show-all-compose-actions: !root.compact
+        && root.toolbar-room >= 7 * root.toolbar-slot;
+    private property <int> compose-button-count: root.selected_is_draft ? 0
+        : root.show-all-compose-actions ? 3 : 1;
+    private property <bool> show-navigation: root.toolbar-room >= (10 + root.compose-button-count) * root.toolbar-slot;
     // Compact pages never show navigation or spam, so read is the only
     // secondary action there.
-    private property <int> secondary-button-count: root.compact ? 7 : 8;
+    private property <int> secondary-button-count: (root.compact ? 7 : 8) + root.compose-button-count;
     private property <bool> show-secondary-actions: root.toolbar-room
-        >= root.secondary-button-count * root.toolbar-button + (root.secondary-button-count - 1) * 6px;
-    private property <bool> show-primary-actions: root.toolbar-room >= 6 * root.toolbar-button + 5 * 6px;
+        >= root.secondary-button-count * root.toolbar-slot;
+    private property <bool> show-primary-actions: root.toolbar-room >= (6 + root.compose-button-count) * root.toolbar-slot;
     in-out property <bool> text_mode: false;
     in-out property <bool> source_mode: false;
     in-out property <bool> rendering_info_open: false;
@@ -428,7 +445,8 @@ export component MailReadingPane inherits Rectangle {
             - root.message-actions-height - root.message-bottom-padding)
         : root.rendered-email-height;
     private property <length> attachment-flow-y: root.message-body-content-height;
-    private property <length> message-actions-height: root.compact ? 52px : 42px;
+    private property <length> message-actions-padding: root.compact ? 4px : 5px;
+    private property <length> message-actions-height: root.toolbar-button + 2 * root.message-actions-padding;
     private property <length> message-bottom-padding: root.compact ? 10px : 12px;
     private property <length> thread-header-height: 64px;
     private property <length> thread-item-stride: root.thread-header-height + root.thread-item-gap;
@@ -622,7 +640,7 @@ export component MailReadingPane inherits Rectangle {
                             padding-left: max(parent.inset, toolbar-clearance.leading);
                             padding-right: max(parent.inset, toolbar-clearance.trailing);
                             padding-bottom: 0px;
-                            spacing: 6px;
+                            spacing: root.toolbar-spacing;
                             cross-axis-alignment: center;
                             ToolbarIconButton {
                                 visible: root.has_selected;
@@ -656,6 +674,34 @@ export component MailReadingPane inherits Rectangle {
                                 clicked => { root.select_email(root.next-email-id); }
                             }
                             Rectangle { horizontal-stretch: 1; }
+                            if !root.selected_is_draft : ToolbarIconButton {
+                                interactive: root.has_selected;
+                                compact: root.compact;
+                                icon: @image-url("../icons/lucide/outline/reply.svg");
+                                icon-color: root.secondary-text;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Reply");
+                                accessible-id: "message-toolbar-reply-button";
+                                clicked => { root.compose_message_action("reply"); }
+                            }
+                            if !root.selected_is_draft && root.show-all-compose-actions : ToolbarIconButton {
+                                interactive: root.has_selected;
+                                icon: @image-url("../icons/lucide/outline/reply-all.svg");
+                                icon-color: root.secondary-text;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Reply all");
+                                accessible-id: "message-toolbar-reply-all-button";
+                                clicked => { root.compose_message_action("reply_all"); }
+                            }
+                            if !root.selected_is_draft && root.show-all-compose-actions : ToolbarIconButton {
+                                interactive: root.has_selected;
+                                icon: @image-url("../icons/lucide/outline/forward.svg");
+                                icon-color: root.secondary-text;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Forward");
+                                accessible-id: "message-toolbar-forward-button";
+                                clicked => { root.compose_message_action("forward"); }
+                            }
                             if root.show-primary-actions : ToolbarIconButton {
                                 visible: !root.selected_is_draft;
                                 interactive: root.has_selected;
@@ -667,8 +713,7 @@ export component MailReadingPane inherits Rectangle {
                                 tooltip-text: @tr("Archive message");
                                 clicked => { root.message_action("archive"); }
                             }
-                            ToolbarIconButton {
-                                visible: !root.selected_is_draft;
+                            if !root.selected_is_draft && root.show-star-action : ToolbarIconButton {
                                 interactive: root.has_selected;
                                 compact: root.compact;
                                 icon: root.selected_starred ? @image-url("../icons/lucide/filled/star.svg") : @image-url("../icons/lucide/outline/star.svg");
@@ -710,9 +755,11 @@ export component MailReadingPane inherits Rectangle {
                             }
                             label-action := Rectangle {
                                 visible: !root.selected_is_draft;
-                                width: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
-                                height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
-                                label-button := ToolbarIconButton {
+                                // Keep the popup anchor alive when the trigger
+                                // moves into More, without reserving a button.
+                                width: root.show-label-action ? root.toolbar-button : 0px;
+                                height: root.toolbar-button;
+                                if root.show-label-action : ToolbarIconButton {
                                     compact: root.compact;
                                     width: parent.width;
                                     height: parent.height;
@@ -733,7 +780,7 @@ export component MailReadingPane inherits Rectangle {
                                 }
 
                                 label-popup := PopupWindow {
-                                    x: root.compact ? -232px : -252px;
+                                    x: max(8px - label-action.absolute-position.x, parent.width - self.width);
                                     y: parent.height + 4px;
                                     width: 288px;
                                     height: 330px;
@@ -925,6 +972,12 @@ export component MailReadingPane inherits Rectangle {
                                 activated(action) => {
                                     if action == "edit_draft" || action == "reply" || action == "reply_all" || action == "forward" {
                                         root.compose_message_action(action);
+                                    } else if action == "star" {
+                                        root.message_action(root.selected_starred ? "unstar" : "star");
+                                    } else if action == "labels" {
+                                        root.label-search-query = "";
+                                        root.search-mail-labels("");
+                                        label-popup.show();
                                     } else if action == "openpgp" {
                                         AccountMailPreferences.read-message();
                                     } else if action == "print" {
@@ -1693,15 +1746,16 @@ export component MailReadingPane inherits Rectangle {
                                     background: root.surface;
 
                                     Rectangle {
+                                        y: 0px;
                                         width: parent.width;
                                         height: 1px;
                                         background: root.border-subtle;
                                     }
 
                                     HorizontalBox {
-                                        padding-top: root.compact ? 4px : 5px;
+                                        padding-top: root.message-actions-padding;
                                         padding-right: 10px;
-                                        padding-bottom: root.compact ? 4px : 5px;
+                                        padding-bottom: root.message-actions-padding;
                                         padding-left: 10px;
                                         spacing: 4px;
                                         alignment: start;
