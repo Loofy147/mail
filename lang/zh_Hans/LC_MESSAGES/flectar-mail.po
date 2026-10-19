@@ -106,31 +106,31 @@ msgstr "12月"
 msgid "December"
 msgstr "十二月"
 
-#: ui/app.slint:94 ui/components/calendar.slint:675
+#: ui/app.slint:94 ui/components/calendar.slint:677
 msgid "Mon"
 msgstr "周一"
 
-#: ui/app.slint:95 ui/components/calendar.slint:675
+#: ui/app.slint:95 ui/components/calendar.slint:677
 msgid "Tue"
 msgstr "周二"
 
-#: ui/app.slint:96 ui/components/calendar.slint:675
+#: ui/app.slint:96 ui/components/calendar.slint:677
 msgid "Wed"
 msgstr "周三"
 
-#: ui/app.slint:97 ui/components/calendar.slint:675
+#: ui/app.slint:97 ui/components/calendar.slint:677
 msgid "Thu"
 msgstr "周四"
 
-#: ui/app.slint:98 ui/components/calendar.slint:675
+#: ui/app.slint:98 ui/components/calendar.slint:677
 msgid "Fri"
 msgstr "周五"
 
-#: ui/app.slint:99 ui/components/calendar.slint:675
+#: ui/app.slint:99 ui/components/calendar.slint:677
 msgid "Sat"
 msgstr "周六"
 
-#: ui/app.slint:100 ui/components/calendar.slint:675
+#: ui/app.slint:100 ui/components/calendar.slint:677
 msgid "Sun"
 msgstr "周日"
 
@@ -1386,7 +1386,7 @@ msgstr ""
 msgid "Permanently delete this conversation from Trash?"
 msgstr ""
 
-#: ui/app.slint:1957 ui/components/calendar.slint:926
+#: ui/app.slint:1957 ui/components/calendar.slint:928
 msgid "This action cannot be undone."
 msgstr "此操作无法撤销。"
 
@@ -1815,7 +1815,7 @@ msgid "Cancelled"
 msgstr "已取消"
 
 #: ui/components/calendar-agenda.slint:255 ui/components/calendar.slint:63
-#: ui/components/calendar.slint:709
+#: ui/components/calendar.slint:711
 msgid "View details for {}"
 msgstr "查看 {} 的详情"
 
@@ -1848,55 +1848,55 @@ msgid "Reset filters"
 msgstr "重置筛选条件"
 
 #: ui/components/calendar-agenda.slint:288 ui/components/calendar.slint:112
-#: ui/components/calendar.slint:737
+#: ui/components/calendar.slint:739
 msgid "New event"
 msgstr "新建日程"
 
-#: ui/components/calendar.slint:141 ui/components/calendar.slint:735
+#: ui/components/calendar.slint:141 ui/components/calendar.slint:737
 msgid "Previous month"
 msgstr "上个月"
 
-#: ui/components/calendar.slint:155 ui/components/calendar.slint:736
+#: ui/components/calendar.slint:155 ui/components/calendar.slint:738
 msgid "Next month"
 msgstr "下个月"
 
-#: ui/components/calendar.slint:160 ui/components/calendar.slint:779
+#: ui/components/calendar.slint:160 ui/components/calendar.slint:781
 msgctxt "Monday initial"
 msgid "M"
 msgstr "一"
 
-#: ui/components/calendar.slint:161 ui/components/calendar.slint:779
+#: ui/components/calendar.slint:161 ui/components/calendar.slint:781
 msgctxt "Tuesday initial"
 msgid "T"
 msgstr "二"
 
-#: ui/components/calendar.slint:162 ui/components/calendar.slint:779
+#: ui/components/calendar.slint:162 ui/components/calendar.slint:781
 msgctxt "Wednesday initial"
 msgid "W"
 msgstr "三"
 
-#: ui/components/calendar.slint:163 ui/components/calendar.slint:779
+#: ui/components/calendar.slint:163 ui/components/calendar.slint:781
 msgctxt "Thursday initial"
 msgid "T"
 msgstr "四"
 
-#: ui/components/calendar.slint:164 ui/components/calendar.slint:779
+#: ui/components/calendar.slint:164 ui/components/calendar.slint:781
 msgctxt "Friday initial"
 msgid "F"
 msgstr "五"
 
-#: ui/components/calendar.slint:165 ui/components/calendar.slint:779
+#: ui/components/calendar.slint:165 ui/components/calendar.slint:781
 msgctxt "Saturday initial"
 msgid "S"
 msgstr "六"
 
-#: ui/components/calendar.slint:166 ui/components/calendar.slint:779
+#: ui/components/calendar.slint:166 ui/components/calendar.slint:781
 msgctxt "Sunday initial"
 msgid "S"
 msgstr "日"
 
 #: ui/components/calendar.slint:212 ui/components/calendar.slint:611
-#: ui/components/calendar.slint:809
+#: ui/components/calendar.slint:811
 msgid "Select {}"
 msgstr "选择 {}"
 
@@ -1969,15 +1969,15 @@ msgstr "下一周期"
 msgid "Week"
 msgstr "周"
 
-#: ui/components/calendar.slint:567 ui/components/calendar.slint:748
+#: ui/components/calendar.slint:567 ui/components/calendar.slint:750
 msgid "Month"
 msgstr "月"
 
-#: ui/components/calendar.slint:568 ui/components/calendar.slint:749
+#: ui/components/calendar.slint:568 ui/components/calendar.slint:751
 msgid "Agenda"
 msgstr "日程"
 
-#: ui/components/calendar.slint:582 ui/components/calendar.slint:761
+#: ui/components/calendar.slint:582 ui/components/calendar.slint:763
 msgid "Local time · {}"
 msgstr "本地时间 · {}"
 
@@ -1989,27 +1989,27 @@ msgstr "本地"
 msgid "ALL DAY"
 msgstr "全天"
 
-#: ui/components/calendar.slint:820
+#: ui/components/calendar.slint:822
 msgid "Agenda · {}"
 msgstr "日程 · {}"
 
-#: ui/components/calendar.slint:855
+#: ui/components/calendar.slint:857
 msgid "No events for this date"
 msgstr "该日期没有日程"
 
-#: ui/components/calendar.slint:924
+#: ui/components/calendar.slint:926
 msgid "Delete this event?"
 msgstr "删除此日程？"
 
-#: ui/components/calendar.slint:925
+#: ui/components/calendar.slint:927
 msgid "This event will be removed from your calendar."
 msgstr "此日程将从您的日历中移除。"
 
-#: ui/components/calendar.slint:927
+#: ui/components/calendar.slint:929
 msgid "Delete event"
 msgstr "删除日程"
 
-#: ui/components/calendar.slint:928
+#: ui/components/calendar.slint:930
 msgid "Keep event"
 msgstr "保留日程"
 
