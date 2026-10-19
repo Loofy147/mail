@@ -17,9 +17,12 @@ pub mod favicon;
 mod files_controller;
 mod latest_load;
 mod mail;
+#[cfg(test)]
+mod mail_drop_tests;
 mod mail_groups;
 mod mail_navigation;
 mod mail_render_projection;
+mod mail_scope;
 mod mail_setup;
 mod mail_view_model;
 mod mail_work;
@@ -95,6 +98,7 @@ use mail_groups::{
     MailGroupState, mail_group_key, mail_list_entry_key, project_mail_list, same_mail_list_entry,
 };
 use mail_render_projection::*;
+use mail_scope::{Scope, StandardMailbox};
 use mail_view_model::*;
 use renderer::{GpuEmailRenderer, RenderedEmail};
 use renderer_input_controller::register_renderer_input_callbacks;
@@ -371,7 +375,7 @@ struct ComposeSendUpdate {
 
 struct MailListUpdate {
     view_generation: u64,
-    scope: String,
+    scope: Scope,
     query: String,
     kind: MailListUpdateKind,
     result: Result<mail::MailPage, String>,
@@ -562,7 +566,9 @@ struct InboxState {
     sidebar_rows: Rc<SidebarModel>,
     sidebar_animation: Rc<SidebarAnimation>,
     folder_filter: String,
-    scope: String,
+    /// Always visible for `connected_accounts`; write through
+    /// [`InboxState::set_scope`] and [`InboxState::set_connected_accounts`].
+    scope: Scope,
     query: String,
     search_filter: String,
     inbox_count: usize,
@@ -620,13 +626,6 @@ enum MailDropDestination {
     Route(String),
 }
 
-fn navigation_label_id(scope: &str) -> Option<i64> {
-    ["AccountLabel:", "GlobalLabel:", "Category:", "Label:"]
-        .into_iter()
-        .find_map(|prefix| scope.strip_prefix(prefix))
-        .and_then(|id| id.parse().ok())
-}
-
 fn mail_drag_payload(data: &DataTransfer) -> Option<Rc<MailDragPayload>> {
     data.user_data()?.downcast::<MailDragPayload>().ok()
 }
@@ -647,25 +646,27 @@ fn mail_operation_ids(
     }
 }
 
-fn standard_mailbox_folder(state: &InboxState, account_id: i64, label: &str) -> Option<i64> {
+/// The provider folder backing one account's standard mailbox, if any.
+fn standard_mailbox_folder(
+    state: &InboxState,
+    account_id: i64,
+    mailbox: StandardMailbox,
+) -> Option<i64> {
+    let scope = Scope::Account {
+        account_id,
+        mailbox,
+    };
     state
         .mailboxes
         .iter()
-        .find(|mailbox| {
-            !mailbox.is_account
-                && mailbox.account_id == account_id
-                && mailbox.is_standard
-                && mailbox.is_selectable
-                && mailbox.label == label
-                && mailbox.folder_id >= 0
-        })
-        .map(|mailbox| mailbox.folder_id)
+        .find(|entry| entry.scope == Some(scope) && entry.is_selectable && entry.folder_id >= 0)
+        .map(|entry| entry.folder_id)
 }
 
 fn resolve_single_mail_drop(
     state: &InboxState,
     item: &MailDragItem,
-    target_scope: &str,
+    target_scope: Scope,
     target_account_id: i32,
     target_folder_id: i32,
 ) -> Result<(i64, MailDropDestination), String> {
@@ -688,11 +689,9 @@ fn resolve_single_mail_drop(
     }
 
     let destination = match target_scope {
-        "Important" => MailDropDestination::Route("important".to_owned()),
-        "Other" => MailDropDestination::Route("other".to_owned()),
-        scope if navigation_label_id(scope).is_some() => {
-            let label_id = navigation_label_id(scope)
-                .ok_or_else(|| "label destination is invalid".to_owned())?;
+        Scope::Important => MailDropDestination::Route("important".to_owned()),
+        Scope::Other => MailDropDestination::Route("other".to_owned()),
+        Scope::Label { id: label_id, .. } => {
             let label = state
                 .labels
                 .iter()
@@ -715,31 +714,41 @@ fn resolve_single_mail_drop(
                 MailDropDestination::Label(label_id)
             }
         }
-        "Unified Starred" if !message.starred => MailDropDestination::Action("star"),
-        "Unified Inbox" if message.folder == "Spam" => MailDropDestination::Action("not_spam"),
-        "Unified Inbox" if message.folder == "Archive" => MailDropDestination::Action("unarchive"),
-        "Unified Inbox" if message.folder != "Inbox" => MailDropDestination::Folder(
-            standard_mailbox_folder(state, message.account_id, "Inbox")
-                .ok_or_else(|| "this account has no inbox destination".to_owned())?,
-        ),
-        "Unified Archive" if message.folder != "Archive" => MailDropDestination::Folder(
-            standard_mailbox_folder(state, message.account_id, "Archive")
-                .ok_or_else(|| "this account has no archive destination".to_owned())?,
-        ),
-        "Unified Spam" if message.folder != "Spam" => {
-            standard_mailbox_folder(state, message.account_id, "Spam")
+        Scope::Unified(StandardMailbox::Starred) if !message.starred => {
+            MailDropDestination::Action("star")
+        }
+        Scope::Unified(StandardMailbox::Inbox) if message.folder == "Spam" => {
+            MailDropDestination::Action("not_spam")
+        }
+        Scope::Unified(StandardMailbox::Inbox) if message.folder == "Archive" => {
+            MailDropDestination::Action("unarchive")
+        }
+        Scope::Unified(StandardMailbox::Inbox) if message.folder != "Inbox" => {
+            MailDropDestination::Folder(
+                standard_mailbox_folder(state, message.account_id, StandardMailbox::Inbox)
+                    .ok_or_else(|| "this account has no inbox destination".to_owned())?,
+            )
+        }
+        Scope::Unified(StandardMailbox::Archive) if message.folder != "Archive" => {
+            MailDropDestination::Folder(
+                standard_mailbox_folder(state, message.account_id, StandardMailbox::Archive)
+                    .ok_or_else(|| "this account has no archive destination".to_owned())?,
+            )
+        }
+        Scope::Unified(StandardMailbox::Spam) if message.folder != "Spam" => {
+            standard_mailbox_folder(state, message.account_id, StandardMailbox::Spam)
                 .ok_or_else(|| "this account has no spam destination".to_owned())?;
             MailDropDestination::Action("spam")
         }
-        "Unified Trash" if message.folder != "Trash" => {
-            standard_mailbox_folder(state, message.account_id, "Trash")
+        Scope::Unified(StandardMailbox::Trash) if message.folder != "Trash" => {
+            standard_mailbox_folder(state, message.account_id, StandardMailbox::Trash)
                 .ok_or_else(|| "this account has no trash destination".to_owned())?;
             MailDropDestination::Action("trash")
         }
-        scope if scope.starts_with("Unified ") => {
+        Scope::Unified(_) => {
             return Err("this unified mailbox is not a drop destination".to_owned());
         }
-        _ => {
+        Scope::Folder(_) | Scope::Account { .. } => {
             if i64::from(target_account_id) != message.account_id {
                 return Err("messages cannot be moved between accounts".to_owned());
             }
@@ -749,7 +758,7 @@ fn resolve_single_mail_drop(
                 .find(|mailbox| {
                     !mailbox.is_account
                         && mailbox.account_id == message.account_id
-                        && mailbox.scope == target_scope
+                        && mailbox.scope == Some(target_scope)
                         && mailbox.folder_id == i64::from(target_folder_id)
                 })
                 .ok_or_else(|| "mailbox destination is no longer available".to_owned())?;
@@ -759,18 +768,34 @@ fn resolve_single_mail_drop(
             if target.label == message.folder {
                 return Err("message is already in this destination".to_owned());
             }
-            match target.label.as_str() {
-                "Starred" if !message.starred => MailDropDestination::Action("star"),
-                "Inbox" if message.folder == "Spam" => MailDropDestination::Action("not_spam"),
-                "Inbox" if message.folder == "Archive" => MailDropDestination::Action("unarchive"),
-                "Archive" => MailDropDestination::Folder(target.folder_id),
-                "Spam" => MailDropDestination::Action("spam"),
-                "Trash" => MailDropDestination::Action("trash"),
-                "Sent" | "Drafts" | "Starred" => {
+            // Custom folders are plain moves even when named like a
+            // standard mailbox.
+            let standard = match target_scope {
+                Scope::Account { mailbox, .. } => Some(mailbox),
+                _ => None,
+            };
+            match standard {
+                Some(StandardMailbox::Starred) if !message.starred => {
+                    MailDropDestination::Action("star")
+                }
+                Some(StandardMailbox::Inbox) if message.folder == "Spam" => {
+                    MailDropDestination::Action("not_spam")
+                }
+                Some(StandardMailbox::Inbox) if message.folder == "Archive" => {
+                    MailDropDestination::Action("unarchive")
+                }
+                Some(StandardMailbox::Archive) => MailDropDestination::Folder(target.folder_id),
+                Some(StandardMailbox::Spam) => MailDropDestination::Action("spam"),
+                Some(StandardMailbox::Trash) => MailDropDestination::Action("trash"),
+                Some(StandardMailbox::Sent | StandardMailbox::Drafts | StandardMailbox::Starred) => {
                     return Err("this mailbox is not a drop destination".to_owned());
                 }
-                _ if target.folder_id >= 0 => MailDropDestination::Folder(target.folder_id),
-                _ => return Err("mailbox destination is unavailable".to_owned()),
+                Some(StandardMailbox::Inbox) | None if target.folder_id >= 0 => {
+                    MailDropDestination::Folder(target.folder_id)
+                }
+                Some(StandardMailbox::Inbox) | None => {
+                    return Err("mailbox destination is unavailable".to_owned());
+                }
             }
         }
     };
@@ -781,7 +806,7 @@ fn resolve_single_mail_drop(
 fn resolve_mail_drop(
     state: &InboxState,
     payload: &MailDragPayload,
-    target_scope: &str,
+    target_scope: Scope,
     target_account_id: i32,
     target_folder_id: i32,
 ) -> Result<Vec<(i32, i64, MailDropDestination)>, String> {
@@ -809,7 +834,7 @@ fn perform_mail_drop(
     state: &Rc<RefCell<InboxState>>,
     _runtime: &tokio::runtime::Runtime,
     payload: &MailDragPayload,
-    target_scope: &str,
+    target_scope: Scope,
     target_account_id: i32,
     target_folder_id: i32,
 ) -> Result<(), String> {
@@ -1004,7 +1029,7 @@ impl InboxState {
             email_rows: Rc::new(VecModel::default()),
             mail_list_entries: Rc::new(VecModel::default()),
             mail_groups: MailGroupState::default(),
-            scope: "Unified Inbox".to_owned(),
+            scope: Scope::UNIFIED_INBOX,
             query: String::new(),
             search_filter: "All mail".to_owned(),
             page: 1,
@@ -1041,6 +1066,22 @@ impl InboxState {
         }
     }
 
+    /// Select `scope`, or the equivalent mailbox the sidebar shows for the
+    /// connected accounts.
+    fn set_scope(&mut self, scope: Scope) {
+        self.scope = scope.visible_for(&self.connected_accounts);
+    }
+
+    /// Replace the account inventory. Returns whether the selection moved to
+    /// stay visible, in which case the caller must reload the message list.
+    #[must_use]
+    fn set_connected_accounts(&mut self, accounts: Vec<Account>) -> bool {
+        self.connected_accounts = accounts;
+        let previous = self.scope;
+        self.set_scope(previous);
+        self.scope != previous
+    }
+
     fn queue_warm_start_update(&self) {
         // A warm projection loaded before Core exists is not authoritative and
         // must never overwrite a newer cache if startup subsequently fails.
@@ -1058,7 +1099,7 @@ impl InboxState {
         }
         self.warm_start_cache
             .save(WarmStartSnapshot::capture(WarmStartProjection {
-                scope: &self.scope,
+                scope: self.scope,
                 inbox_count: self.inbox_count,
                 next_cursor: self.next_cursor.and_then(|cursor| match cursor {
                     MailCursor::Thread(cursor) => Some(cursor),
@@ -1226,8 +1267,7 @@ fn spawn_startup_load(
         let warm = load_warm_start_snapshot(&paths.warm_start_file()).await;
         let preferred_scope = warm
             .as_ref()
-            .map(|snapshot| snapshot.scope.clone())
-            .unwrap_or_else(|| "Unified Inbox".to_owned());
+            .map_or(Scope::UNIFIED_INBOX, |snapshot| snapshot.scope);
         metrics.emit(
             "warm_cache_loaded",
             serde_json::json!({
@@ -1256,7 +1296,7 @@ fn spawn_startup_load(
             paths,
             credentials,
             oauth_redirects,
-            &preferred_scope,
+            preferred_scope,
             &metrics,
         )
         .await;
@@ -1269,7 +1309,7 @@ fn spawn_startup_load(
         let follow_up = result
             .as_ref()
             .ok()
-            .map(|snapshot| (snapshot.core.clone(), snapshot.scope.clone()));
+            .map(|snapshot| (snapshot.core.clone(), snapshot.scope));
         let _ = startup_tx
             .send(StartupUpdate::Ready(result.map(Box::new)))
             .await;
@@ -1280,7 +1320,7 @@ fn spawn_startup_load(
         let metadata_tx = startup_tx.clone();
         let metadata_core = core.clone();
         tokio::spawn(async move {
-            let result = load_startup_mail_metadata(&metadata_core, &scope).await;
+            let result = load_startup_mail_metadata(&metadata_core, scope).await;
             let _ = metadata_tx.send(StartupUpdate::MailMetadata(result)).await;
         });
     });
@@ -1694,13 +1734,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_mail_drop_check = Rc::clone(&state);
     app.global::<MailDragApi>().on_can_drop_on_mailbox(
         move |data, target_scope, target_account_id, target_folder_id| {
-            let Some(payload) = mail_drag_payload(&data) else {
+            let (Some(payload), Ok(target_scope)) =
+                (mail_drag_payload(&data), target_scope.parse::<Scope>())
+            else {
                 return false;
             };
             resolve_mail_drop(
                 &state_for_mail_drop_check.borrow(),
                 &payload,
-                target_scope.as_str(),
+                target_scope,
                 target_account_id,
                 target_folder_id,
             )
@@ -1722,12 +1764,19 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 ));
                 return false;
             };
+            let Ok(target_scope) = target_scope.parse::<Scope>() else {
+                app.set_render_status(UiMessage::detail(
+                    "Message action failed: {}",
+                    "invalid mailbox destination",
+                ));
+                return false;
+            };
             match perform_mail_drop(
                 &app,
                 &state_for_mail_drop,
                 &runtime_for_mail_drop,
                 &payload,
-                target_scope.as_str(),
+                target_scope,
                 target_account_id,
                 target_folder_id,
             ) {
@@ -2860,7 +2909,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 snapshot_is_current(&folder_update_state, metadata.account_revision)
             }) {
                 let mut state = folder_update_state.borrow_mut();
-                state.scope = metadata.scope.clone();
+                state.set_scope(metadata.scope);
                 state.mailboxes = metadata.mailboxes;
                 state.unified_mailboxes = metadata.unified_mailboxes;
                 state.inbox_count = metadata.inbox_count;
@@ -2937,7 +2986,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let Some(core) = create_folder_state.borrow().core.clone() else {
             return;
         };
-        let scope = create_folder_state.borrow().scope.clone();
+        let scope = create_folder_state.borrow().scope;
         let updates = create_folder_updates.clone();
         let name = name.to_string();
         create_folder_runtime.spawn(async move {
@@ -2949,7 +2998,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 )
                 .await;
             let metadata = if result.is_ok() {
-                core.load_mail_metadata(&scope).await.ok()
+                core.load_mail_metadata(scope).await.ok()
             } else {
                 None
             };
@@ -2974,13 +3023,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let Some(core) = rename_folder_state.borrow().core.clone() else {
             return;
         };
-        let scope = rename_folder_state.borrow().scope.clone();
+        let scope = rename_folder_state.borrow().scope;
         let updates = rename_folder_updates.clone();
         let name = name.to_string();
         rename_folder_runtime.spawn(async move {
             let result = core.rename_folder(i64::from(folder_id), name).await;
             let metadata = if result.is_ok() {
-                core.load_mail_metadata(&scope).await.ok()
+                core.load_mail_metadata(scope).await.ok()
             } else {
                 None
             };
@@ -3008,10 +3057,10 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let folder_id = i64::from(folder_id);
         let (current_scope, selected_folder_is_deleted) = {
             let state = delete_folder_state.borrow();
-            let selected_folder_id = state
-                .scope
-                .strip_prefix("Folder:")
-                .and_then(|value| value.parse::<i64>().ok());
+            let selected_folder_id = match state.scope {
+                Scope::Folder(id) => Some(id),
+                _ => None,
+            };
             let parents = state
                 .mailboxes
                 .iter()
@@ -3028,10 +3077,10 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 }
                 candidate = parents.get(&candidate).copied().unwrap_or(-1);
             }
-            (state.scope.clone(), selected_folder_is_deleted)
+            (state.scope, selected_folder_is_deleted)
         };
         let scope = if selected_folder_is_deleted {
-            "Unified Inbox".to_owned()
+            Scope::UNIFIED_INBOX
         } else {
             current_scope
         };
@@ -3039,7 +3088,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         delete_folder_runtime.spawn(async move {
             let result = core.delete_folder(folder_id).await;
             let metadata = if result.is_ok() {
-                core.load_mail_metadata(&scope).await.ok()
+                core.load_mail_metadata(scope).await.ok()
             } else {
                 None
             };
@@ -3067,7 +3116,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let mail_pagination_in_progress_for_result = Rc::clone(&mail_pagination_in_progress);
     app.on_drain_mail_list_updates(move || {
         while let Ok(update) = mail_list_rx.borrow_mut().try_recv() {
-            let current_scope = mail_update_state.borrow().scope.clone();
+            let current_scope = mail_update_state.borrow().scope;
             let current_query = mail_update_state.borrow().query.clone();
             let Some(app) = mail_update_app.upgrade() else {
                 return;
@@ -3233,7 +3282,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         {
             let (using_core, core, scope) = {
                 let state = mail_update_state.borrow();
-                (state.using_core, state.core.clone(), state.scope.clone())
+                (state.using_core, state.core.clone(), state.scope)
             };
             if using_core && let Some(core) = core {
                 mail_metadata_refresh_requested_for_core.set(false);
@@ -3241,7 +3290,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 metadata_last_started.set(Some(std::time::Instant::now()));
                 let updates = mail_metadata_tx.clone();
                 mail_update_runtime.spawn(async move {
-                    let result = core.load_mail_metadata(&scope).await;
+                    let result = core.load_mail_metadata(scope).await;
                     let _ = updates.send(MailMetadataUpdate { result }).await;
                 });
             }
@@ -3256,7 +3305,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 (
                     state.using_core,
                     state.core.clone(),
-                    state.scope.clone(),
+                    state.scope,
                     state.query.clone(),
                 )
             };
@@ -3267,7 +3316,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 let updates = mail_list_tx_for_core.clone();
                 mail_update_runtime.spawn(async move {
                     let result = core
-                        .load_page(&scope, &query, None, PAGE_SIZE as i64, false)
+                        .load_page(scope, &query, None, PAGE_SIZE as i64, false)
                         .await;
                     let _ = updates
                         .send(MailListUpdate {
@@ -3703,9 +3752,11 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     {
                         let mut state = startup_state.borrow_mut();
                         state.core = Some(core.clone());
-                        state.connected_accounts = accounts;
+                        // The startup scope was already validated for these
+                        // accounts, which also become the source of truth.
+                        let _ = state.set_connected_accounts(accounts);
                         state.account_configs = account_configs;
-                        state.scope = scope;
+                        state.set_scope(scope);
                         state.remote_images_enabled = allow_remote_images;
                         state.mark_read_on_open = settings
                             .as_ref()
@@ -3727,7 +3778,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         };
                         if let Some(page) = page.filter(|page| page.account_count > 0) {
                             state.using_core = true;
-                            if state.scope == "Unified Inbox" {
+                            if state.scope == Scope::UNIFIED_INBOX {
                                 state.inbox_count = page.messages.len();
                             }
                             state.messages = page.messages;
@@ -4343,10 +4394,10 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             {
                 return;
             }
-            let scope = if account_owns_scope(&state.mailboxes, &state.scope, account_id) {
-                "Unified Inbox".to_owned()
+            let scope = if account_owns_scope(&state, account_id) {
+                Scope::UNIFIED_INBOX
             } else {
-                state.scope.clone()
+                state.scope
             };
             // Keep a surviving selection reachable after browsing past the
             // first page, including when deleting from a unified scope.
@@ -4363,10 +4414,14 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             // Core deletion is journaled across stores. A late cleanup error
             // can occur after the account row was deleted; reflect that fact.
             let removed = account_was_removed(account_id, &result, accounts.as_ref());
+            // Match the selection `reconcile_removed_account` will leave.
+            let scope = accounts
+                .as_ref()
+                .map_or(scope, |snapshot| scope.visible_for(&snapshot.accounts));
             let (metadata, page) = if removed {
                 let (metadata, page) = tokio::join!(
-                    core.load_mail_metadata(&scope),
-                    core.load_page(&scope, &query, None, limit, false)
+                    core.load_mail_metadata(scope),
+                    core.load_page(scope, &query, None, limit, false)
                 );
                 (metadata.ok(), page.ok())
             } else {
@@ -4710,7 +4765,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
         let (core, scope) = {
             let state = state_for_sync.borrow();
-            (state.core.clone(), state.scope.clone())
+            (state.core.clone(), state.scope)
         };
         let Some(core) = core else {
             sync_progress_for_click.set(false);
@@ -4725,7 +4780,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         runtime_for_sync.spawn(async move {
             let result = core.sync_now(None).await;
             let metadata = if result.is_ok() {
-                core.load_mail_metadata(&scope).await.ok()
+                core.load_mail_metadata(scope).await.ok()
             } else {
                 None
             };
@@ -4746,7 +4801,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
         let (core, scope) = {
             let state = state_for_account_sync.borrow();
-            (state.core.clone(), state.scope.clone())
+            (state.core.clone(), state.scope)
         };
         let Some(core) = core else {
             sync_progress_for_account_click.set(false);
@@ -4762,7 +4817,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         runtime_for_account_sync.spawn(async move {
             let result = core.sync_now(Some(account_id)).await;
             let metadata = if result.is_ok() {
-                core.load_mail_metadata(&scope).await.ok()
+                core.load_mail_metadata(scope).await.ok()
             } else {
                 None
             };
@@ -4928,18 +4983,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let request = {
             let state = state_for_empty_trash.borrow();
             if !state.using_core { return; }
-            let account_id = if requested_account_id == 0 ||
-                (requested_account_id < 0 && state.scope == "Unified Trash") {
-                None
-            } else if requested_account_id > 0 {
-                Some(i64::from(requested_account_id))
-            } else {
-                match state.mailboxes.iter().find(|mailbox| {
-                    mailbox.scope == state.scope && mailbox.is_standard && mailbox.label == "Trash"
-                }) {
-                    Some(mailbox) => Some(mailbox.account_id),
-                    None => return,
-                }
+            // A negative id empties the trash currently shown.
+            let account_id = match (requested_account_id, state.scope) {
+                (0, _) | (..0, Scope::Unified(StandardMailbox::Trash)) => None,
+                (1.., _) => Some(i64::from(requested_account_id)),
+                (_, Scope::Account { account_id, mailbox: StandardMailbox::Trash }) => Some(account_id),
+                _ => return,
             };
             state.core.clone().map(|core| (core, account_id))
         };
@@ -5115,8 +5164,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             runtime_for_delete_label.block_on(core.delete_label(label_id))?;
             {
                 let mut state = state_for_delete_label.borrow_mut();
-                if navigation_label_id(&state.scope) == Some(label_id) {
-                    state.scope = "Unified Inbox".to_owned();
+                if state.scope.label_id() == Some(label_id) {
+                    state.set_scope(Scope::UNIFIED_INBOX);
                     state.page = 1;
                     state.next_cursor = None;
                     state.selected_id = None;
@@ -7029,7 +7078,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         app.set_mail_loading_more(false);
         {
             let mut state = state_for_scope.borrow_mut();
-            state.scope = scope.to_string();
+            // An unknown key cannot come from the sidebar; keep the inbox
+            // reachable rather than presenting a list for no mailbox.
+            state.set_scope(scope.parse().unwrap_or(Scope::UNIFIED_INBOX));
             state.pending_selection = None;
             state.mail_groups.clear();
             state.page = 1;
@@ -7065,7 +7116,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             (
                 state.using_core,
                 state.core.clone(),
-                state.scope.clone(),
+                state.scope,
                 state.query.clone(),
                 state.next_cursor,
             )
@@ -7093,7 +7144,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let updates = mail_list_tx_for_more.clone();
         runtime_for_more.spawn(async move {
             let result = core
-                .load_page(&scope, &query, Some(cursor), PAGE_SIZE as i64, false)
+                .load_page(scope, &query, Some(cursor), PAGE_SIZE as i64, false)
                 .await;
             let _ = updates
                 .send(MailListUpdate {
@@ -7530,7 +7581,7 @@ mod tests {
         let mut messages = fixture_messages();
         messages[1].folder = "Sent".into();
         messages[2].folder = "Archive".into();
-        let filtered = filtered_messages(&messages, "Unified Inbox", "", "All mail");
+        let filtered = filtered_messages(&messages, Scope::UNIFIED_INBOX, "", "All mail");
 
         assert_eq!(filtered.len(), messages.len() - 2);
         assert!(filtered.iter().all(|email| email.folder == "Inbox"));
@@ -7545,7 +7596,16 @@ mod tests {
     #[test]
     fn folder_scope_and_search_can_be_combined() {
         let messages = fixture_messages();
-        let filtered = filtered_messages(&messages, "Flectar / Inbox", "calendar", "All mail");
+        let flectar = messages
+            .iter()
+            .find(|message| message.account == "Flectar")
+            .unwrap()
+            .account_id;
+        let scope = Scope::Account {
+            account_id: flectar,
+            mailbox: StandardMailbox::Inbox,
+        };
+        let filtered = filtered_messages(&messages, scope, "calendar", "All mail");
 
         assert_eq!(filtered.len(), 2);
         assert!(filtered.iter().all(|email| email.sender == "Google Calendar"));
@@ -7561,8 +7621,14 @@ mod tests {
         messages[0].starred = true;
         messages[1].has_attachments = true;
 
-        let starred = filtered_messages(&messages, "Unified Starred", "", "All mail");
-        let attachments = filtered_messages(&messages, "Unified Inbox", "", "Has attachments");
+        let starred = filtered_messages(
+            &messages,
+            Scope::Unified(StandardMailbox::Starred),
+            "",
+            "All mail",
+        );
+        let attachments =
+            filtered_messages(&messages, Scope::UNIFIED_INBOX, "", "Has attachments");
 
         assert_eq!(starred.len(), 1);
         assert_eq!(starred[0].id, messages[0].id);
@@ -7596,14 +7662,17 @@ mod tests {
     fn account_starred_scope_filters_within_the_account() {
         let mut messages = fixture_messages();
         messages[0].starred = true;
-        let scope = format!("{} / Starred", messages[0].account);
-        let filtered = filtered_messages(&messages, &scope, "", "All mail");
+        let scope = Scope::Account {
+            account_id: messages[0].account_id,
+            mailbox: StandardMailbox::Starred,
+        };
+        let filtered = filtered_messages(&messages, scope, "", "All mail");
 
         assert!(filtered.iter().any(|message| message.id == messages[0].id));
         assert!(
             filtered
                 .iter()
-                .all(|message| message.account == messages[0].account && message.starred)
+                .all(|message| message.account_id == messages[0].account_id && message.starred)
         );
     }
 

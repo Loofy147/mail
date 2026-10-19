@@ -4,7 +4,7 @@ use super::*;
 #[derive(Clone)]
 struct PageRequest {
     core: CoreMailSource,
-    scope: String,
+    scope: Scope,
     query: String,
 }
 
@@ -98,7 +98,7 @@ pub(super) fn register(
             request
                 .core
                 .load_page(
-                    &request.scope,
+                    request.scope,
                     &request.query,
                     None,
                     PAGE_SIZE as i64,
@@ -266,7 +266,7 @@ pub(super) fn refresh(
         let mut state = state.borrow_mut();
         let request = PageRequest {
             core: state.core.clone().ok_or("mail core is unavailable")?,
-            scope: state.scope.clone(),
+            scope: state.scope,
             query: state.query.clone(),
         };
         let work = state
