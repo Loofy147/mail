@@ -117,12 +117,21 @@ component MessageLoadingSkeleton inherits Rectangle {
     in property <color> base-color;
     in property <color> highlight-color;
     in property <color> text-color;
+    // The skeleton covers a body as tall as its rendered email. Only this
+    // visible window, in the skeleton's coordinates, is painted.
+    in property <length> paint-top: 0px;
+    in property <length> paint-bottom: self.height;
 
     visible: root.active || self.opacity > 0;
-    background: root.surface-color;
     clip: true;
     opacity: root.active ? 1 : 0;
     animate opacity { duration: 180ms; easing: ease-out; }
+
+    Rectangle {
+        y: clamp(root.paint-top, 0px, root.height);
+        height: clamp(root.paint-bottom, 0px, root.height) - self.y;
+        background: root.surface-color;
+    }
 
     LoadingSkeletonBlock {
         x: 18px;
@@ -435,6 +444,15 @@ export component MailReadingPane inherits Rectangle {
         email-surface.height - root.thread-header-height - root.renderer-controls-height
     );
     private property <length> rendered-email-height: root.email-viewport-width * EmailReader.width-ratio * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px);
+    // Slint's software renderer (CPU mode, Android) panics when it paints a
+    // rectangle reaching past ±32767 physical pixels (#35). Surfaces that grow
+    // with the message paint only this visible part of the scroll content; the
+    // margin keeps a cut edge, with its corner radius and border, out of view.
+    private property <length> paint-margin: 32px;
+    private property <length> paint-left: -email-scroll.content-x - root.paint-margin;
+    private property <length> paint-right: -email-scroll.content-x + email-scroll.visible-width + root.paint-margin;
+    private property <length> paint-top: -email-scroll.content-y - root.paint-margin;
+    private property <length> paint-bottom: -email-scroll.content-y + email-scroll.visible-height + root.paint-margin;
     private property <length> attachment-section-height: MailAttachments.rows.length > 0 ? 34px + MailAttachments.rows.length * 48px : 0px;
     // Normal HTML uses its intrinsic rendered height. Alternate surfaces own
     // their scrolling. Fit their body and footer in the outer viewport when
@@ -1094,11 +1112,15 @@ export component MailReadingPane inherits Rectangle {
                                 // The expanded header and document share one card
                                 // boundary. Its fixed horizontal position keeps the
                                 // chrome aligned while a zoomed document scrolls.
+                                // The card is as tall as the rendered email, so it
+                                // is painted only within the visible window.
                                 Rectangle {
+                                    property <length> card-top: root.selected-header-y;
+                                    property <length> card-bottom: self.card-top + root.thread-header-height + root.expanded-message-height;
                                     x: -email-scroll.content-x + root.message-card-inset;
-                                    y: root.selected-header-y;
+                                    y: clamp(root.paint-top, self.card-top, self.card-bottom);
                                     width: max(0px, email-scroll.visible-width - 2 * root.message-card-inset);
-                                    height: root.thread-header-height + root.expanded-message-height;
+                                    height: clamp(root.paint-bottom, self.card-top, self.card-bottom) - self.y;
                                     background: root.surface;
                                     border-radius: 8px;
                                     border-width: 1px;
@@ -1227,6 +1249,8 @@ export component MailReadingPane inherits Rectangle {
                                     y: root.message-body-y;
                                     width: root.email-viewport-width;
                                     height: root.message-body-content-height;
+                                    paint-top: root.paint-top - self.y;
+                                    paint-bottom: root.paint-bottom - self.y;
                                     z: 50;
                                     active: EmailReader.body-pending;
                                     surface-color: root.surface;
@@ -1305,8 +1329,16 @@ export component MailReadingPane inherits Rectangle {
                                         visible: !root.text_mode && !root.source_mode && !EmailReader.reader-mode;
                                         x: missing.x * 1px; y: missing.y * 1px + (root.remote-images-blocked ? 60px : 0px);
                                         width: missing.width * 1px; height: missing.height * 1px;
-                                        background: root.control-bg; border-width: 1px; border-color: root.border;
                                         clip: true; accessible-role: image; accessible-label: missing.alt;
+                                        // Authored image sizes are unbounded; paint
+                                        // only the visible part of the placeholder.
+                                        Rectangle {
+                                            x: clamp(root.paint-left - email-context.x - parent.x, 0px, parent.width);
+                                            y: clamp(root.paint-top - email-context.y - parent.y, 0px, parent.height);
+                                            width: clamp(root.paint-right - email-context.x - parent.x, 0px, parent.width) - self.x;
+                                            height: clamp(root.paint-bottom - email-context.y - parent.y, 0px, parent.height) - self.y;
+                                            background: root.control-bg; border-width: 1px; border-color: root.border;
+                                        }
                                         Text {
                                             x: 4px; y: 2px; width: max(0px,parent.width - 8px); height: max(0px,parent.height - 4px);
                                             text: missing.alt != "" ? missing.alt : missing.state == "loading" ? @tr("Loading image…") : missing.state == "blocked" ? @tr("Blocked image") : missing.state == "limited" ? @tr("Image exceeds limits") : @tr("Image unavailable");
@@ -1561,7 +1593,15 @@ export component MailReadingPane inherits Rectangle {
                                         if event.text == Key.Return || event.text == " " { root.open_email_link(link.url); return accept; }
                                         reject
                                     }
-                                    Rectangle { width: parent.width; height: parent.height; border-width: parent.has-focus ? 2px : 0px; border-color: root.accent; background: transparent; }
+                                    // A link can wrap the whole message; paint
+                                    // only the visible part of its focus ring.
+                                    Rectangle {
+                                        x: clamp(root.paint-left - parent.x, 0px, parent.width);
+                                        y: clamp(root.paint-top - parent.y, 0px, parent.height);
+                                        width: clamp(root.paint-right - parent.x, 0px, parent.width) - self.x;
+                                        height: clamp(root.paint-bottom - parent.y, 0px, parent.height) - self.y;
+                                        border-width: parent.has-focus ? 2px : 0px; border-color: root.accent; background: transparent;
+                                    }
                                 }
 
                                 // Attachments belong to the message document. They

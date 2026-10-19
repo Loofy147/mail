@@ -654,7 +654,9 @@ export component FunctionalCalendarView inherits Rectangle {
                     x: root.time-gutter + event.day-index * root.column-width + 5px;
                     y: (event.start-minutes - 480) / 60 * root.hour-height;
                     width: root.column-width - 10px;
-                    height: max(44px, event.duration-minutes / 60 * root.hour-height);
+                    // A timed event ends in its own day column. Synced events can
+                    // span weeks, past what the software renderer can paint (#35).
+                    height: max(44px, min(event.duration-minutes, 1440 - event.start-minutes) / 60 * root.hour-height);
                     title: event.title;
                     detail: event.detail;
                     fill-color: event.color-index == 0 ? (root.dark-mode ? #1b2e46 : #e9f3ff) : event.color-index == 1 ? (root.dark-mode ? #31234b : #f2eaff) : event.color-index == 2 ? (root.dark-mode ? #352518 : #fff1df) : (root.dark-mode ? #173528 : #e7f8ef);
