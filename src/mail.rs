@@ -1,4 +1,5 @@
 use crate::favicon::domain_from_address;
+use crate::mail_scope::{LabelKind, Scope, StandardMailbox};
 use chrono::{DateTime, Datelike, Local, Utc};
 use flectar_mail_core::{
     Core,
@@ -130,7 +131,8 @@ pub struct MailboxEntry {
     pub can_rename: bool,
     pub can_delete: bool,
     pub label: String,
-    pub scope: String,
+    /// Absent for account headings, which are not navigation targets.
+    pub scope: Option<Scope>,
     pub context: String,
     pub detail: String,
     pub avatar: String,
@@ -199,14 +201,14 @@ pub struct MailConversation {
 #[derive(Clone, Debug)]
 pub struct MailMetadata {
     pub account_revision: u64,
-    pub scope: String,
+    pub scope: Scope,
     pub inbox_count: usize,
     pub mailboxes: Vec<MailboxEntry>,
     pub unified_mailboxes: Vec<MailboxEntry>,
 }
 
 struct PageLoadContext<'a> {
-    scope: &'a str,
+    scope: Scope,
     query: &'a str,
     cursor: Option<MailCursor>,
     limit: i64,
@@ -289,7 +291,7 @@ impl CoreMailSource {
 
     pub async fn load_page(
         &self,
-        scope: &str,
+        scope: Scope,
         query: &str,
         cursor: Option<MailCursor>,
         limit: i64,
@@ -327,9 +329,9 @@ impl CoreMailSource {
     /// the account list if folder/page projection happens to fail.
     pub async fn load_startup_page(
         &self,
-        preferred_scope: &str,
+        preferred_scope: Scope,
         limit: i64,
-    ) -> Result<(Vec<Account>, String, Option<MailPage>), String> {
+    ) -> Result<(Vec<Account>, Scope, Option<MailPage>), String> {
         let accounts = self
             .core
             .list_accounts()
@@ -341,7 +343,7 @@ impl CoreMailSource {
                 let scope = validated_startup_scope(preferred_scope, &accounts, &folders, &labels);
                 let page = self
                     .load_page_with_context(PageLoadContext {
-                        scope: &scope,
+                        scope,
                         query: "",
                         cursor: None,
                         limit,
@@ -353,7 +355,7 @@ impl CoreMailSource {
                     .ok();
                 (scope, page)
             }
-            Err(_) => (normalize_account_scope("Unified Inbox", &accounts), None),
+            Err(_) => (Scope::UNIFIED_INBOX.visible_for(&accounts), None),
         };
         Ok((accounts, scope, page))
     }
@@ -361,7 +363,7 @@ impl CoreMailSource {
     /// Load exact sidebar badges independently of the latency-sensitive message
     /// page. Core events can therefore update counters live without delaying
     /// list rendering.
-    pub async fn load_mail_metadata(&self, scope: &str) -> Result<MailMetadata, String> {
+    pub async fn load_mail_metadata(&self, scope: Scope) -> Result<MailMetadata, String> {
         let revision = self.account_revision();
         let accounts = self
             .core
@@ -383,7 +385,7 @@ impl CoreMailSource {
 
     async fn load_mail_metadata_with_context(
         &self,
-        scope: &str,
+        scope: Scope,
         accounts: &[Account],
         folders: &[FolderInfo],
     ) -> Result<MailMetadata, String> {
@@ -394,7 +396,7 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())?;
         Ok(MailMetadata {
             account_revision: self.account_revision(),
-            scope: scope.to_owned(),
+            scope,
             inbox_count: badges
                 .iter()
                 .map(|counts| counts.inbox.max(0) as usize)
@@ -434,7 +436,7 @@ impl CoreMailSource {
             .as_ref()
             .map(|metadata| metadata.mailboxes.clone())
             .unwrap_or_else(|| mailbox_entries(accounts, folders));
-        let resolved = resolve_scope(scope, accounts, folders, &labels);
+        let resolved = resolve_scope(scope, folders, &labels);
 
         let (threads, next_cursor) = if query.trim().is_empty() {
             let cursor = match cursor {
@@ -1535,45 +1537,29 @@ fn parse_address(value: &str) -> Result<Address, String> {
     })
 }
 
-const STANDARD_ACCOUNT_FOLDERS: [&str; 7] = [
-    "Inbox", "Starred", "Sent", "Archive", "Spam", "Trash", "Drafts",
-];
-
-/// Unified shortcuts are absent with one account. Reuse the existing standard
-/// account scopes (including virtual mailboxes when discovery is incomplete).
-/// Other selections and the zero/multiple-account cases retain their meaning.
-pub(crate) fn normalize_account_scope(scope: &str, accounts: &[Account]) -> String {
-    if let [account] = accounts
-        && let Some(label) = scope.strip_prefix("Unified ")
-        && STANDARD_ACCOUNT_FOLDERS.contains(&label)
-    {
-        return format!("{} / {label}", account_label(account));
-    }
-    scope.to_owned()
-}
-
-fn standard_account_view(label: &str) -> Option<View> {
-    match label {
-        "Inbox" => Some(View::Inbox),
-        "Starred" => Some(View::Starred),
-        "Sent" => Some(View::Sent),
-        "Archive" => Some(View::Done),
-        "Spam" => Some(View::Spam),
-        "Trash" => Some(View::Trash),
-        "Drafts" => Some(View::Drafts),
-        _ => None,
+const fn standard_mailbox_view(mailbox: StandardMailbox) -> View {
+    match mailbox {
+        StandardMailbox::Inbox => View::Inbox,
+        StandardMailbox::Starred => View::Starred,
+        StandardMailbox::Sent => View::Sent,
+        StandardMailbox::Archive => View::Done,
+        StandardMailbox::Spam => View::Spam,
+        StandardMailbox::Trash => View::Trash,
+        StandardMailbox::Drafts => View::Drafts,
     }
 }
 
-fn standard_folder_role(label: &str) -> Option<&'static str> {
-    match label {
-        "Inbox" => Some("inbox"),
-        "Sent" => Some("sent"),
-        "Archive" => Some("archive"),
-        "Spam" => Some("spam"),
-        "Trash" => Some("trash"),
-        "Drafts" => Some("drafts"),
-        _ => None,
+/// Provider folder role backing a standard mailbox. Starred is a flag, not a
+/// folder.
+const fn standard_mailbox_role(mailbox: StandardMailbox) -> Option<&'static str> {
+    match mailbox {
+        StandardMailbox::Inbox => Some("inbox"),
+        StandardMailbox::Starred => None,
+        StandardMailbox::Sent => Some("sent"),
+        StandardMailbox::Archive => Some("archive"),
+        StandardMailbox::Spam => Some("spam"),
+        StandardMailbox::Trash => Some("trash"),
+        StandardMailbox::Drafts => Some("drafts"),
     }
 }
 
@@ -1589,7 +1575,7 @@ struct FolderTreeRoot<'a> {
     folder: &'a FolderInfo,
     depth: usize,
     parent_folder_id: i64,
-    standard_label: Option<&'a str>,
+    standard_mailbox: Option<StandardMailbox>,
 }
 
 fn append_folder_tree<'a>(
@@ -1604,7 +1590,7 @@ fn append_folder_tree<'a>(
         folder,
         depth,
         parent_folder_id,
-        standard_label,
+        standard_mailbox,
     }) = pending.pop()
     {
         if !visited.insert(folder.id) {
@@ -1616,9 +1602,9 @@ fn append_folder_tree<'a>(
                 .iter()
                 .any(|descendant| !visited.contains(&descendant.id))
         });
-        let is_standard = standard_label.is_some();
-        let label = standard_label
-            .map(str::to_owned)
+        let is_standard = standard_mailbox.is_some();
+        let label = standard_mailbox
+            .map(|mailbox| mailbox.label().to_owned())
             .unwrap_or_else(|| folder_label(folder));
         entries.push(MailboxEntry {
             account_id: folder.account_id,
@@ -1632,10 +1618,12 @@ fn append_folder_tree<'a>(
             can_rename: folder.can_rename,
             can_delete: folder.can_delete,
             label,
-            scope: standard_label.map_or_else(
-                || format!("Folder:{}", folder.id),
-                |label| format!("{account_label} / {label}"),
-            ),
+            scope: Some(standard_mailbox.map_or(Scope::Folder(folder.id), |mailbox| {
+                Scope::Account {
+                    account_id: folder.account_id,
+                    mailbox,
+                }
+            })),
             context: account_label.to_owned(),
             detail: String::new(),
             avatar: String::new(),
@@ -1650,7 +1638,7 @@ fn append_folder_tree<'a>(
                         folder: descendant,
                         depth: depth + 1,
                         parent_folder_id: folder.id,
-                        standard_label: None,
+                        standard_mailbox: None,
                     });
                 }
             }
@@ -1674,7 +1662,7 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
             can_rename: false,
             can_delete: false,
             label: account_label.clone(),
-            scope: account_label.clone(),
+            scope: None,
             context: account_label.clone(),
             detail: account.email.clone(),
             avatar: avatar_initials(&account_label),
@@ -1686,15 +1674,15 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
             .iter()
             .filter(|folder| folder.account_id == account.id)
             .collect::<Vec<_>>();
-        let role_folders = STANDARD_ACCOUNT_FOLDERS
-            .iter()
-            .filter_map(|label| {
-                let role = standard_folder_role(label)?;
+        let role_folders = StandardMailbox::ALL
+            .into_iter()
+            .filter_map(|mailbox| {
+                let role = standard_mailbox_role(mailbox)?;
                 account_folders
                     .iter()
                     .copied()
                     .find(|folder| folder.role.as_deref() == Some(role))
-                    .map(|folder| (*label, folder))
+                    .map(|folder| (mailbox, folder))
             })
             .collect::<std::collections::HashMap<_, _>>();
         let role_folder_ids = role_folders
@@ -1760,15 +1748,15 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
         }
 
         let mut visited = std::collections::HashSet::new();
-        for label in STANDARD_ACCOUNT_FOLDERS {
-            if let Some(folder) = role_folders.get(label).copied() {
+        for mailbox in StandardMailbox::ALL {
+            if let Some(folder) = role_folders.get(&mailbox).copied() {
                 append_folder_tree(
                     &mut entries,
                     FolderTreeRoot {
                         folder,
                         depth: 0,
                         parent_folder_id: -1,
-                        standard_label: Some(label),
+                        standard_mailbox: Some(mailbox),
                     },
                     &account_label,
                     &children,
@@ -1787,8 +1775,11 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
                 can_create_children: false,
                 can_rename: false,
                 can_delete: false,
-                label: label.to_owned(),
-                scope: format!("{account_label} / {label}"),
+                label: mailbox.label().to_owned(),
+                scope: Some(Scope::Account {
+                    account_id: account.id,
+                    mailbox,
+                }),
                 context: account_label.clone(),
                 detail: String::new(),
                 avatar: String::new(),
@@ -1812,7 +1803,7 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
                     folder: root,
                     depth: 0,
                     parent_folder_id: -1,
-                    standard_label: None,
+                    standard_mailbox: None,
                 },
                 &account_label,
                 &children,
@@ -1831,7 +1822,7 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
                         folder,
                         depth: 0,
                         parent_folder_id: -1,
-                        standard_label: None,
+                        standard_mailbox: None,
                     },
                     &account_label,
                     &children,
@@ -1850,16 +1841,18 @@ fn mailbox_entries_with_counts(
 ) -> Vec<MailboxEntry> {
     let mut entries = mailbox_entries(accounts, folders);
     for entry in &mut entries {
-        if entry.is_account {
+        // Badges belong to the standard mailboxes, not to custom folders that
+        // merely share a name with one.
+        let Some(Scope::Account { mailbox, .. }) = entry.scope else {
             continue;
-        }
+        };
         let Some(counts) = badges
             .iter()
             .find(|counts| counts.account_id == entry.account_id)
         else {
             continue;
         };
-        entry.count = mailbox_badge(&entry.label, counts);
+        entry.count = mailbox_badge(mailbox, counts);
     }
     entries
 }
@@ -1871,16 +1864,12 @@ fn unified_mailbox_entries(badges: &[MailboxBadgeCounts]) -> Vec<MailboxEntry> {
         starred: badges.iter().map(|counts| counts.starred).sum(),
         drafts: badges.iter().map(|counts| counts.drafts).sum(),
     };
-    let mailboxes = [
-        ("Starred", "Unified Starred"),
-        ("Sent", "Unified Sent"),
-        ("Archive", "Unified Archive"),
-        ("Spam", "Unified Spam"),
-        ("Trash", "Unified Trash"),
-        ("Drafts", "Unified Drafts"),
-    ];
-    let mut entries = Vec::with_capacity(mailboxes.len());
-    for (label, scope) in mailboxes {
+    // The unified inbox has a dedicated sidebar row.
+    let mailboxes = StandardMailbox::ALL
+        .into_iter()
+        .filter(|mailbox| *mailbox != StandardMailbox::Inbox);
+    let mut entries = Vec::with_capacity(StandardMailbox::ALL.len() - 1);
+    for mailbox in mailboxes {
         entries.push(MailboxEntry {
             account_id: 0,
             folder_id: -1,
@@ -1892,24 +1881,27 @@ fn unified_mailbox_entries(badges: &[MailboxBadgeCounts]) -> Vec<MailboxEntry> {
             can_create_children: false,
             can_rename: false,
             can_delete: false,
-            label: label.to_owned(),
-            scope: scope.to_owned(),
+            label: mailbox.label().to_owned(),
+            scope: Some(Scope::Unified(mailbox)),
             context: "Unified".to_owned(),
             detail: String::new(),
             avatar: String::new(),
             is_account: false,
-            count: mailbox_badge(label, &total),
+            count: mailbox_badge(mailbox, &total),
         });
     }
     entries
 }
 
-fn mailbox_badge(label: &str, counts: &MailboxBadgeCounts) -> String {
-    let count = match label {
-        "Inbox" => counts.inbox,
-        "Starred" => counts.starred,
-        "Drafts" => counts.drafts,
-        _ => return String::new(),
+fn mailbox_badge(mailbox: StandardMailbox, counts: &MailboxBadgeCounts) -> String {
+    let count = match mailbox {
+        StandardMailbox::Inbox => counts.inbox,
+        StandardMailbox::Starred => counts.starred,
+        StandardMailbox::Drafts => counts.drafts,
+        StandardMailbox::Sent
+        | StandardMailbox::Archive
+        | StandardMailbox::Spam
+        | StandardMailbox::Trash => return String::new(),
     };
     if count > 0 {
         count.to_string()
@@ -1927,174 +1919,88 @@ struct ScopeResolution {
     title: String,
 }
 
-fn resolve_scope(
-    scope: &str,
-    accounts: &[Account],
-    folders: &[FolderInfo],
-    labels: &[Label],
-) -> ScopeResolution {
-    if scope == "Unified Inbox" {
-        return ScopeResolution {
-            account_id: None,
-            folder_id: None,
-            split_id: None,
-            label_id: None,
-            view: View::Inbox,
-            title: "Inbox".to_owned(),
-        };
-    }
-    if let Some(view) = match scope {
-        "Unified Starred" => Some(View::Starred),
-        "Unified Sent" => Some(View::Sent),
-        "Unified Archive" => Some(View::Done),
-        "Unified Spam" => Some(View::Spam),
-        "Unified Trash" => Some(View::Trash),
-        "Unified Drafts" => Some(View::Drafts),
-        _ => None,
-    } {
-        return ScopeResolution {
-            account_id: None,
-            folder_id: None,
-            split_id: None,
-            label_id: None,
-            view,
-            title: scope.trim_start_matches("Unified ").to_owned(),
-        };
-    }
-
-    if matches!(scope, "Important" | "Other") {
-        return ScopeResolution {
-            account_id: None,
-            folder_id: None,
-            split_id: Some(if scope == "Important" { -1 } else { -2 }),
-            label_id: None,
-            view: View::Inbox,
-            title: scope.to_owned(),
-        };
-    }
-
-    if let Some(label_id) = ["AccountLabel:", "GlobalLabel:", "Category:", "Label:"]
-        .into_iter()
-        .find_map(|prefix| scope.strip_prefix(prefix))
-        .and_then(|id| id.parse::<i64>().ok())
-        && let Some(label) = labels.iter().find(|label| label.id == label_id)
-    {
-        return ScopeResolution {
-            account_id: label.owner_account_id,
-            folder_id: None,
-            split_id: None,
-            label_id: Some(label_id),
-            view: if label.is_auto {
-                View::Inbox
-            } else {
-                View::All
-            },
-            title: label.name.clone(),
-        };
-    }
-
-    if let Some(folder_id) = scope
-        .strip_prefix("Folder:")
-        .and_then(|id| id.parse::<i64>().ok())
-        && let Some(folder) = folders.iter().find(|folder| folder.id == folder_id)
-    {
-        return ScopeResolution {
-            account_id: Some(folder.account_id),
-            folder_id: Some(folder.id),
-            split_id: None,
-            label_id: None,
-            view: view_for_folder(folder),
-            title: folder_label(folder),
-        };
-    }
-
-    if let Some((account_name, folder_name)) = scope.rsplit_once(" / ")
-        && let Some(account) = accounts
-            .iter()
-            .find(|account| account_label(account) == account_name)
-    {
-        if let Some(view) = standard_account_view(folder_name) {
-            return ScopeResolution {
-                account_id: Some(account.id),
-                folder_id: None,
-                split_id: None,
-                label_id: None,
-                view,
-                title: folder_name.to_owned(),
-            };
-        }
-        if let Some(folder) = folders
-            .iter()
-            .find(|folder| folder.account_id == account.id && folder_label(folder) == folder_name)
-        {
-            return ScopeResolution {
-                account_id: Some(account.id),
-                folder_id: Some(folder.id),
-                split_id: None,
-                label_id: None,
-                view: view_for_folder(folder),
-                title: folder_name.to_owned(),
-            };
-        }
-    }
-
-    let account_id = accounts
-        .iter()
-        .find(|account| account_label(account) == scope)
-        .map(|account| account.id);
-    ScopeResolution {
-        account_id,
+fn resolve_scope(scope: Scope, folders: &[FolderInfo], labels: &[Label]) -> ScopeResolution {
+    let unfiltered = |view, title: &str| ScopeResolution {
+        account_id: None,
         folder_id: None,
         split_id: None,
         label_id: None,
-        view: View::Inbox,
-        title: "Inbox".to_owned(),
+        view,
+        title: title.to_owned(),
+    };
+    match scope {
+        Scope::Unified(mailbox) => unfiltered(standard_mailbox_view(mailbox), mailbox.label()),
+        Scope::Important => ScopeResolution {
+            split_id: Some(-1),
+            ..unfiltered(View::Inbox, "Important")
+        },
+        Scope::Other => ScopeResolution {
+            split_id: Some(-2),
+            ..unfiltered(View::Inbox, "Other")
+        },
+        Scope::Label { id, .. } => match labels.iter().find(|label| label.id == id) {
+            Some(label) => ScopeResolution {
+                account_id: label.owner_account_id,
+                label_id: Some(id),
+                ..unfiltered(
+                    if label.is_auto {
+                        View::Inbox
+                    } else {
+                        View::All
+                    },
+                    &label.name,
+                )
+            },
+            None => resolve_scope(Scope::UNIFIED_INBOX, folders, labels),
+        },
+        Scope::Folder(id) => match folders.iter().find(|folder| folder.id == id) {
+            Some(folder) => ScopeResolution {
+                account_id: Some(folder.account_id),
+                folder_id: Some(folder.id),
+                ..unfiltered(view_for_folder(folder), &folder_label(folder))
+            },
+            None => resolve_scope(Scope::UNIFIED_INBOX, folders, labels),
+        },
+        Scope::Account {
+            account_id,
+            mailbox,
+        } => ScopeResolution {
+            account_id: Some(account_id),
+            ..unfiltered(standard_mailbox_view(mailbox), mailbox.label())
+        },
     }
 }
 
-/// A warm-start scope is presentation data and can outlive an account rename
-/// or removal. Accept only scopes represented by the current local database;
-/// otherwise fall back to the visible inbox before querying its first page.
+/// A warm-start scope is presentation data and can outlive an account,
+/// folder or label. Accept only scopes represented by the current local
+/// database; otherwise fall back to the visible inbox before querying its
+/// first page.
 fn validated_startup_scope(
-    preferred_scope: &str,
+    preferred: Scope,
     accounts: &[Account],
     folders: &[FolderInfo],
     labels: &[Label],
-) -> String {
-    const UNIFIED_SCOPES: [&str; 7] = [
-        "Unified Inbox",
-        "Unified Starred",
-        "Unified Sent",
-        "Unified Archive",
-        "Unified Spam",
-        "Unified Trash",
-        "Unified Drafts",
-    ];
-    if let Some(label_id) = ["AccountLabel:", "GlobalLabel:", "Category:", "Label:"]
-        .into_iter()
-        .find_map(|prefix| preferred_scope.strip_prefix(prefix))
-        .and_then(|id| id.parse::<i64>().ok())
-        && let Some(label) = labels.iter().find(|label| label.id == label_id)
-    {
-        let prefix = if label.is_auto {
-            "Category:"
-        } else if label.owner_account_id.is_some() {
-            "AccountLabel:"
-        } else {
-            "GlobalLabel:"
-        };
-        return format!("{prefix}{label_id}");
-    }
-    if UNIFIED_SCOPES.contains(&preferred_scope)
-        || matches!(preferred_scope, "Important" | "Other")
-        || mailbox_entries(accounts, folders)
+) -> Scope {
+    let scope = match preferred {
+        Scope::Unified(_) | Scope::Important | Scope::Other => Some(preferred),
+        // A label can move between sections, e.g. when it becomes automatic.
+        Scope::Label { id, .. } => labels
             .iter()
-            .any(|mailbox| mailbox.scope == preferred_scope)
-    {
-        normalize_account_scope(preferred_scope, accounts)
-    } else {
-        normalize_account_scope("Unified Inbox", accounts)
-    }
+            .find(|label| label.id == id)
+            .map(|label| Scope::Label {
+                kind: LabelKind::of(label.is_auto, label.owner_account_id),
+                id,
+            }),
+        Scope::Folder(_) => mailbox_entries(accounts, folders)
+            .iter()
+            .any(|mailbox| mailbox.scope == Some(preferred))
+            .then_some(preferred),
+        Scope::Account { account_id, .. } => accounts
+            .iter()
+            .any(|account| account.id == account_id)
+            .then_some(preferred),
+    };
+    scope.unwrap_or(Scope::UNIFIED_INBOX).visible_for(accounts)
 }
 
 fn summary_to_message(
@@ -2472,11 +2378,24 @@ fn markdown_to_plain_text(markdown: &str) -> String {
     output.trim_end().to_owned()
 }
 
+/// Fixture rows with one stable id per fixture account, in first-seen order.
 #[cfg(test)]
 pub fn fixture_messages() -> Vec<MailMessage> {
+    let mut accounts = Vec::new();
     fixtures()
         .into_iter()
-        .map(MailMessage::from_fixture)
+        .map(|fixture| {
+            let mut message = MailMessage::from_fixture(fixture);
+            let index = accounts
+                .iter()
+                .position(|account| *account == message.account)
+                .unwrap_or_else(|| {
+                    accounts.push(message.account.clone());
+                    accounts.len() - 1
+                });
+            message.account_id = index as i64 + 1;
+            message
+        })
         .collect()
 }
 
@@ -2507,11 +2426,11 @@ pub fn fixtures() -> Vec<EmailFixture> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ComposeMessage, STANDARD_ACCOUNT_FOLDERS, compose_args, display_thread_subject,
-        mailbox_entries, markdown_to_html, markdown_to_plain_text, normalize_account_scope,
-        readable_message_html, relative_time_at, resolve_scope, summary_to_message,
-        validated_startup_scope,
+        ComposeMessage, compose_args, display_thread_subject, mailbox_entries, markdown_to_html,
+        markdown_to_plain_text, readable_message_html, relative_time_at, resolve_scope,
+        summary_to_message, validated_startup_scope,
     };
+    use crate::mail_scope::{LabelKind, Scope, StandardMailbox};
     use chrono::{Local, TimeZone};
     use flectar_mail_core::models::{
         Account, Address, AuthKind, FolderInfo, Label, MailProtocol, Provider, ThreadSummary, View,
@@ -2540,52 +2459,86 @@ mod tests {
             account.display_name = Some("Work / Personal".into());
             let accounts = [account];
             let entries = mailbox_entries(&accounts, &[]);
-            for label in STANDARD_ACCOUNT_FOLDERS {
-                let unified = format!("Unified {label}");
-                let scope = normalize_account_scope(&unified, &accounts);
-                assert!(entries.iter().any(|entry| entry.scope == scope));
+            for mailbox in StandardMailbox::ALL {
+                let unified = Scope::Unified(mailbox);
+                let scope = unified.visible_for(&accounts);
+                assert!(entries.iter().any(|entry| entry.scope == Some(scope)));
                 assert_eq!(
-                    validated_startup_scope(&unified, &accounts, &[], &[]),
+                    validated_startup_scope(unified, &accounts, &[], &[]),
                     scope
                 );
-                assert_eq!(normalize_account_scope(&scope, &accounts), scope);
-                let before = resolve_scope(&unified, &accounts, &[], &[]);
-                let after = resolve_scope(&scope, &accounts, &[], &[]);
+                let before = resolve_scope(unified, &[], &[]);
+                let after = resolve_scope(scope, &[], &[]);
                 assert_eq!(after.view, before.view);
                 assert_eq!(after.account_id, Some(1));
                 assert_eq!(after.folder_id, None);
-                assert_eq!(after.title, label);
+                assert_eq!(after.title, mailbox.label());
             }
+            let removed = Scope::Account {
+                account_id: 2,
+                mailbox: StandardMailbox::Sent,
+            };
             assert_eq!(
-                validated_startup_scope("Removed account / Inbox", &accounts, &[], &[]),
-                "Work / Personal / Inbox"
+                validated_startup_scope(removed, &accounts, &[], &[]),
+                Scope::Account {
+                    account_id: 1,
+                    mailbox: StandardMailbox::Inbox
+                }
             );
         }
     }
 
     #[test]
-    fn account_scope_normalization_preserves_other_navigation() {
-        let mut offline = test_account();
-        offline.id = 2;
-        offline.sync_state = "error".into();
-        offline.sync_error = Some("Offline".into());
-        for accounts in [vec![], vec![test_account(), offline]] {
-            for label in STANDARD_ACCOUNT_FOLDERS {
-                let scope = format!("Unified {label}");
-                assert_eq!(normalize_account_scope(&scope, &accounts), scope);
-            }
+    fn startup_keeps_known_navigation_and_drops_stale_targets() {
+        let mut second = test_account();
+        second.id = 2;
+        let accounts = [test_account(), second];
+        let folders = [FolderInfo {
+            id: 42,
+            account_id: 2,
+            parent_id: None,
+            display_name: "Receipts".into(),
+            is_jmap: false,
+            imap_name: "Receipts".into(),
+            delimiter: Some("/".into()),
+            role: None,
+            selectable: true,
+            can_create_children: true,
+            can_rename: true,
+            can_delete: true,
+        }];
+        let kept = [
+            Scope::Unified(StandardMailbox::Drafts),
+            Scope::Important,
+            Scope::Other,
+            Scope::Folder(42),
+            Scope::Account {
+                account_id: 2,
+                mailbox: StandardMailbox::Spam,
+            },
+        ];
+        for scope in kept {
+            assert_eq!(
+                validated_startup_scope(scope, &accounts, &folders, &[]),
+                scope
+            );
         }
-        for scope in [
-            "Folder:42",
-            "AccountLabel:7",
-            "GlobalLabel:8",
-            "Category:9",
-            "Important",
-            "Other",
-            "Person / Inbox",
-            "Unified Unknown",
-        ] {
-            assert_eq!(normalize_account_scope(scope, &[test_account()]), scope);
+        let stale = [
+            Scope::Folder(43),
+            Scope::Account {
+                account_id: 3,
+                mailbox: StandardMailbox::Inbox,
+            },
+            Scope::Label {
+                kind: LabelKind::Global,
+                id: 9,
+            },
+        ];
+        for scope in stale {
+            assert_eq!(
+                validated_startup_scope(scope, &accounts, &folders, &[]),
+                Scope::UNIFIED_INBOX
+            );
         }
     }
 
@@ -2853,9 +2806,10 @@ mod tests {
         assert_eq!(child.label, "2026");
         assert_eq!(child.parent_folder_id, parent.folder_id);
         assert_eq!(child.depth, 1);
-        assert_eq!(child.scope, "Folder:11");
-        assert_eq!(duplicate_leaf.scope, "Folder:12");
-        assert_eq!(custom_inbox.scope, "Folder:13");
+        assert_eq!(child.scope, Some(Scope::Folder(11)));
+        assert_eq!(duplicate_leaf.scope, Some(Scope::Folder(12)));
+        assert_eq!(custom_inbox.scope, Some(Scope::Folder(13)));
+        assert!(custom_inbox.count.is_empty());
     }
 
     #[test]
@@ -2882,7 +2836,7 @@ mod tests {
         assert!(entries.iter().all(|entry| entry.folder_id != 10));
         assert_eq!(
             entries.iter().filter(|entry| !entry.is_account).count(),
-            STANDARD_ACCOUNT_FOLDERS.len()
+            StandardMailbox::ALL.len()
         );
     }
 
@@ -2975,31 +2929,33 @@ mod tests {
             },
         ];
 
-        let important = resolve_scope("Important", &[], &[], &labels);
+        let label = |kind, id| Scope::Label { kind, id };
+        let important = resolve_scope(Scope::Important, &[], &labels);
         assert_eq!(important.view, View::Inbox);
         assert_eq!(important.split_id, Some(-1));
 
-        let manual = resolve_scope("Label:31", &[], &[], &labels);
+        let manual = resolve_scope(label(LabelKind::Global, 31), &[], &labels);
         assert_eq!(manual.view, View::All);
         assert_eq!(manual.label_id, Some(31));
         assert_eq!(manual.account_id, None);
         assert_eq!(manual.title, "Projects");
 
-        let automatic = resolve_scope("Label:32", &[], &[], &labels);
+        let automatic = resolve_scope(label(LabelKind::Category, 32), &[], &labels);
         assert_eq!(automatic.view, View::Inbox);
         assert_eq!(automatic.label_id, Some(32));
         assert_eq!(automatic.title, "Newsletters");
+        // Saved selections follow a label into its current sidebar section.
         assert_eq!(
-            validated_startup_scope("Label:32", &[], &[], &labels),
-            "Category:32"
+            validated_startup_scope(label(LabelKind::Global, 32), &[], &[], &labels),
+            label(LabelKind::Category, 32)
         );
         assert_eq!(
-            validated_startup_scope("Label:31", &[], &[], &labels),
-            "GlobalLabel:31"
+            validated_startup_scope(label(LabelKind::Category, 31), &[], &[], &labels),
+            label(LabelKind::Global, 31)
         );
         assert_eq!(
-            validated_startup_scope("Label:999", &[], &[], &labels),
-            "Unified Inbox"
+            validated_startup_scope(label(LabelKind::Global, 999), &[], &[], &labels),
+            Scope::UNIFIED_INBOX
         );
 
         let account_label = Label {
@@ -3012,16 +2968,15 @@ mod tests {
             is_auto: false,
         };
         let account_scope = resolve_scope(
-            "AccountLabel:33",
-            &[],
+            label(LabelKind::Account, 33),
             &[],
             std::slice::from_ref(&account_label),
         );
         assert_eq!(account_scope.account_id, Some(7));
         assert_eq!(account_scope.label_id, Some(33));
         assert_eq!(
-            validated_startup_scope("Label:33", &[], &[], &[account_label]),
-            "AccountLabel:33"
+            validated_startup_scope(label(LabelKind::Global, 33), &[], &[], &[account_label]),
+            label(LabelKind::Account, 33)
         );
     }
 }
@@ -3076,14 +3031,14 @@ mod search_pagination_adapter_tests {
 
         for query in ["needle", ""] {
             let first = source
-                .load_page("Unified Inbox", query, None, 25, false)
+                .load_page(Scope::UNIFIED_INBOX, query, None, 25, false)
                 .await
                 .unwrap();
             assert_eq!(first.messages.len(), 25);
             let cursor = first.next_cursor.expect("more mail remains");
             assert_eq!(matches!(cursor, MailCursor::Search(_)), !query.is_empty());
             let second = source
-                .load_page("Unified Inbox", query, Some(cursor), 25, false)
+                .load_page(Scope::UNIFIED_INBOX, query, Some(cursor), 25, false)
                 .await
                 .unwrap();
             assert_eq!(second.messages.len(), 2);
@@ -3154,9 +3109,9 @@ mod account_removal_snapshot_tests {
         .unwrap();
         seed(&source).await;
         let before = source.load_account_snapshot().await.unwrap();
-        let metadata = source.load_mail_metadata("Unified Inbox").await.unwrap();
+        let metadata = source.load_mail_metadata(Scope::UNIFIED_INBOX).await.unwrap();
         let page = source
-            .load_page("Unified Inbox", "", None, 50, false)
+            .load_page(Scope::UNIFIED_INBOX, "", None, 50, false)
             .await
             .unwrap();
         store.fail.store(true, Ordering::Relaxed);

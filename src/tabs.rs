@@ -19,7 +19,8 @@ const SAVE_DELAY: Duration = Duration::from_millis(500);
 #[serde(tag = "workspace", rename_all = "lowercase")]
 pub(crate) enum Location {
     Mail {
-        scope: String,
+        #[serde(deserialize_with = "saved_scope")]
+        scope: Scope,
         #[serde(default)]
         query: String,
         #[serde(default = "default_filter")]
@@ -40,10 +41,17 @@ fn default_filter() -> String {
     "All mail".to_owned()
 }
 
+/// Tabs saved before account mailboxes were keyed by id named them by display
+/// name. Reopen such a tab at the inbox instead of discarding every tab.
+fn saved_scope<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Scope, D::Error> {
+    let key = <String as serde::Deserialize>::deserialize(deserializer)?;
+    Ok(key.parse().unwrap_or_default())
+}
+
 impl Location {
     fn inbox() -> Self {
         Self::Mail {
-            scope: "Unified Inbox".to_owned(),
+            scope: Scope::UNIFIED_INBOX,
             query: String::new(),
             filter: default_filter(),
             conversation: None,
@@ -458,7 +466,7 @@ impl Tabs {
             };
             (
                 Location::Mail {
-                    scope: state.scope.clone(),
+                    scope: state.scope,
                     query: state.query.clone(),
                     filter: state.search_filter.clone(),
                     conversation: Some(id),
@@ -548,7 +556,7 @@ impl Tabs {
                     .unwrap_or_else(|| app.get_selected_scope_title().to_string());
                 (
                     Location::Mail {
-                        scope: state.scope.clone(),
+                        scope: state.scope,
                         query: state.query.clone(),
                         filter: state.search_filter.clone(),
                         conversation,
@@ -583,7 +591,7 @@ impl Tabs {
         {
             let state = self.context.state.borrow();
             if state.using_core
-                && state.scope == mail::normalize_account_scope(scope, &state.connected_accounts)
+                && state.scope == scope.visible_for(&state.connected_accounts)
                 && &state.query == query
             {
                 rows = Some(cached_rows(&state));
@@ -635,7 +643,7 @@ impl Tabs {
     fn restore_mail(
         &self,
         app: &AppWindow,
-        scope: String,
+        scope: Scope,
         query: String,
         filter: String,
         conversation: Option<i32>,
@@ -650,7 +658,7 @@ impl Tabs {
         let using_core = {
             let mut state = context.state.borrow_mut();
             mail_work::invalidate(&mut state);
-            state.scope = mail::normalize_account_scope(&scope, &state.connected_accounts);
+            state.set_scope(scope);
             state.query = query;
             state.search_filter = filter;
             state.mail_groups.clear();
@@ -762,40 +770,44 @@ fn cached_rows(state: &InboxState) -> Rc<CachedRows> {
 mod tests {
     use super::*;
 
-    fn mail(scope: &str) -> Location {
+    const A: Scope = Scope::Folder(1);
+    const B: Scope = Scope::Folder(2);
+    const C: Scope = Scope::Folder(3);
+
+    fn mail(scope: Scope) -> Location {
         Location::Mail {
-            scope: scope.to_owned(),
+            scope,
             query: String::new(),
             filter: default_filter(),
             conversation: None,
         }
     }
 
-    fn scopes(strip: &TabStrip) -> Vec<String> {
+    fn scopes(strip: &TabStrip) -> Vec<Scope> {
         strip
             .tabs
             .iter()
-            .map(|tab| match &tab.location {
-                Location::Mail { scope, .. } => scope.clone(),
-                other => other.workspace().to_owned(),
+            .filter_map(|tab| match tab.location {
+                Location::Mail { scope, .. } => Some(scope),
+                _ => None,
             })
             .collect()
     }
 
     #[test]
     fn tabs_open_beside_the_active_tab_and_close_like_a_browser() {
-        let mut strip = TabStrip::new(mail("A"));
-        strip.open(mail("B"), String::new(), None);
-        strip.open(mail("C"), String::new(), None);
-        // Each opens right after the active tab, which stays "A".
-        assert_eq!(scopes(&strip), ["A", "C", "B"]);
+        let mut strip = TabStrip::new(mail(A));
+        strip.open(mail(B), String::new(), None);
+        strip.open(mail(C), String::new(), None);
+        // Each opens right after the active tab, which stays A.
+        assert_eq!(scopes(&strip), [A, C, B]);
         assert_eq!(strip.active, 0);
 
         strip.active = 1;
         let c = strip.tabs[1].id;
         // The tab that takes the closed tab's place becomes active.
         assert_eq!(strip.close(c), Closed::Active(1));
-        assert_eq!(scopes(&strip), ["A", "B"]);
+        assert_eq!(scopes(&strip), [A, B]);
         assert_eq!(strip.active, 1);
 
         // Closing the last tab in the strip activates its left neighbour.
@@ -808,23 +820,23 @@ mod tests {
 
     #[test]
     fn closing_an_inactive_tab_keeps_the_active_tab() {
-        let mut strip = TabStrip::new(mail("A"));
-        strip.open(mail("B"), String::new(), None);
+        let mut strip = TabStrip::new(mail(A));
+        strip.open(mail(B), String::new(), None);
         strip.active = 1;
         let a = strip.tabs[0].id;
         assert_eq!(strip.close(a), Closed::Inactive);
         assert_eq!(strip.active, 0);
-        assert_eq!(scopes(&strip), ["B"]);
+        assert_eq!(scopes(&strip), [B]);
     }
 
     #[test]
     fn moving_tabs_keeps_the_active_tab_and_cycling_wraps() {
-        let mut strip = TabStrip::new(mail("A"));
-        strip.open(mail("C"), String::new(), None);
-        strip.open(mail("B"), String::new(), None);
+        let mut strip = TabStrip::new(mail(A));
+        strip.open(mail(C), String::new(), None);
+        strip.open(mail(B), String::new(), None);
         let a = strip.tabs[0].id;
         strip.move_tab(a, 9);
-        assert_eq!(scopes(&strip), ["B", "C", "A"]);
+        assert_eq!(scopes(&strip), [B, C, A]);
         assert_eq!(strip.active, 2);
         assert_eq!(strip.cycled(1), 0);
         assert_eq!(strip.cycled(-1), 1);
@@ -832,11 +844,11 @@ mod tests {
 
     #[test]
     fn the_number_of_tabs_is_bounded() {
-        let mut strip = TabStrip::new(mail("A"));
+        let mut strip = TabStrip::new(mail(A));
         for _ in 1..MAX_TABS {
-            assert!(strip.open(mail("B"), String::new(), None).is_some());
+            assert!(strip.open(mail(B), String::new(), None).is_some());
         }
-        assert!(strip.open(mail("B"), String::new(), None).is_none());
+        assert!(strip.open(mail(B), String::new(), None).is_none());
     }
 
     #[test]
@@ -845,7 +857,7 @@ mod tests {
         let path = dir.path().join("tabs.json");
         assert!(load(&path).is_none());
 
-        let mut strip = TabStrip::new(mail("Unified Inbox"));
+        let mut strip = TabStrip::new(mail(Scope::UNIFIED_INBOX));
         strip.open(
             Location::Calendar {
                 date: NaiveDate::from_ymd_opt(2026, 9, 9).unwrap(),
@@ -856,7 +868,7 @@ mod tests {
         );
         strip.open(
             Location::Mail {
-                scope: "Folder:7".into(),
+                scope: Scope::Folder(7),
                 query: "invoice".into(),
                 filter: "Unread".into(),
                 conversation: Some(42),
@@ -878,6 +890,21 @@ mod tests {
             active: 7,
         });
         assert_eq!(out_of_range.active, 0);
+
+        // Tabs saved before account mailboxes were keyed by id keep their
+        // place and reopen at the inbox; the rest of the strip survives.
+        std::fs::write(
+            &path,
+            r#"{"tabs":[
+                {"location":{"workspace":"mail","scope":"Person / Sent"},"title":"Sent"},
+                {"location":{"workspace":"mail","scope":"Folder:7","query":"invoice"}}
+            ],"active":1}"#,
+        )
+        .unwrap();
+        let legacy = TabStrip::restore(load(&path).unwrap());
+        assert_eq!(scopes(&legacy), [Scope::UNIFIED_INBOX, Scope::Folder(7)]);
+        assert_eq!(legacy.tabs[0].title, "Sent");
+        assert_eq!(legacy.active, 1);
     }
 
     #[test]
