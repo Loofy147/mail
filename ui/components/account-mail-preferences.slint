@@ -4,6 +4,7 @@ import { AppTheme } from "../design-system.slint";
 import { TypeScale } from "../typography.slint";
 import { Button } from "button.slint";
 import { LineEdit } from "controls.slint";
+import { OnScreenSurface } from "on-screen-surface.slint";
 import { SettingsSelectRow, SettingsSwitchRow } from "settings-components.slint";
 
 export struct SignatureChoice { id: string, name: string, text: string }
@@ -86,7 +87,7 @@ export global AccountMailPreferences {
     in-out property <string> reader-text;
 }
 
-export component AccountMailPreferencesPanel inherits Rectangle {
+export component AccountMailPreferencesPanel inherits OnScreenSurface {
     in property <[AccountRow]> accounts;
     in property <bool> compact: false;
     in-out property <bool> security-tab: false;

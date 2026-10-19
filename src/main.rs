@@ -30,6 +30,8 @@ mod mail_view_model;
 mod mail_work;
 mod message_appearance;
 mod oauth_browser;
+#[cfg(test)]
+mod on_screen_surface_tests;
 pub mod pdf_preview;
 pub mod platform;
 mod preview_controls;

@@ -12,6 +12,7 @@ import { ConfirmationDialog } from "../components/confirmation-dialog.slint";
 import { IconButton, LineEdit, RadioButton, Switch } from "../components/controls.slint";
 import { CopyableDiagnostic } from "../components/copyable-diagnostic.slint";
 import { FocusVisibleScope } from "../components/focus-visible-scope.slint";
+import { OnScreenSurface } from "../components/on-screen-surface.slint";
 import { ProviderButton } from "../components/provider-button.slint";
 import { FormField, SettingsCard, SettingsLinkRow, SettingsNavItem, SettingsSelectRow, SettingsSwitchRow, ShortcutRow } from "../components/settings-components.slint";
 import { RuntimeColorPicker, ThemeEditor } from "../components/theme-editor.slint";
@@ -2687,7 +2688,7 @@ export component SettingsDialog inherits Rectangle {
                             }
                         }
 
-                        if root.show_account_status && root.sync_status != "" : Rectangle {
+                        if root.show_account_status && root.sync_status != "" : OnScreenSurface {
                             height: max(36px, account-status.preferred-height + 16px);
                             background: root.account_setup_in_progress ? root.accent-soft : AppTheme.destructive.transparentize(0.9);
                             border-radius: 8px;
