@@ -5710,12 +5710,3 @@ msgstr "Restaurar"
 #: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Maximize"
 msgstr "Maximizar"
-
-#~ msgid ""
-#~ "general theme appearance palette language workspace layout window "
-#~ "frameless title bar renderer privacy remote images sync group messages "
-#~ "date inbox"
-#~ msgstr ""
-#~ "general tema apariencia paleta idioma espacio de trabajo disposición "
-#~ "ventana sin marco barra de título renderizador privacidad imágenes "
-#~ "remotas sincronización agrupar mensajes fecha bandeja de entrada"

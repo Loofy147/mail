@@ -5683,12 +5683,3 @@ msgstr "Восстановить"
 #: ui/window-chrome.slint:202 ui/window-chrome.slint:239
 msgid "Maximize"
 msgstr "Развернуть"
-
-#~ msgid ""
-#~ "general theme appearance palette language workspace layout window "
-#~ "frameless title bar renderer privacy remote images sync group messages "
-#~ "date inbox"
-#~ msgstr ""
-#~ "общие тема оформление палитра язык рабочая область расположение окно без "
-#~ "рамки заголовок отрисовка конфиденциальность внешние изображения "
-#~ "синхронизация группировка письма дата входящие"
