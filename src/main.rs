@@ -17,6 +17,8 @@ pub mod favicon;
 mod files_controller;
 mod latest_load;
 mod mail;
+#[cfg(test)]
+mod mail_drop_tests;
 mod mail_groups;
 mod mail_navigation;
 mod mail_render_projection;
