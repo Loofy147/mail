@@ -58,6 +58,12 @@ def release_notes(version: str) -> str:
     return (
         "Desktop builds for Linux x64, Windows x64, and macOS Apple silicon and Intel. "
         "Linux testers can choose AppImage, Debian, Fedora RPM, or Flatpak.\n\n"
+        "The x86_64 RPM supports Fedora 43 and 44. The same package is built "
+        "on Fedora 43 and tested in clean containers on both releases, including "
+        "PDF rendering and X11/Wayland startup. Other RPM distributions are not "
+        "yet tested. Install it with `sudo dnf install ./flectar-mail-"
+        f"{version}-linux-x64.rpm`; if a graphical installer reports a conflict, "
+        "this command shows the dependency details.\n\n"
         "Gmail and Outlook sign-in require a bundled OAuth registration or your own "
         "keys in **Sign-in settings** on the welcome screen. IMAP/SMTP and JMAP "
         "do not require Google or Microsoft app keys. Provider policies still apply.\n\n"

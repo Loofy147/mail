@@ -392,7 +392,7 @@ When preview builds are published, download them from
 [GitHub Releases](https://github.com/flectar/mail/releases) and look for the
 **Pre-release** badge:
 
-- **Linux x64:** AppImage, Debian/Ubuntu `.deb`, Fedora `.rpm`, or a
+- **Linux x64:** AppImage, Debian/Ubuntu `.deb`, Fedora 43/44 `.rpm`, or a
   sideloaded Flatpak preview bundle
 - **Windows x64:** Setup `.exe` or portable ZIP
 - **macOS Apple silicon or Intel (macOS 14+):** DMG or application ZIP
@@ -411,6 +411,17 @@ Install the downloaded Linux package with either
 `sudo dnf install ./flectar-mail-<version>-linux-x64.rpm` or
 `flatpak install --user ./flectar-mail-<version>-linux-x64.flatpak`. Launch the
 Flatpak with `flatpak run com.flectar.mail`.
+
+The RPM targets Fedora 43 and 44 on x86_64. Release builds use Fedora 43 as
+their compatibility baseline; the same RPM must pass installation, PDF
+rendering, X11 and Wayland startup, and removal checks in clean containers for
+both versions before publication. Other RPM-based distributions are not yet
+tested. If Discover reports a generic conflict, run the `dnf install` command
+above and include its dependency error in your bug report.
+
+The older `0.1.0-alpha.7` RPM was built on Fedora 44 and cannot install on
+Fedora 43 because it requires glibc 2.43. Its Flatpak bundle is an alternative
+while waiting for an RPM release built with the compatibility checks above.
 
 Each GitHub release includes `SHA256SUMS` and signed build-provenance
 attestations. With GitHub CLI installed, verify a download with
