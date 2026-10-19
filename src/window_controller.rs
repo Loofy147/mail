@@ -13,6 +13,7 @@ mod macos;
 
 /// How long the window must stay minimized before its rendering buffers are
 /// released. Shorter interruptions keep the rendered message ready.
+#[cfg(desktop)]
 const MINIMIZED_RELEASE_DELAY: Duration = Duration::from_secs(10);
 /// Let Slint destroy the native surface and process pending property changes
 /// that may still own image references before returning memory.
