@@ -127,6 +127,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_System_JobObjects",
+    "Win32_System_Memory",
+    "Win32_System_Registry",
     "Win32_System_Threading",
     "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
@@ -148,6 +150,12 @@ slint = { version = "1.18.1", default-features = false, features = ["backend-win
 # already part of the Linux build through ashpd and winit.
 futures-util = { version = "0.3", default-features = false }
 x11rb = { version = "0.13", default-features = false }
+# A forwarded launch hands its activation token to the running window through
+# winit's own Wayland connection. Winit already builds these crates with the
+# same features.
+wayland-backend = { version = "0.3", default-features = false, features = ["client_system"] }
+wayland-client = { version = "0.31", default-features = false }
+wayland-protocols = { version = "0.32", default-features = false, features = ["client", "staging"] }
 
 # Integrated window frames use winit window attributes and native window events.
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
@@ -158,7 +166,9 @@ slint = { version = "1.18.1", default-features = false, features = ["backend-win
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", default-features = false, features = ["std"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSButton", "NSControl", "NSResponder", "NSView", "NSWindow"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSGeometry", "NSString", "NSUserDefaults"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSAppleEventManager", "NSError", "NSGeometry", "NSString", "NSUserDefaults"] }
+# Registers the bundled sign-in agent with Login Items (macOS 13+).
+objc2-service-management = { version = "0.3", default-features = false, features = ["std", "objc2", "objc2-foundation", "SMAppService"] }
 
 # This is `desktop`; keep it in step with the `mobile` alias in build.rs.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
