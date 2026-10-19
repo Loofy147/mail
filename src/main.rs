@@ -736,7 +736,7 @@ fn resolve_single_mail_drop(
                 .ok_or_else(|| "this account has no trash destination".to_owned())?;
             MailDropDestination::Action("trash")
         }
-        scope if scope.starts_with("Unified ") => {
+        scope if scope.starts_with("Unified ") && !scope.contains(" / ") => {
             return Err("this unified mailbox is not a drop destination".to_owned());
         }
         _ => {
@@ -4363,6 +4363,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             // Core deletion is journaled across stores. A late cleanup error
             // can occur after the account row was deleted; reflect that fact.
             let removed = account_was_removed(account_id, &result, accounts.as_ref());
+            let scope = accounts.as_ref().map_or(scope.clone(), |snapshot| {
+                mail::normalize_account_scope(&scope, &snapshot.accounts)
+            });
             let (metadata, page) = if removed {
                 let (metadata, page) = tokio::join!(
                     core.load_mail_metadata(&scope),

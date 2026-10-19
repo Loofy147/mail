@@ -353,7 +353,7 @@ impl CoreMailSource {
                     .ok();
                 (scope, page)
             }
-            Err(_) => ("Unified Inbox".to_owned(), None),
+            Err(_) => (normalize_account_scope("Unified Inbox", &accounts), None),
         };
         Ok((accounts, scope, page))
     }
@@ -1539,6 +1539,19 @@ const STANDARD_ACCOUNT_FOLDERS: [&str; 7] = [
     "Inbox", "Starred", "Sent", "Archive", "Spam", "Trash", "Drafts",
 ];
 
+/// Unified shortcuts are absent with one account. Reuse the existing standard
+/// account scopes (including virtual mailboxes when discovery is incomplete).
+/// Other selections and the zero/multiple-account cases retain their meaning.
+pub(crate) fn normalize_account_scope(scope: &str, accounts: &[Account]) -> String {
+    if let [account] = accounts
+        && let Some(label) = scope.strip_prefix("Unified ")
+        && STANDARD_ACCOUNT_FOLDERS.contains(&label)
+    {
+        return format!("{} / {label}", account_label(account));
+    }
+    scope.to_owned()
+}
+
 fn standard_account_view(label: &str) -> Option<View> {
     match label {
         "Inbox" => Some(View::Inbox),
@@ -1995,7 +2008,7 @@ fn resolve_scope(
         };
     }
 
-    if let Some((account_name, folder_name)) = scope.split_once(" / ")
+    if let Some((account_name, folder_name)) = scope.rsplit_once(" / ")
         && let Some(account) = accounts
             .iter()
             .find(|account| account_label(account) == account_name)
@@ -2041,7 +2054,7 @@ fn resolve_scope(
 
 /// A warm-start scope is presentation data and can outlive an account rename
 /// or removal. Accept only scopes represented by the current local database;
-/// otherwise fall back to the unified inbox before querying its first page.
+/// otherwise fall back to the visible inbox before querying its first page.
 fn validated_startup_scope(
     preferred_scope: &str,
     accounts: &[Account],
@@ -2078,9 +2091,9 @@ fn validated_startup_scope(
             .iter()
             .any(|mailbox| mailbox.scope == preferred_scope)
     {
-        preferred_scope.to_owned()
+        normalize_account_scope(preferred_scope, accounts)
     } else {
-        "Unified Inbox".to_owned()
+        normalize_account_scope("Unified Inbox", accounts)
     }
 }
 
@@ -2495,8 +2508,9 @@ pub fn fixtures() -> Vec<EmailFixture> {
 mod tests {
     use super::{
         ComposeMessage, STANDARD_ACCOUNT_FOLDERS, compose_args, display_thread_subject,
-        mailbox_entries, markdown_to_html, markdown_to_plain_text, readable_message_html,
-        relative_time_at, resolve_scope, summary_to_message, validated_startup_scope,
+        mailbox_entries, markdown_to_html, markdown_to_plain_text, normalize_account_scope,
+        readable_message_html, relative_time_at, resolve_scope, summary_to_message,
+        validated_startup_scope,
     };
     use chrono::{Local, TimeZone};
     use flectar_mail_core::models::{
@@ -2515,6 +2529,63 @@ mod tests {
             sync_state: "idle".into(),
             sync_error: None,
             can_create_top_level_mailbox: true,
+        }
+    }
+
+    #[test]
+    fn single_account_scopes_preserve_every_standard_view() {
+        for provider in [Provider::Imap, Provider::Gmail, Provider::Microsoft] {
+            let mut account = test_account();
+            account.provider = provider;
+            account.display_name = Some("Work / Personal".into());
+            let accounts = [account];
+            let entries = mailbox_entries(&accounts, &[]);
+            for label in STANDARD_ACCOUNT_FOLDERS {
+                let unified = format!("Unified {label}");
+                let scope = normalize_account_scope(&unified, &accounts);
+                assert!(entries.iter().any(|entry| entry.scope == scope));
+                assert_eq!(
+                    validated_startup_scope(&unified, &accounts, &[], &[]),
+                    scope
+                );
+                assert_eq!(normalize_account_scope(&scope, &accounts), scope);
+                let before = resolve_scope(&unified, &accounts, &[], &[]);
+                let after = resolve_scope(&scope, &accounts, &[], &[]);
+                assert_eq!(after.view, before.view);
+                assert_eq!(after.account_id, Some(1));
+                assert_eq!(after.folder_id, None);
+                assert_eq!(after.title, label);
+            }
+            assert_eq!(
+                validated_startup_scope("Removed account / Inbox", &accounts, &[], &[]),
+                "Work / Personal / Inbox"
+            );
+        }
+    }
+
+    #[test]
+    fn account_scope_normalization_preserves_other_navigation() {
+        let mut offline = test_account();
+        offline.id = 2;
+        offline.sync_state = "error".into();
+        offline.sync_error = Some("Offline".into());
+        for accounts in [vec![], vec![test_account(), offline]] {
+            for label in STANDARD_ACCOUNT_FOLDERS {
+                let scope = format!("Unified {label}");
+                assert_eq!(normalize_account_scope(&scope, &accounts), scope);
+            }
+        }
+        for scope in [
+            "Folder:42",
+            "AccountLabel:7",
+            "GlobalLabel:8",
+            "Category:9",
+            "Important",
+            "Other",
+            "Person / Inbox",
+            "Unified Unknown",
+        ] {
+            assert_eq!(normalize_account_scope(scope, &[test_account()]), scope);
         }
     }
 

@@ -327,7 +327,7 @@ pub(crate) fn apply_warm_start_snapshot(
         // Core remains unset: cached rows are only a presentation until local
         // storage is ready, and the startup guard keeps actions inert.
         state.using_core = true;
-        state.scope = snapshot.scope;
+        state.scope = mail::normalize_account_scope(&snapshot.scope, &snapshot.accounts);
         state.inbox_count = snapshot.inbox_count;
         state.next_cursor = snapshot.next_cursor.map(MailCursor::Thread);
         state.connected_accounts = snapshot.accounts;
@@ -781,30 +781,42 @@ mod warm_start_tests {
         software_renderer::{MinimalSoftwareWindow, RepaintBufferType},
     };
     use slint::{Model, Rgb8Pixel};
+    use std::{cell::Cell, time::Duration};
 
-    struct Headless(Rc<MinimalSoftwareWindow>);
+    struct Headless(Rc<MinimalSoftwareWindow>, Rc<Cell<Duration>>);
 
     impl Platform for Headless {
         fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
             Ok(self.0.clone())
+        }
+
+        fn duration_since_start(&self) -> Duration {
+            self.1.get()
         }
     }
 
     #[test]
     fn warm_start_paints_accounts_and_rows_before_core_ready() {
         let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
-        slint::platform::set_platform(Box::new(Headless(window.clone()))).unwrap();
+        let clock = Rc::new(Cell::new(Duration::ZERO));
+        slint::platform::set_platform(Box::new(Headless(window.clone(), clock.clone()))).unwrap();
         let app = AppWindow::new().unwrap();
         app.window().set_size(slint::PhysicalSize::new(1320, 800));
         app.show().unwrap();
         let render = |name: &str| {
-            slint::platform::update_timers_and_animations();
-            app.window().request_redraw();
             let size = app.window().size();
             let mut pixels = vec![Rgb8Pixel::default(); (size.width * size.height) as usize];
-            window.draw_if_needed(|renderer| {
-                renderer.render(&mut pixels, size.width as usize);
-            });
+            // Evaluate bindings before advancing the clock: the compact drawer
+            // starts its animation on the first frame. Clicks and snapshots
+            // must see the settled layout even when PNG output is disabled.
+            for elapsed in [Duration::ZERO, Duration::from_secs(1)] {
+                clock.set(clock.get() + elapsed);
+                slint::platform::update_timers_and_animations();
+                app.window().request_redraw();
+                window.draw_if_needed(|renderer| {
+                    renderer.render(&mut pixels, size.width as usize);
+                });
+            }
             if let Some(directory) = std::env::var_os("FLECTAR_STARTUP_REVIEW_DIR") {
                 let directory = PathBuf::from(directory);
                 std::fs::create_dir_all(&directory).unwrap();
@@ -851,13 +863,39 @@ mod warm_start_tests {
         app.set_mail_list_entries(state.mail_list_entries.clone().into());
         app.set_sidebar_rows(state.sidebar_rows.clone().into());
         let state = Rc::new(RefCell::new(state));
+        let mut mailboxes = vec![mail::MailboxEntry {
+            is_account: true,
+            is_standard: false,
+            label: "Person".into(),
+            scope: "Person".into(),
+            count: String::new(),
+            ..mailbox()
+        }];
+        for (index, label) in [
+            "Inbox", "Starred", "Sent", "Archive", "Spam", "Trash", "Drafts",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            mailboxes.push(mail::MailboxEntry {
+                label: label.into(),
+                scope: format!("Person / {label}"),
+                folder_id: index as i64 + 1,
+                count: if index == 0 {
+                    "3".into()
+                } else {
+                    String::new()
+                },
+                ..mailbox()
+            });
+        }
         let snapshot = WarmStartSnapshot::capture(WarmStartProjection {
-            scope: "Person / Inbox",
+            scope: "Unified Inbox",
             inbox_count: 3,
             next_cursor: None,
             accounts: &[account()],
             messages: &[message()],
-            mailboxes: &[mailbox()],
+            mailboxes: &mailboxes,
             unified_mailboxes: &[],
         });
 
@@ -874,7 +912,20 @@ mod warm_start_tests {
             app.get_emails().row_data(0).unwrap().subject,
             "Cached subject"
         );
-        assert!(app.get_sidebar_rows().row_count() > 0);
+        assert_eq!(app.get_selected_scope(), "Person / Inbox");
+        let rows = state.borrow().sidebar_rows.iter().collect::<Vec<_>>();
+        assert_eq!(rows[0].kind, crate::SidebarRowKind::Account);
+        assert!(
+            !rows
+                .iter()
+                .any(|row| row.kind == crate::SidebarRowKind::UnifiedInbox)
+        );
+        assert_eq!(
+            rows.iter()
+                .filter(|row| row.kind == crate::SidebarRowKind::Folder)
+                .count(),
+            7
+        );
         for (index, theme) in ["light", "dark"].into_iter().enumerate() {
             app.set_theme_mode(theme.into());
             assert_ne!(render(&format!("cached-{theme}")), loading_frames[index]);
@@ -884,6 +935,70 @@ mod warm_start_tests {
         assert!(
             !app.get_startup_ready(),
             "rendering cached mail must not unlock storage actions"
+        );
+        // Once startup unlocks the shell, the same projected folders must be
+        // usable in the compact drawer as well as the desktop sidebar.
+        app.set_startup_ready(true);
+        app.global::<crate::MotionSettings>().set_enabled(false);
+        let selected = Rc::new(std::cell::RefCell::new(String::new()));
+        let clicked = selected.clone();
+        app.on_select_scope(move |scope| *clicked.borrow_mut() = scope.to_string());
+        let click = |x, y| {
+            let position = slint::LogicalPosition::new(x, y);
+            app.window()
+                .dispatch_event(slint::platform::WindowEvent::PointerPressed {
+                    position,
+                    button: slint::platform::PointerEventButton::Left,
+                });
+            app.window()
+                .dispatch_event(slint::platform::WindowEvent::PointerReleased {
+                    position,
+                    button: slint::platform::PointerEventButton::Left,
+                });
+        };
+        for theme in ["light", "dark"] {
+            app.set_theme_mode(theme.into());
+            render(&format!("ready-compact-{theme}"));
+            click(31., 29.);
+            render(&format!("ready-compact-drawer-{theme}"));
+            selected.borrow_mut().clear();
+            click(140., 165.);
+            assert_eq!(*selected.borrow(), "Person / Inbox");
+            app.window().set_size(slint::PhysicalSize::new(1320, 800));
+            render(&format!("ready-desktop-{theme}"));
+            selected.borrow_mut().clear();
+            click(140., 209.);
+            assert_eq!(*selected.borrow(), "Person / Inbox");
+            app.window().set_size(slint::PhysicalSize::new(390, 844));
+        }
+        // A second account counts even before its folders arrive, and even
+        // when offline. Searching/collapsing must not redefine that inventory.
+        let mut second = account();
+        second.id = 8;
+        second.sync_state = "error".into();
+        second.sync_error = Some("Offline".into());
+        state.borrow_mut().connected_accounts.push(second);
+        for query in ["", "Inbox", ""] {
+            state.borrow_mut().folder_filter = query.into();
+            crate::refresh_sidebar(&state);
+            assert_eq!(
+                state
+                    .borrow()
+                    .sidebar_rows
+                    .iter()
+                    .any(|row| row.kind == crate::SidebarRowKind::UnifiedInbox),
+                query.is_empty()
+            );
+            assert_eq!(state.borrow().scope, "Person / Inbox");
+        }
+        state.borrow_mut().connected_accounts.pop();
+        crate::refresh_sidebar(&state);
+        assert!(
+            !state
+                .borrow()
+                .sidebar_rows
+                .iter()
+                .any(|row| row.kind == crate::SidebarRowKind::UnifiedInbox)
         );
     }
 

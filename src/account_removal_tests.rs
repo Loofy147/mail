@@ -59,7 +59,22 @@ fn account_removal_clears_deleted_models_and_preserves_surviving_selection() {
             .unwrap(),
     );
     let dir = tempfile::tempdir().unwrap();
-    for removed in [2, 1] {
+    for (removed, initial_scope) in [2, 1].into_iter().flat_map(|removed| {
+        [
+            "Account 1 / Inbox",
+            "Unified Inbox",
+            "Unified Starred",
+            "Unified Sent",
+            "Unified Archive",
+            "Unified Spam",
+            "Unified Trash",
+            "Unified Drafts",
+            "Important",
+            "GlobalLabel:42",
+        ]
+        .into_iter()
+        .map(move |scope| (removed, scope))
+    }) {
         let (fav, _) = bounded_ui_channel();
         let (avatars, _) = bounded_ui_channel();
         let mut state = InboxState::empty(
@@ -84,7 +99,7 @@ fn account_removal_clears_deleted_models_and_preserves_surviving_selection() {
         for mailbox in &mut state.mailboxes {
             mailbox.account_id = if mailbox.context == "Account 1" { 1 } else { 2 };
         }
-        state.scope = "Account 1 / Inbox".into();
+        state.scope = initial_scope.into();
         state.selected_id = Some(state.messages[0].id);
         state.rendered_id = state.selected_id;
         state.preview_closed = false;
@@ -125,11 +140,17 @@ fn account_removal_clears_deleted_models_and_preserves_surviving_selection() {
             assert!(state.next_cursor.is_none());
             assert_eq!(state.page, 1);
             assert!(!mail_work::accepts_background(&state, old_generation));
+            let expected_scope = if let Some(label) = initial_scope.strip_prefix("Unified ") {
+                format!("Account {} / {label}", 3 - removed)
+            } else if initial_scope == "Account 1 / Inbox" && removed == 1 {
+                "Account 2 / Inbox".into()
+            } else {
+                initial_scope.into()
+            };
+            assert_eq!(state.scope, expected_scope);
             if removed == 2 {
-                assert_eq!(state.scope, "Account 1 / Inbox");
                 assert_eq!(state.selected_id, Some(first_id));
             } else {
-                assert_eq!(state.scope, "Unified Inbox");
                 assert_eq!(state.selected_id, None);
                 assert!(state.preview_closed);
             }
@@ -137,6 +158,13 @@ fn account_removal_clears_deleted_models_and_preserves_surviving_selection() {
         refresh_connected_accounts(&app, &state);
         assert_eq!(app.get_connected_accounts().row_count(), 1);
         assert_eq!(app.get_compose_account_id(), (3 - removed) as i32);
+        refresh_sidebar(&state);
+        assert!(!state.borrow().sidebar_rows.iter().any(|row| matches!(
+            row.kind,
+            SidebarRowKind::UnifiedHeading
+                | SidebarRowKind::UnifiedInbox
+                | SidebarRowKind::UnifiedMailbox
+        )));
         // Removing the final account must empty both the Rust state and the
         // models that drive onboarding, compose and the mail workspace.
         reconcile_removed_account(&mut state.borrow_mut(), 3 - removed);

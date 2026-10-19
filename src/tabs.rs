@@ -582,7 +582,10 @@ impl Tabs {
             && let Location::Mail { scope, query, .. } = &location
         {
             let state = self.context.state.borrow();
-            if state.using_core && &state.scope == scope && &state.query == query {
+            if state.using_core
+                && state.scope == mail::normalize_account_scope(scope, &state.connected_accounts)
+                && &state.query == query
+            {
                 rows = Some(cached_rows(&state));
             }
         }
@@ -647,7 +650,7 @@ impl Tabs {
         let using_core = {
             let mut state = context.state.borrow_mut();
             mail_work::invalidate(&mut state);
-            state.scope = scope;
+            state.scope = mail::normalize_account_scope(&scope, &state.connected_accounts);
             state.query = query;
             state.search_filter = filter;
             state.mail_groups.clear();

@@ -13,10 +13,28 @@ pub(super) fn refresh_from_source(
     preserve_loaded_rows: bool,
     acted_on_ids: &[i32],
 ) -> Result<(), String> {
+    let scope_changed = {
+        let mut state = state.borrow_mut();
+        let scope = mail::normalize_account_scope(&state.scope, &state.connected_accounts);
+        let changed = scope != state.scope;
+        if changed {
+            state.scope = scope;
+            state.page = 1;
+            state.next_cursor = None;
+            state.checked_ids.clear();
+        }
+        changed
+    };
     let using_core = state.borrow().using_core;
 
     if using_core {
-        return mail_work::refresh(app, state, runtime, preserve_loaded_rows, acted_on_ids);
+        return mail_work::refresh(
+            app,
+            state,
+            runtime,
+            preserve_loaded_rows && !scope_changed,
+            acted_on_ids,
+        );
     }
 
     render_current(app, state, runtime)
@@ -835,7 +853,24 @@ pub(super) fn filtered_messages<'a>(
 }
 
 pub(super) fn scope_matches(email: &MailMessage, scope: &str) -> bool {
-    if matches!(scope, "Important" | "Other") || scope.starts_with("Folder:") {
+    // Match the account literally before interpreting reserved scope prefixes;
+    // display names may themselves contain " / ", "Unified ", or "Folder:".
+    if let Some(folder) = scope
+        .strip_prefix(email.account.as_str())
+        .and_then(|suffix| suffix.strip_prefix(" / "))
+    {
+        return if folder == "Starred" {
+            email.starred
+        } else {
+            email.folder == folder
+        };
+    }
+    if matches!(scope, "Important" | "Other")
+        || scope
+            .strip_prefix("Folder:")
+            .and_then(|id| id.parse::<i64>().ok())
+            .is_some()
+    {
         // These scopes are filtered by the core query before projection. Their
         // stable route/folder ids are intentionally not duplicated in every UI
         // row.
@@ -857,14 +892,6 @@ pub(super) fn scope_matches(email: &MailMessage, scope: &str) -> bool {
             "Sent" | "Archive" | "Spam" | "Trash" | "Drafts" => email.folder == folder,
             _ => false,
         };
-    }
-    if let Some((account, folder)) = scope.split_once(" / ") {
-        return email.account == account
-            && if folder == "Starred" {
-                email.starred
-            } else {
-                email.folder == folder
-            };
     }
     email.account == scope
 }
@@ -1644,6 +1671,21 @@ mod tests {
         assert!(!rows[0].selected);
         assert!(rows[1].outgoing);
         assert!(rows[1].selected);
+    }
+
+    #[test]
+    fn standard_scope_matches_account_names_containing_the_separator() {
+        let mut row = message(1);
+        row.starred = true;
+        for account in ["Work / Personal", "Unified Work", "Folder:Work"] {
+            row.account = account.into();
+            for folder in ["Inbox", "Sent", "Archive", "Spam", "Trash", "Drafts"] {
+                row.folder = folder.into();
+                assert!(scope_matches(&row, &format!("{account} / {folder}")));
+                assert!(scope_matches(&row, &format!("{account} / Starred")));
+                assert!(!scope_matches(&row, &format!("Other / {folder}")));
+            }
+        }
     }
 
     pub(super) fn message(id: i32) -> MailMessage {

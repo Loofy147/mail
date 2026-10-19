@@ -154,6 +154,7 @@ pub(super) fn reconcile_removed_account(state: &mut InboxState, account_id: i64)
         state.query.clear();
         state.selected_id = None;
     }
+    state.scope = mail::normalize_account_scope(&state.scope, &state.connected_accounts);
     mail_work::invalidate(state);
 }
 
@@ -351,6 +352,16 @@ pub(super) fn update_connected_accounts(
         state.account_configs = configs;
     }
     refresh_connected_accounts(app, state);
+    // Account setup/import can make the initial unified selection invisible.
+    // Route the change through normal navigation so pending pages are retired.
+    let scope_changed = {
+        let state = state.borrow();
+        mail::normalize_account_scope(&state.scope, &state.connected_accounts) != state.scope
+    };
+    if scope_changed && let Err(error) = refresh_from_source(app, state, runtime, false, &[]) {
+        app.set_render_status(UiMessage::detail("Mail refresh failed: {}", error));
+    }
+    refresh_sidebar(state);
     schedule_profile_avatar_fetches(app, state, runtime);
 }
 
