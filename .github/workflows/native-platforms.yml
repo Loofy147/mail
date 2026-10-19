@@ -180,9 +180,10 @@ jobs:
   rpm:
     needs: metadata
     if: github.event_name == 'push' || github.event_name == 'pull_request' || inputs.include_linux
-    name: Fedora RPM preview (x64)
+    name: Fedora RPM build (x64, Fedora 43 baseline)
     runs-on: ubuntu-24.04
-    container: fedora:44
+    # Build against the oldest supported Fedora; test this exact artifact below.
+    container: fedora:43
     env:
       SOURCE_DATE_EPOCH: ${{ needs.metadata.outputs.source_date_epoch }}
     steps:
@@ -217,7 +218,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           cache-on-failure: true
-          key: native-fedora-rpm-x64
+          key: native-fedora-43-rpm-x64
       - name: Build Fedora release executable
         env:
           FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
@@ -231,29 +232,44 @@ jobs:
           ./scripts/build-rpm.sh
           rpm -qip target/rpm/flectar-mail.rpm
           rpm -qlp target/rpm/flectar-mail.rpm
-      - name: Test RPM installation and removal
-        run: |
-          dnf install -y target/rpm/flectar-mail.rpm
-          test -x /usr/bin/flectar-mail
-          test -f "$(rpm --eval '%{_libdir}')/flectar-mail/libpdfium.so"
-          desktop-file-validate /usr/share/applications/com.flectar.mail.desktop
-          appstreamcli validate --no-net /usr/share/metainfo/com.flectar.mail.metainfo.xml
-          set +e
-          timeout 15s dbus-run-session -- xvfb-run -a /usr/bin/flectar-mail \
-            > target/rpm/launch.log 2>&1
-          status=$?
-          set -e
-          if [[ "$status" -ne 124 ]]; then
-            cat target/rpm/launch.log
-            echo "Installed RPM launch smoke test exited unexpectedly with status $status" >&2
-            exit 1
-          fi
-          dnf remove -y flectar-mail
-          test ! -e /usr/bin/flectar-mail
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: flectar-mail-rpm-x64
           path: target/rpm/flectar-mail.rpm
+          if-no-files-found: error
+
+  rpm-test:
+    needs: rpm
+    name: RPM runtime (Fedora ${{ matrix.fedora }}, x64)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora: [43, 44]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: flectar-mail-rpm-x64
+          path: target/rpm
+      - name: Test published RPM in a clean Fedora container
+        shell: bash
+        env:
+          FEDORA_VERSION: ${{ matrix.fedora }}
+        run: |
+          mkdir -p target/rpm-test
+          docker run --rm \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/work,readonly" \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/target/rpm-test,target=/results" \
+            "fedora:$FEDORA_VERSION" \
+            bash /work/scripts/test-rpm.sh /work/target/rpm/flectar-mail.rpm /results \
+            2>&1 | tee target/rpm-test/transaction.log
+      - name: Preserve RPM runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flectar-mail-rpm-test-fedora-${{ matrix.fedora }}
+          path: target/rpm-test
           if-no-files-found: error
 
   flatpak:
@@ -627,11 +643,12 @@ jobs:
       !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' &&
       needs.metadata.result == 'success' && needs.quality.result == 'success' &&
       needs.linux.result == 'success' && needs.rpm.result == 'success' &&
+      needs.rpm-test.result == 'success' &&
       needs.flatpak.result == 'success' && needs.windows.result == 'success' &&
       needs.macos.result == 'success' &&
       (needs.android.result == 'success' ||
        (needs.metadata.outputs.prerelease == 'false' && needs.android.result == 'skipped'))
-    needs: [metadata, quality, linux, rpm, flatpak, windows, macos, android]
+    needs: [metadata, quality, linux, rpm, rpm-test, flatpak, windows, macos, android]
     runs-on: ubuntu-24.04
     permissions:
       actions: read
