@@ -191,12 +191,14 @@ auto_link_exclude_list = [
 ]
 
 # The Fontique alias deliberately aligns a feature across Slint's and Blitz's
-# transitive font stacks.
+# transitive font stacks. `wayland-backend` is reached through
+# `wayland_client::backend`; the direct dependency guarantees its
+# `client_system` feature, which attaching to winit's display requires.
 # `slint-build`, iOS-only `cc`, and Windows-only `winresource` are consumed by build.rs.
 # These do not appear as normal Rust paths on every host, so dependency
 # scanners need the explicit exceptions.
 [package.metadata.cargo-machete]
-ignored = ["fontique_0_11", "fontique_0_12", "slint-build", "winresource", "cc", "cfg_aliases"]
+ignored = ["fontique_0_11", "fontique_0_12", "wayland-backend", "slint-build", "winresource", "cc", "cfg_aliases"]
 
 [build-dependencies]
 cc = "1"
