@@ -2216,19 +2216,19 @@ msgstr "Bu e-posta ne hakkında?"
 msgid "Confirm"
 msgstr "Onayla"
 
-#: ui/components/controls.slint:170
+#: ui/components/controls.slint:188
 msgid "On"
 msgstr "Açık"
 
-#: ui/components/controls.slint:170 ui/dialogs/settings-dialog.slint:636
+#: ui/components/controls.slint:188 ui/dialogs/settings-dialog.slint:636
 msgid "Off"
 msgstr "Kapalı"
 
-#: ui/components/controls.slint:218 ui/views/mail-list-pane.slint:417
+#: ui/components/controls.slint:236 ui/views/mail-list-pane.slint:417
 msgid "Clear selection"
 msgstr "Seçimi temizle"
 
-#: ui/components/controls.slint:218
+#: ui/components/controls.slint:236
 msgid "Select"
 msgstr "Seç"
 

@@ -2245,19 +2245,19 @@ msgstr "О чём это письмо?"
 msgid "Confirm"
 msgstr "Подтвердить"
 
-#: ui/components/controls.slint:170
+#: ui/components/controls.slint:188
 msgid "On"
 msgstr "Вкл."
 
-#: ui/components/controls.slint:170 ui/dialogs/settings-dialog.slint:636
+#: ui/components/controls.slint:188 ui/dialogs/settings-dialog.slint:636
 msgid "Off"
 msgstr "Выкл."
 
-#: ui/components/controls.slint:218 ui/views/mail-list-pane.slint:417
+#: ui/components/controls.slint:236 ui/views/mail-list-pane.slint:417
 msgid "Clear selection"
 msgstr "Очистить выделение"
 
-#: ui/components/controls.slint:218
+#: ui/components/controls.slint:236
 msgid "Select"
 msgstr "Выбрать"
 
