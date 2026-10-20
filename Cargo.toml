@@ -200,6 +200,11 @@ auto_link_exclude_list = [
 [package.metadata.cargo-machete]
 ignored = ["fontique_0_11", "fontique_0_12", "wayland-backend", "slint-build", "winresource", "cc", "cfg_aliases"]
 
+# tests/text_fit.rs measures laid-out text through Slint's item tree, which
+# only the internal crate exposes. It must stay on the version `slint` uses.
+[dev-dependencies]
+i-slint-core = { version = "=1.18.1", default-features = false }
+
 [build-dependencies]
 cc = "1"
 cfg_aliases = "0.2"

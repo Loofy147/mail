@@ -2181,6 +2181,7 @@ dependencies = [
  "fontique 0.12.0",
  "futures-util",
  "html5ever 0.40.1",
+ "i-slint-core",
  "image",
  "keyboard-types",
  "landlock",

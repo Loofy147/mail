@@ -203,11 +203,13 @@ component CompactProductNavItem inherits Rectangle {
             accessible-role: none;
         }
     }
+    // The label may use the item's full width and bottom inset as the
+    // platform font grows.
     Text {
-        x: 2px;
+        x: 0px;
         y: 40px;
-        width: parent.width - 4px;
-        height: 18px;
+        width: parent.width;
+        height: min(parent.height - self.y, max(18px, self.preferred-height));
         text: root.label;
         color: root.active ? root.accent-color : root.muted-color;
         font-size: TypeScale.caption;

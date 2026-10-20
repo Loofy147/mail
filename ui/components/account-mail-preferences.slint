@@ -119,7 +119,7 @@ export component AccountMailPreferencesPanel inherits OnScreenSurface {
     }
     content := VerticalBox {
         padding: 20px; spacing: 12px; alignment: start;
-        Text { min-height: self.preferred-height; vertical-stretch: 0; text: @tr("Sender identities, signatures & OpenPGP"); color: AppTheme.heading; font-size: TypeScale.subtitle; font-weight: 700; }
+        Text { min-height: self.preferred-height; vertical-stretch: 0; text: @tr("Sender identities, signatures & OpenPGP"); color: AppTheme.heading; font-size: TypeScale.subtitle; font-weight: 700; wrap: word-wrap; }
         Text { min-height: self.preferred-height; vertical-stretch: 0; text: @tr("Choose an account to manage its sender identity, signature, and message protection."); color: AppTheme.secondary; wrap: word-wrap; }
         for account in root.accounts : Button {
             text: account.email;
