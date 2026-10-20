@@ -1591,7 +1591,7 @@ msgstr ""
 #: ui/components/account-mail-preferences.slint:178
 #: ui/dialogs/folder-dialog.slint:128 ui/dialogs/settings-dialog.slint:1984
 #: ui/dialogs/settings-dialog.slint:2723 ui/dialogs/settings-dialog.slint:2958
-#: ui/views/files-view.slint:426 ui/views/mail-reading-pane.slint:1997
+#: ui/views/files-view.slint:426 ui/views/mail-reading-pane.slint:1998
 msgid "Cancel"
 msgstr "İptal"
 
@@ -2720,7 +2720,7 @@ msgid "Revert"
 msgstr "Eski haline dön"
 
 #: ui/components/theme-editor.slint:773 ui/dialogs/folder-dialog.slint:135
-#: ui/views/mail-reading-pane.slint:2002
+#: ui/views/mail-reading-pane.slint:2003
 msgid "Save"
 msgstr "Kaydet"
 
@@ -2980,7 +2980,7 @@ msgstr "En üst düzeyde oluştur"
 msgid "Inside “{}”"
 msgstr "“{}” içinde"
 
-#: ui/dialogs/folder-dialog.slint:133 ui/views/mail-reading-pane.slint:1951
+#: ui/dialogs/folder-dialog.slint:133 ui/views/mail-reading-pane.slint:1952
 msgid "Create label"
 msgstr "Etiket oluştur"
 
@@ -3099,7 +3099,7 @@ msgid "Save settings"
 msgstr "Ayarları kaydet"
 
 #: ui/dialogs/rendering-info-dialog.slint:25
-#: ui/views/mail-reading-pane.slint:380 ui/views/mail-reading-pane.slint:1872
+#: ui/views/mail-reading-pane.slint:380 ui/views/mail-reading-pane.slint:1873
 msgid "About email rendering"
 msgstr "E-posta görüntüleme hakkında"
 
@@ -4392,7 +4392,7 @@ msgstr "Profil adı"
 msgid "Personal or Work"
 msgstr "Kişisel veya İş"
 
-#: ui/dialogs/settings-dialog.slint:2813 ui/views/mail-reading-pane.slint:1966
+#: ui/dialogs/settings-dialog.slint:2813 ui/views/mail-reading-pane.slint:1967
 msgid "Color"
 msgstr "Renk"
 
@@ -5307,7 +5307,7 @@ msgstr "Gönderen etki alanı DMARC ve DKIM ile doğrulandı"
 msgid "to {}"
 msgstr "{} kişisine"
 
-#: ui/views/mail-reading-pane.slint:364 ui/views/mail-reading-pane.slint:1856
+#: ui/views/mail-reading-pane.slint:364 ui/views/mail-reading-pane.slint:1857
 msgid "Continue editing"
 msgstr "Düzenlemeye devam et"
 
@@ -5378,7 +5378,7 @@ msgstr "Kullanılabilir etiketler"
 msgid "Smart category"
 msgstr "Akıllı kategori"
 
-#: ui/views/mail-reading-pane.slint:949 ui/views/mail-reading-pane.slint:1951
+#: ui/views/mail-reading-pane.slint:949 ui/views/mail-reading-pane.slint:1952
 msgid "Edit label"
 msgstr "Etiketi düzenle"
 
@@ -5418,7 +5418,7 @@ msgstr "Aramayı kapat"
 msgid "Some images could not be loaded."
 msgstr "Bazı görseller yüklenemedi."
 
-#: ui/views/mail-reading-pane.slint:1257 ui/views/mail-reading-pane.slint:1560
+#: ui/views/mail-reading-pane.slint:1257 ui/views/mail-reading-pane.slint:1561
 msgid "Retry images"
 msgstr "Görselleri yeniden dene"
 
@@ -5450,83 +5450,83 @@ msgstr "Görsel sınırları aşıyor"
 msgid "Image unavailable"
 msgstr "Görsel kullanılamıyor"
 
-#: ui/views/mail-reading-pane.slint:1509
+#: ui/views/mail-reading-pane.slint:1510
 msgid "Show rendered email"
 msgstr "Görüntülenen e-postayı göster"
 
-#: ui/views/mail-reading-pane.slint:1532
+#: ui/views/mail-reading-pane.slint:1533
 msgid "Copy this HTML into your GitHub rendering issue."
 msgstr "Bu HTML'i GitHub'daki görüntüleme sorun kaydınıza yapıştırın."
 
-#: ui/views/mail-reading-pane.slint:1549
+#: ui/views/mail-reading-pane.slint:1550
 msgid "Show email"
 msgstr "E-postayı göster"
 
-#: ui/views/mail-reading-pane.slint:1559
+#: ui/views/mail-reading-pane.slint:1560
 msgid "View original plain text"
 msgstr "Özgün düz metni görüntüle"
 
-#: ui/views/mail-reading-pane.slint:1561
+#: ui/views/mail-reading-pane.slint:1562
 msgid "Copy formatted selection"
 msgstr "Biçimli seçimi kopyala"
 
-#: ui/views/mail-reading-pane.slint:1562
+#: ui/views/mail-reading-pane.slint:1563
 msgid "Caret browsing"
 msgstr "İmleçle gezinme"
 
-#: ui/views/mail-reading-pane.slint:1565
+#: ui/views/mail-reading-pane.slint:1566
 msgid "Copy selected text"
 msgstr "Seçili metni kopyala"
 
-#: ui/views/mail-reading-pane.slint:1575
+#: ui/views/mail-reading-pane.slint:1576
 msgid "Copy all email text"
 msgstr "Tüm e-posta metnini kopyala"
 
-#: ui/views/mail-reading-pane.slint:1585
+#: ui/views/mail-reading-pane.slint:1586
 msgid "Select all email text"
 msgstr "Tüm e-posta metnini seç"
 
-#: ui/views/mail-reading-pane.slint:1603
+#: ui/views/mail-reading-pane.slint:1604
 msgid "Link: {}"
 msgstr "Bağlantı: {}"
 
-#: ui/views/mail-reading-pane.slint:1795
+#: ui/views/mail-reading-pane.slint:1796
 msgid "Heading: {}"
 msgstr "Başlık: {}"
 
-#: ui/views/mail-reading-pane.slint:1915
+#: ui/views/mail-reading-pane.slint:1916
 msgid "No message selected"
 msgstr "İleti seçilmedi"
 
-#: ui/views/mail-reading-pane.slint:1916
+#: ui/views/mail-reading-pane.slint:1917
 msgid "Choose an email to read it here."
 msgstr "Burada okumak için bir e-posta seçin."
 
-#: ui/views/mail-reading-pane.slint:1958
+#: ui/views/mail-reading-pane.slint:1959
 msgid "Label name"
 msgstr "Etiket adı"
 
-#: ui/views/mail-reading-pane.slint:1976
+#: ui/views/mail-reading-pane.slint:1977
 msgid "Blue"
 msgstr "Mavi"
 
-#: ui/views/mail-reading-pane.slint:1978
+#: ui/views/mail-reading-pane.slint:1979
 msgid "Pink"
 msgstr "Pembe"
 
-#: ui/views/mail-reading-pane.slint:1979
+#: ui/views/mail-reading-pane.slint:1980
 msgid "Red"
 msgstr "Kırmızı"
 
-#: ui/views/mail-reading-pane.slint:1980
+#: ui/views/mail-reading-pane.slint:1981
 msgid "Amber"
 msgstr "Kehribar"
 
-#: ui/views/mail-reading-pane.slint:1983
+#: ui/views/mail-reading-pane.slint:1984
 msgid "Slate"
 msgstr "Kurşuni"
 
-#: ui/views/mail-reading-pane.slint:1988
+#: ui/views/mail-reading-pane.slint:1989
 msgid "Use across all accounts (local only)"
 msgstr "Tüm hesaplarda kullan (yalnızca yerel)"
 
