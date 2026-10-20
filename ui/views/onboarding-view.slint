@@ -240,6 +240,7 @@ export component OnboardingView inherits Rectangle {
                     font-size: TypeScale.heading;
                     font-weight: 700;
                     horizontal-alignment: center;
+                    wrap: word-wrap;
                 }
                 Text {
                     text: root.account-protocol == "jmap" ? @tr("Connect using JMAP for mail sync and sending.") : @tr("Connect using IMAP and SMTP. POP3 is not supported.");
@@ -325,7 +326,7 @@ export component OnboardingView inherits Rectangle {
                     }
                     FormField {
                         enabled: !root.account-setup-in-progress;
-                        width: 82px;
+                        width: max(82px, self.preferred-width);
                         label: @tr("Port");
                         label-color: root.muted-text;
                         value: root.imap-port;
@@ -349,7 +350,7 @@ export component OnboardingView inherits Rectangle {
                     }
                     FormField {
                         enabled: !root.account-setup-in-progress;
-                        width: 82px;
+                        width: max(82px, self.preferred-width);
                         label: @tr("Port");
                         label-color: root.muted-text;
                         value: root.smtp-port;

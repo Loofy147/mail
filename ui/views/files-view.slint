@@ -96,6 +96,7 @@ component FilesNavigation inherits Rectangle {
                 Button {
                     height: LayoutMetrics.sidebar-action-height;
                     text: @tr("Connect storage"); primary: true; has-icon: true;
+                    label-overflow: elide;
                     icon: @image-url("../icons/lucide/outline/plus.svg");
                     enabled: !FilesUi.busy; clicked => { root.setup(); }
                 }
