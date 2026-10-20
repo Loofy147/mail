@@ -186,16 +186,38 @@ pub fn set_settings(conn: &Connection, id: i64, settings: &AccountSettings) -> R
 }
 
 pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()> {
-    let (old_protocol, old_jmap_url, old_jmap_account_id): (String, String, Option<String>) = conn
-        .query_row(
-            "SELECT mail_protocol,jmap_url,jmap_account_id FROM accounts WHERE id=?1",
-            params![id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )?;
+    let (old_protocol, old_jmap_url, old_jmap_account_id, old_outgoing): (
+        String,
+        String,
+        Option<String>,
+        (String, u16, String),
+    ) = conn.query_row(
+        "SELECT mail_protocol,jmap_url,jmap_account_id,smtp_host,smtp_port,username
+         FROM accounts WHERE id=?1",
+        params![id],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                (row.get(3)?, row.get(4)?, row.get(5)?),
+            ))
+        },
+    )?;
     let jmap_identity_changed = (old_protocol == "jmap" || a.mail_protocol == MailProtocol::Jmap)
         && (old_protocol != a.mail_protocol.as_str()
             || old_jmap_url != a.jmap_url
             || old_jmap_account_id.as_deref() != a.jmap_account_id);
+    // Addresses the user declared stay while the same server judges them:
+    // re-entering a password (as every imported account must) is not a
+    // reason to forget them. A JMAP server only allows those under its own
+    // wildcard identities, so a new identity source drops them.
+    let keep_manual = !jmap_identity_changed;
+    let outgoing_changed = (
+        old_outgoing.0.as_str(),
+        old_outgoing.1,
+        old_outgoing.2.as_str(),
+    ) != (a.smtp_host, a.smtp_port, a.username);
     // The caller has stopped the account workers before this transaction. A
     // submission that was interrupted at that instant is inherently
     // uncertain and must never be replayed automatically. Other same-account
@@ -213,7 +235,8 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
         params![id, now_ms()],
     )?;
     conn.execute(
-        "UPDATE accounts SET email = ?2, display_name = ?3, avatar_url = ?4, provider = ?5,
+        "UPDATE accounts SET email = ?2, display_name = COALESCE(?3, display_name),
+                avatar_url = ?4, provider = ?5,
                 auth_kind = ?6, mail_protocol = ?7, username = ?8,
                 jmap_url = ?9, jmap_account_id = ?10, imap_host = ?11, imap_port = ?12,
                 smtp_host = ?13, smtp_port = ?14, sync_state = 'idle', sync_error = NULL
@@ -236,19 +259,31 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
         ],
     )?;
     // A password-account edit invalidates any provider aliases discovered for
-    // the old connection. Seed only the new authenticated address after the
+    // the old connection. Seed the new authenticated address after the
     // account row itself has been accepted (for example, by its UNIQUE email
     // constraint), so a rejected edit cannot leave mismatched identities.
     conn.execute(
-        "DELETE FROM sender_identities WHERE account_id=?1",
-        params![id],
+        "DELETE FROM sender_identities WHERE account_id=?1 AND (source<>'manual' OR ?2=0)",
+        params![id, keep_manual],
     )?;
+    if outgoing_changed {
+        // What the old outgoing server did with an address says nothing
+        // about the new one.
+        conn.execute(
+            "UPDATE sender_identities SET delivery_status='unknown',delivery_error=NULL
+             WHERE account_id=?1",
+            params![id],
+        )?;
+    }
     conn.execute(
         "INSERT INTO sender_identities (
            account_id,email,display_name,is_primary,is_provider_default,
            verification_status,last_synced_at
-         ) VALUES (?1,?2,?3,1,1,'accepted',?4)",
-        params![id, a.email, a.display_name, now_ms()],
+         ) VALUES (?1,?2,(SELECT display_name FROM accounts WHERE id=?1),1,1,'accepted',?3)
+         ON CONFLICT(account_id,email) DO UPDATE SET
+           display_name=excluded.display_name,is_primary=1,is_provider_default=1,
+           verification_status='accepted',source='provider'",
+        params![id, a.email, now_ms()],
     )?;
     if jmap_identity_changed {
         conn.execute(
@@ -368,6 +403,154 @@ pub fn reorder(conn: &mut Connection, source_id: i64, target_id: i64, after: boo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn password_edits_keep_declared_identities_and_the_display_name() {
+        let conn = crate::db::testutil::conn();
+        let account = NewAccount {
+            email: "me@test.dev",
+            display_name: Some("Me Myself"),
+            avatar_url: None,
+            provider: Provider::Imap,
+            auth_kind: AuthKind::Password,
+            mail_protocol: MailProtocol::Imap,
+            username: "me",
+            jmap_url: "",
+            jmap_account_id: None,
+            imap_host: "imap.test.dev",
+            imap_port: 993,
+            smtp_host: "smtp.test.dev",
+            smtp_port: 465,
+        };
+        let id = insert_with_sync_state(&conn, &account, "needs_reauth").unwrap();
+        let identity = |email: &str, source| SenderIdentity {
+            account_id: id,
+            email: email.into(),
+            display_name: None,
+            reply_to_email: None,
+            is_primary: false,
+            is_provider_default: false,
+            verification_status: "accepted".into(),
+            last_synced_at: 0,
+            source,
+            delivery_status: Default::default(),
+            delivery_error: None,
+        };
+        super::super::sender_identities::save_manual(
+            &conn,
+            &identity("alias@test.dev", SenderIdentitySource::Manual),
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO sender_identities (account_id,email,is_primary,is_provider_default,
+               verification_status,last_synced_at,source)
+             VALUES (?1,'discovered@test.dev',0,0,'accepted',0,'provider')",
+            params![id],
+        )
+        .unwrap();
+
+        // The account editor sends no display name when the user signs in.
+        update_password(
+            &conn,
+            id,
+            &NewAccount {
+                display_name: None,
+                ..account
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            get(&conn, id).unwrap().unwrap().display_name.as_deref(),
+            Some("Me Myself")
+        );
+        let identities = super::super::sender_identities::list(&conn, id).unwrap();
+        let emails = identities
+            .iter()
+            .map(|identity| identity.email.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(emails, ["me@test.dev", "alias@test.dev"]);
+        assert!(identities[0].is_primary);
+        assert_eq!(identities[0].display_name.as_deref(), Some("Me Myself"));
+    }
+
+    #[test]
+    fn password_edits_reassess_declared_identities_for_a_new_server() {
+        let conn = crate::db::testutil::conn();
+        let account = NewAccount {
+            email: "me@test.dev",
+            display_name: None,
+            avatar_url: None,
+            provider: Provider::Imap,
+            auth_kind: AuthKind::Password,
+            mail_protocol: MailProtocol::Imap,
+            username: "me",
+            jmap_url: "",
+            jmap_account_id: None,
+            imap_host: "imap.test.dev",
+            imap_port: 993,
+            smtp_host: "smtp.test.dev",
+            smtp_port: 465,
+        };
+        let id = insert(&conn, &account).unwrap();
+        super::super::sender_identities::save_manual(
+            &conn,
+            &SenderIdentity {
+                account_id: id,
+                email: "alias@test.dev".into(),
+                display_name: None,
+                reply_to_email: None,
+                is_primary: false,
+                is_provider_default: false,
+                verification_status: "accepted".into(),
+                last_synced_at: 0,
+                source: SenderIdentitySource::Manual,
+                delivery_status: Default::default(),
+                delivery_error: None,
+            },
+        )
+        .unwrap();
+        super::super::sender_identities::record_delivery(
+            &conn,
+            id,
+            "alias@test.dev",
+            SenderDeliveryStatus::Rejected,
+            Some("550 sender not allowed"),
+        )
+        .unwrap();
+
+        // The new outgoing server has not refused the alias yet.
+        let moved = NewAccount {
+            smtp_host: "mail.test.dev",
+            ..account
+        };
+        update_password(&conn, id, &moved).unwrap();
+        let identities = super::super::sender_identities::list(&conn, id).unwrap();
+        let alias = identities
+            .iter()
+            .find(|identity| identity.email == "alias@test.dev")
+            .unwrap();
+        assert_eq!(alias.delivery_status, SenderDeliveryStatus::Unknown);
+        assert_eq!(alias.delivery_error, None);
+
+        // A JMAP server only allows the addresses it grants.
+        update_password(
+            &conn,
+            id,
+            &NewAccount {
+                mail_protocol: MailProtocol::Jmap,
+                jmap_url: "https://jmap.test.dev/.well-known/jmap",
+                ..moved
+            },
+        )
+        .unwrap();
+        let identities = super::super::sender_identities::list(&conn, id).unwrap();
+        let emails = identities
+            .iter()
+            .map(|identity| identity.email.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(emails, ["me@test.dev"]);
+    }
 
     #[test]
     fn find_by_email_is_case_insensitive_and_update_keeps_account_id() {
