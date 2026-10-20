@@ -13,9 +13,10 @@
 // FLECTAR_TEXT_FIT_SNAPSHOTS to a directory to save a render of each state.
 
 use flectar_mail::{
-    AccountRow, AppTheme, AppWindow, CalendarAgendaRow, CalendarDay, CalendarEventRow,
-    CalendarSourceRow, CalendarWeekDay, ContactAccountRow, ContactRow, ContactSidebarRow,
-    ContactSidebarRowKind, EmailRow, LocalizedMessage, MailAttachment, MailAttachments,
+    AccountImport, AccountRow, AppTheme, AppWindow, CalendarAgendaRow, CalendarDay,
+    CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ContactAccountRow, ContactRow,
+    ContactSidebarRow, ContactSidebarRowKind, EmailRow, ImportAccountRow, ImportFailureRow,
+    ImportFindingRow, ImportProfileRow, LocalizedMessage, MailAttachment, MailAttachments,
     MailLabelRow, MailListEntry, MailProfileRow, MailboxRow, MotionSettings, SidebarRow,
     SidebarRowKind, StorageUsageRow, ThreadMessageRow,
 };
@@ -593,7 +594,77 @@ fn reset(app: &AppWindow) {
     app.set_account_form_open(false);
     app.global::<AppTheme>().set_preset("default".into());
     app.global::<MailAttachments>().set_rows(model(Vec::new()));
+    app.global::<AccountImport>().set_open(false);
     WindowInner::from_pub(app.window()).close_all_popups();
+}
+
+fn import_finding(code: &str, detail: &str, blocking: bool) -> ImportFindingRow {
+    ImportFindingRow {
+        code: code.into(),
+        detail: detail.into(),
+        count: detail.parse().unwrap_or_default(),
+        blocking,
+    }
+}
+
+/// Opens the account import dialog at `stage` with a representative plan.
+fn open_import(app: &AppWindow, stage: &str) {
+    let import = app.global::<AccountImport>();
+    import.set_folder_supported(true);
+    import.set_profiles(model(vec![ImportProfileRow {
+        name: "default-release".into(),
+        path: "/home/jamie/.thunderbird/x7k2.default-release".into(),
+        is_default: true,
+    }]));
+    import.set_source("thunderbird".into());
+    import.set_accounts(model(vec![
+        ImportAccountRow {
+            email: "jamie.rivera@example.com".into(),
+            label: "Work".into(),
+            server: "imap.example.com".into(),
+            status: "ready".into(),
+            sign_in: "password".into(),
+            selected: true,
+            findings: model(vec![
+                import_finding("password-mechanism-changed", "", false),
+                import_finding("aliases-skipped", "2", false),
+            ]),
+        },
+        ImportAccountRow {
+            email: "jamie@outlook.com".into(),
+            status: "ready".into(),
+            sign_in: "microsoft".into(),
+            selected: true,
+            findings: model(vec![import_finding(
+                "microsoft-sign-in-replaces-password",
+                "",
+                false,
+            )]),
+            ..Default::default()
+        },
+        ImportAccountRow {
+            email: "archive@example.net".into(),
+            label: "Old POP".into(),
+            status: "unsupported".into(),
+            sign_in: "password".into(),
+            findings: model(vec![
+                import_finding("pop3-unsupported", "pop.example.net", true),
+                import_finding("unencrypted-outgoing", "smtp.example.net", true),
+            ]),
+            ..Default::default()
+        },
+    ]));
+    import.set_selected_count(2);
+    import.set_feeds(1);
+    import.set_imported(2);
+    import.set_already_present(1);
+    import.set_failures(model(vec![ImportFailureRow {
+        email: "broken@example.org".into(),
+        error: "incomplete IMAP settings for broken@example.org".into(),
+    }]));
+    import.set_error_code("unknown-format".into());
+    import.set_stage(stage.into());
+    import.set_open(true);
 }
 
 thread_local! {
@@ -814,6 +885,10 @@ fn states() -> Vec<State> {
                 press(app, "Delete everything");
             })
         },
+        state("import choose", |app| open_import(app, "choose")),
+        state("import review", |app| open_import(app, "review")),
+        state("import done", |app| open_import(app, "done")),
+        state("import error", |app| open_import(app, "error")),
         state("settings profile picker", |app| {
             app.set_settings_tab("Accounts".into());
             app.set_settings_open(true);

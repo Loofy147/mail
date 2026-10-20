@@ -32,6 +32,8 @@ import { ComposeDialog } from "dialogs/compose-dialog.slint";
 import { FolderDialog } from "dialogs/folder-dialog.slint";
 import { ConfirmationDialog } from "components/confirmation-dialog.slint";
 import { SettingsDialog } from "dialogs/settings-dialog.slint";
+import { AccountImport, ImportDialog } from "dialogs/import-dialog.slint";
+export { AccountImport, ImportAccountRow, ImportFailureRow, ImportFindingRow, ImportProfileRow } from "dialogs/import-dialog.slint";
 import { MailView } from "views/mail-view.slint";
 export { MessageColors } from "message-colors.slint";
 export { FilesUi, FileRow, OperationRow } from "views/files-view.slint";
@@ -287,16 +289,15 @@ export global I18n {
     ui-message-data(key, argument, second-argument, third-argument) => {
         if (key == "Connect an account before creating a backup.") { return @tr("Connect an account before creating a backup."); }
         if (key == "Export Flectar Mail account backup") { return @tr("Export Flectar Mail account backup"); }
-        if (key == "Import Flectar Mail account backup") { return @tr("Import Flectar Mail account backup"); }
         if (key == "Flectar Mail backup") { return @tr("Flectar Mail backup"); }
+        if (key == "Import accounts") { return @tr("Import accounts"); }
+        if (key == "Account settings") { return @tr("Account settings"); }
+        if (key == "Choose a Thunderbird profile folder") { return @tr("Choose a Thunderbird profile folder"); }
         if (key == "Choose where to export the database snapshot") { return @tr("Choose where to export the database snapshot"); }
         if (key == "Backup exported. Passwords and OAuth tokens were not included.") { return @tr("Backup exported. Passwords and OAuth tokens were not included."); }
         if (key == "Could not export backup: {}") { return @tr("Could not export backup: {}", argument); }
         if (key == "Local data storage is unavailable. Retry startup.") { return @tr("Local data storage is unavailable. Retry startup."); }
         if (key == "Creating verified database snapshot…") { return @tr("Creating verified database snapshot…"); }
-        if (key == "Backup imported. All {} account configurations already existed.") { return @tr("Backup imported. All {} account configurations already existed.", argument); }
-        if (key == "Imported {} account configurations. Open Accounts and sign in to each one.") { return @tr("Imported {} account configurations. Open Accounts and sign in to each one.", argument); }
-        if (key == "Could not import backup: {}") { return @tr("Could not import backup: {}", argument); }
         if (key == "All local Flectar Mail data was deleted.") { return @tr("All local Flectar Mail data was deleted."); }
         if (key == "Could not delete all local data: {}") { return @tr("Could not delete all local data: {}", argument); }
         if (key == "Deleting local accounts and cached data…") { return @tr("Deleting local accounts and cached data…"); }
@@ -599,7 +600,7 @@ export component AppWindow inherits Window {
     callback set_account_carddav_enabled(int, bool);
     callback disconnect_carddav(int);
     callback export_account_backup();
-    callback import_account_backup();
+    callback import_accounts();
     callback export_database_snapshot();
     callback delete_all_data();
     callback load_storage_usage();
@@ -1088,6 +1089,12 @@ export component AppWindow inherits Window {
     }
 
     system-back-requested => {
+        // The import dialog covers everything; accounts being written cannot
+        // be abandoned, so back waits for that step to finish.
+        if AccountImport.open {
+            if AccountImport.stage != "importing" { AccountImport.close(); }
+            return true;
+        }
         if MailAttachments.open { MailAttachments.command("close", ""); return true; }
         if root.active_view == "files" && FilesUi.transfers-open {FilesUi.transfers-open=false;return true;}
         if root.active_view == "files" && FilesUi.dialog != "" { FilesUi.dialog = ""; return true; }
@@ -1819,7 +1826,7 @@ export component AppWindow inherits Window {
             set_account_carddav_enabled(account-id, enabled) => { root.set_account_carddav_enabled(account-id, enabled); }
             disconnect_carddav(account-id) => { root.disconnect_carddav(account-id); }
             export_account_backup => { root.export_account_backup(); }
-            import_account_backup => { root.import_account_backup(); }
+            import_accounts => { root.import_accounts(); }
             export_database_snapshot => { root.export_database_snapshot(); }
             delete_all_data => { root.delete_all_data(); }
             load_storage_usage => { root.load_storage_usage(); }
@@ -1970,6 +1977,19 @@ export component AppWindow inherits Window {
         }
     }
 
+    if AccountImport.open : ImportDialog {
+        x: root.content-x;
+        y: root.content-y;
+        width: root.content-width;
+        height: root.content-height;
+        z: 15500;
+        compact: root.compact-layout;
+        open-accounts => {
+            root.settings_tab = "Accounts";
+            root.settings_open = true;
+        }
+    }
+
     if root.folder-dialog-open : FolderDialog {
         x: root.content-x;
         y: root.content-y;
@@ -2080,13 +2100,7 @@ export component AppWindow inherits Window {
             root.start_oauth(provider);
         }
         cancel-oauth => { root.cancel_oauth(); }
-        import-account-backup => {
-            root.import_account_backup();
-            if (root.connected_accounts.length > 0) {
-                root.settings_tab = "Accounts";
-                root.settings_open = true;
-            }
-        }
+        import-accounts => { root.import_accounts(); }
     }
 
     // Keep the progressively painted shell inert until its callbacks have a

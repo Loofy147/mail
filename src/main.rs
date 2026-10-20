@@ -17,6 +17,7 @@ pub mod documents;
 mod email_document;
 pub mod favicon;
 mod files_controller;
+mod import_controller;
 mod latest_load;
 mod mail;
 #[cfg(test)]
@@ -7067,6 +7068,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         &contact_load_generation,
         &calendar_state,
     );
+
+    import_controller::register_import_callbacks(&app, &platform.documents, &state, &runtime);
 
     register_renderer_input_callbacks(
         &app,

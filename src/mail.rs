@@ -697,6 +697,16 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    pub async fn import_accounts(
+        &self,
+        drafts: Vec<flectar_mail_core::migration::AccountDraft>,
+    ) -> Result<flectar_mail_core::migration::AccountImportReport, String> {
+        self.core
+            .import_accounts(drafts)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
     pub async fn save_settings(&self, settings: Settings) -> Result<(), String> {
         self.core
             .set_settings(settings)
