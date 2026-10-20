@@ -1788,9 +1788,11 @@ export component SettingsDialog inherits Rectangle {
                                                 accessible-role: none;
                                             }
                                         }
+                                        // Names and addresses elide before the account's controls
+                                        // can push past the card.
                                         VerticalBox {
                                             horizontal-stretch: 1;
-                                            min-width: root.compact ? 0px : 190px;
+                                            min-width: root.compact ? 0px : 120px;
                                             spacing: 2px;
                                             account-name := Text { height: max(19px, self.preferred-height); text: account.name; color: root.heading; font-size: TypeScale.body-large; font-weight: 700; overflow: elide; }
                                             account-email := Text { height: max(16px, self.preferred-height); text: account.email; color: root.secondary-text; font-size: TypeScale.caption; overflow: elide; }
@@ -1807,10 +1809,17 @@ export component SettingsDialog inherits Rectangle {
                                             sync => { root.sync_account(account.id); }
                                             width: 108px;
                                         }
+                                        // The switch rows share the buttons' 30px band and grow
+                                        // to fit their label or button.
                                         if !root.compact && account.calendar_connected : HorizontalBox {
-                                            width: 122px;
+                                            width: max(122px, self.preferred-width);
+                                            height: 30px;
+                                            padding-top: 0px;
+                                            padding-bottom: 0px;
                                             spacing: 8px;
+                                            cross-axis-alignment: center;
                                             if account.provider == "imap" : Button {
+                                                width: max(64px, self.content-width);
                                                 text: @tr("CalDAV");
                                                 height: 30px;
                                                 clicked => { root.open-caldav-settings(account); }
@@ -1833,14 +1842,18 @@ export component SettingsDialog inherits Rectangle {
                                             clicked => { root.open-caldav-settings(account); }
                                         }
                                         if !root.compact && account.carddav_connected : HorizontalBox {
-                                            width: 122px;
+                                            width: max(122px, self.preferred-width);
+                                            height: 30px;
+                                            padding-top: 0px;
+                                            padding-bottom: 0px;
                                             spacing: 8px;
+                                            cross-axis-alignment: center;
                                             Text { text: @tr("Contacts"); color: root.body-text; font-size: TypeScale.caption; vertical-alignment: center; }
                                             Rectangle { horizontal-stretch: 1; }
                                             Switch { checked: account.carddav_enabled; toggled => { root.set_account_carddav_enabled(account.id, self.checked); } }
                                         }
                                         if !root.compact : Button {
-                                            width: 98px;
+                                            width: max(98px, self.content-width);
                                             height: 30px;
                                             text: account.carddav_connected ? (account.carddav_status == "" ? @tr("Manage") : @tr("Fix CardDAV")) : @tr("CardDAV");
                                             clicked => {
@@ -1952,6 +1965,7 @@ export component SettingsDialog inherits Rectangle {
                                         height: 36px;
                                         spacing: 10px;
                                         Button {
+                                            width: max(64px, self.content-width);
                                             text: account.calendar_connected ? @tr("CalDAV settings") : @tr("Set up CalDAV");
                                             clicked => { root.open-caldav-settings(account); }
                                         }
