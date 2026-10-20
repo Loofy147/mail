@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Validate Android OAuth configuration and the actual build-script environment."""
+import hashlib
 import importlib.util
 import json
 import os
@@ -50,23 +51,40 @@ class AndroidOAuthTests(unittest.TestCase):
                 self.assertIn(key, str(error.exception))
                 self.assertNotIn(value, str(error.exception))
 
-    def run_build(self, script, configuration):
+    def run_build(self, script, configuration, ci_variable=None):
         # Run the real shell entry points. Replace Cargo with a recorder that
         # stops before compilation; no SDK downloads, signing or network calls.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "scripts").mkdir()
-            for name in (script, "verify-android-oauth.py"):
+            for name in (script, "verify-android-oauth.py", "verify-android-test-keystore.sh"):
                 shutil.copyfile(SCRIPTS / name, root / "scripts" / name)
+            # Exercise the real CI signing guard with a fake public certificate,
+            # without depending on release secrets or a JDK.
+            certificate = b"OAuth test public certificate"
+            android = root / "platform/android"
+            android.mkdir(parents=True)
+            (android / "test-signing-certificate.sha256").write_text(
+                hashlib.sha256(certificate).hexdigest() + "\n"
+            )
             sdk = root / "sdk"
             sdk.mkdir()
             toolchain = root / "ndk/toolchains/llvm/prebuilt/fixture/bin"
             toolchain.mkdir(parents=True)
             binaries = root / "bin"
             binaries.mkdir()
-            for path in (toolchain / "aarch64-linux-android26-clang", binaries / "gradle", binaries / "keytool"):
+            for path in (toolchain / "aarch64-linux-android26-clang", binaries / "gradle"):
                 path.write_text("#!/bin/sh\nexit 99\n")
                 path.chmod(0o755)
+            keytool = binaries / "keytool"
+            keytool.write_text(
+                "#!/usr/bin/env python3\nimport pathlib, sys\n"
+                "assert sys.argv[1:3] == ['-exportcert', '-keystore']\n"
+                "assert sys.argv[4:] == ['-alias', 'androiddebugkey', '-storepass', 'android']\n"
+                "assert pathlib.Path(sys.argv[3]).is_file()\n"
+                f"sys.stdout.buffer.write({certificate!r})\n"
+            )
+            keytool.chmod(0o755)
             capture = root / "cargo-environment.json"
             cargo = binaries / "cargo"
             cargo.write_text(
@@ -80,6 +98,10 @@ class AndroidOAuthTests(unittest.TestCase):
             keystore.touch()
             env = {key: value for key, value in os.environ.items() if not key.startswith("FLECTAR_")}
             env.update({
+                # Select the build mode explicitly instead of inheriting the
+                # test runner's CI environment.
+                "CI": "",
+                "GITHUB_ACTIONS": "",
                 "PATH": str(binaries) + os.pathsep + env.get("PATH", ""),
                 "ANDROID_HOME": str(sdk),
                 "ANDROID_NDK_ROOT": str(root / "ndk"),
@@ -95,24 +117,29 @@ class AndroidOAuthTests(unittest.TestCase):
                 "OAUTH_CAPTURE": str(capture),
                 **configuration,
             })
+            if ci_variable:
+                env[ci_variable] = "true"
             result = subprocess.run(["bash", str(root / "scripts" / script)],
                                     env=env, capture_output=True, text=True, timeout=15)
             recorded = json.loads(capture.read_text()) if capture.exists() else None
             return result, recorded
 
     def test_preview_never_injects_placeholder_defaults(self):
-        for values in ({}, {GOOGLE: "", MICROSOFT: "", REDIRECT: ""}, VALID):
-            with self.subTest(configuration=values):
-                result, recorded = self.run_build("build-android-test-apk.sh", values)
-                self.assertEqual(result.returncode, 73, result.stdout + result.stderr)
-                self.assertEqual(recorded, {key: values.get(key) for key in (GOOGLE, MICROSOFT, REDIRECT)})
+        for ci_variable in (None, "CI", "GITHUB_ACTIONS"):
+            for values in ({}, {GOOGLE: "", MICROSOFT: "", REDIRECT: ""}, VALID):
+                with self.subTest(ci_variable=ci_variable, configuration=values):
+                    result, recorded = self.run_build("build-android-test-apk.sh", values, ci_variable)
+                    self.assertEqual(result.returncode, 73, result.stdout + result.stderr)
+                    self.assertEqual(recorded, {key: values.get(key) for key in (GOOGLE, MICROSOFT, REDIRECT)})
 
     def test_preview_rejects_invalid_ids_before_compilation(self):
-        for values in ({MICROSOFT: "00000000-0000-0000-0000-000000000000"}, {GOOGLE: "test.apps.googleusercontent.com"}):
-            result, recorded = self.run_build("build-android-test-apk.sh", values)
-            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-            self.assertIsNone(recorded)
-            self.assertIn("not a valid", result.stderr)
+        for ci_variable in (None, "CI", "GITHUB_ACTIONS"):
+            for values in ({MICROSOFT: "00000000-0000-0000-0000-000000000000"}, {GOOGLE: "test.apps.googleusercontent.com"}):
+                with self.subTest(ci_variable=ci_variable, configuration=values):
+                    result, recorded = self.run_build("build-android-test-apk.sh", values, ci_variable)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIsNone(recorded)
+                    self.assertIn("not a valid", result.stderr)
 
     def test_production_requires_real_ids_before_compilation(self):
         values = {**VALID, REDIRECT: "msauth://com.flectar.mail/fixture-signature"}
