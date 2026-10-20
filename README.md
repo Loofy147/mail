@@ -396,7 +396,7 @@ When preview builds are published, download them from
   sideloaded Flatpak preview bundle
 - **Windows x64:** Setup `.exe` or portable ZIP
 - **macOS Apple silicon or Intel (macOS 14+):** DMG or application ZIP
-- **Android arm64 (Android 8.0+):** Experimental test APK in prereleases
+- **Android arm64 (Android 8.0+):** Signed APK; previews and stable releases share one app identity
 
 Windows previews are unsigned; macOS previews are ad-hoc signed and not
 notarized, so operating-system security prompts are expected. Install updates
@@ -417,18 +417,21 @@ Each GitHub release includes `SHA256SUMS` and signed build-provenance
 attestations. With GitHub CLI installed, verify a download with
 `gh attestation verify <download> --repo flectar/mail`.
 
-Starting with alpha 8, Android preview releases use a persistent signing key so
-later previews can update the app in place and retain local data. Alpha 6 and
-alpha 7 used different keys and cannot update to this new signing identity.
+Starting with alpha 8, Android alpha, beta, release-candidate, and stable builds
+use one package (`com.flectar.mail`) and one persistent signing identity. Later
+versions can update the app in place and retain local data. Alpha 6 and alpha 7
+used different keys and cannot update to this signing identity.
 
-CI requires the `FLECTAR_ANDROID_TEST_KEYSTORE_BASE64` repository secret and checks
-its public certificate against `platform/android/test-signing-certificate.sha256`
-before building and when verifying the final APK. A missing or different key
-blocks publication. Keep a secure backup of the original keystore; restore it if
-the secret is lost. **Do not generate a replacement key or change the pinned
-fingerprint for a routine release.** The keystore uses alias `androiddebugkey`
-and password `android`, matching the preview build script. Its private key must
-remain outside the repository. Production signing is managed separately.
+Both Android release workflows use the `android-release` GitHub environment.
+They require the same keystore and password secrets, verify the public
+certificate against `platform/android/app-signing-certificate.sha256`, and
+derive Android version codes from the release version. A missing or different
+key blocks publication. **Do not generate a replacement key or change the
+pinned fingerprint for a routine release.** Password changes preserve the
+identity when the original private key and certificate are retained.
+
+See [Android signing setup and recovery](docs/android-signing.md) for the
+one-time migration command, required secrets, backups, and Play App Signing.
 
 Local developer builds can still generate a local test key. They only update
 installations signed with that same local key.

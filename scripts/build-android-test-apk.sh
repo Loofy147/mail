@@ -6,10 +6,10 @@ target_dir="$project_dir/target"
 android_sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 android_ndk="${ANDROID_NDK_ROOT:-${ANDROID_NDK_HOME:-}}"
 
-# CI must never fall back to a fresh per-run key, even when this script is
-# invoked outside the native-platforms workflow.
+# Keep this entry point for local development. CI always uses the same
+# credentialed, pinned release builder as stable releases.
 if [[ "${CI:-}" == true || "${GITHUB_ACTIONS:-}" == true ]]; then
-  bash "$project_dir/scripts/verify-android-test-keystore.sh" >/dev/null
+  exec bash "$project_dir/scripts/build-android-release.sh" --preview
 fi
 
 # Missing registrations are supported: the app shows Sign-in settings instead
@@ -50,8 +50,7 @@ export CXX_aarch64_linux_android="$toolchain/aarch64-linux-android26-clang++"
 export AR_aarch64_linux_android="$toolchain/llvm-ar"
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$toolchain/aarch64-linux-android26-clang"
 
-# Local development may generate its own key. CI has already required and
-# verified the persistent alpha key above.
+# Local development may generate its own key; these APKs are never published.
 data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
 keystore_dir="$data_home/flectar-mail/android"
 keystore="${FLECTAR_ANDROID_TEST_KEYSTORE:-$keystore_dir/test-signing.keystore}"
