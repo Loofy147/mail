@@ -1449,7 +1449,7 @@ msgstr "Идентификатор диагностики {}"
 msgid "Retry"
 msgstr "Повторить"
 
-#: ui/app.slint:2156 ui/components/copyable-diagnostic.slint:38
+#: ui/app.slint:2156 ui/components/copyable-diagnostic.slint:43
 msgid "Copy diagnostics"
 msgstr "Копировать диагностику"
 

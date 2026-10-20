@@ -1418,7 +1418,7 @@ msgstr "诊断 ID {}"
 msgid "Retry"
 msgstr "重试"
 
-#: ui/app.slint:2156 ui/components/copyable-diagnostic.slint:38
+#: ui/app.slint:2156 ui/components/copyable-diagnostic.slint:43
 msgid "Copy diagnostics"
 msgstr "复制诊断信息"
 

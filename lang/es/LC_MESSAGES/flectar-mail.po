@@ -1466,7 +1466,7 @@ msgstr "ID de diagnóstico {}"
 msgid "Retry"
 msgstr "Reintentar"
 
-#: ui/app.slint:2156 ui/components/copyable-diagnostic.slint:38
+#: ui/app.slint:2156 ui/components/copyable-diagnostic.slint:43
 msgid "Copy diagnostics"
 msgstr "Copiar datos de diagnóstico"
 

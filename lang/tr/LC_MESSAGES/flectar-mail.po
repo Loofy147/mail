@@ -1431,7 +1431,7 @@ msgstr "Tanılama kimliği {}"
 msgid "Retry"
 msgstr "Yeniden dene"
 
-#: ui/app.slint:2156 ui/components/copyable-diagnostic.slint:38
+#: ui/app.slint:2156 ui/components/copyable-diagnostic.slint:43
 msgid "Copy diagnostics"
 msgstr "Tanılama bilgilerini kopyala"
 
