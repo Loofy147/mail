@@ -22,6 +22,7 @@ mod http_body;
 pub mod imap;
 pub mod jmap;
 pub mod mail_security;
+pub mod migration;
 pub mod mime;
 pub mod models;
 pub mod oauth;
@@ -165,6 +166,58 @@ fn normalize_account_email(value: &str) -> Option<String> {
         return None;
     }
     Some(format!("{local}@{}", domain.to_lowercase()))
+}
+
+/// Rules every account created from portable or migrated settings must
+/// satisfy. Interactive setup checks the same fields as the user types them.
+pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Result<()> {
+    imap::trusted_certificates(&config.settings.connection.trusted_certificate_pem)?;
+    let email = config.email.trim();
+    if email.len() > 320 || !email.contains('@') {
+        return Err(CoreError::Other(format!(
+            "invalid account email address: {}",
+            config.email
+        )));
+    }
+    if config.username.len() > 512
+        || config.jmap_url.len() > 2048
+        || config.imap_host.len() > 253
+        || config.smtp_host.len() > 253
+    {
+        return Err(CoreError::Other("an account field is too long".into()));
+    }
+    let valid_pair = matches!(
+        (config.provider, config.auth_kind),
+        (Provider::Imap, AuthKind::Password)
+            | (Provider::Gmail, AuthKind::Oauth2)
+            | (Provider::Microsoft, AuthKind::Oauth2)
+    );
+    if !valid_pair {
+        return Err(CoreError::Other(format!(
+            "unsupported sign-in type for {email}"
+        )));
+    }
+    if config.provider == Provider::Imap
+        && config.mail_protocol == MailProtocol::Imap
+        && (config.username.trim().is_empty()
+            || config.imap_host.trim().is_empty()
+            || config.smtp_host.trim().is_empty()
+            || config.imap_port == 0
+            || config.smtp_port == 0)
+    {
+        return Err(CoreError::Other(format!(
+            "incomplete IMAP settings for {email}"
+        )));
+    }
+    if config.provider == Provider::Imap
+        && config.mail_protocol == MailProtocol::Jmap
+        && config.username.trim().is_empty()
+    {
+        return Err(CoreError::Other(format!(
+            "incomplete JMAP settings for {email}"
+        )));
+    }
+    Ok(())
 }
 
 fn normalize_account_password(value: String) -> String {
@@ -804,54 +857,7 @@ impl Core {
         configs: Vec<PortableAccountConfig>,
     ) -> Result<usize> {
         for config in &configs {
-            imap::trusted_certificates(&config.settings.connection.trusted_certificate_pem)?;
-            let email = config.email.trim();
-            if email.len() > 320 || !email.contains('@') {
-                return Err(CoreError::Other(format!(
-                    "backup contains an invalid email address: {}",
-                    config.email
-                )));
-            }
-            if config.username.len() > 512
-                || config.jmap_url.len() > 2048
-                || config.imap_host.len() > 253
-                || config.smtp_host.len() > 253
-            {
-                return Err(CoreError::Other(
-                    "backup contains an account field that is too long".into(),
-                ));
-            }
-            let valid_pair = matches!(
-                (config.provider, config.auth_kind),
-                (Provider::Imap, AuthKind::Password)
-                    | (Provider::Gmail, AuthKind::Oauth2)
-                    | (Provider::Microsoft, AuthKind::Oauth2)
-            );
-            if !valid_pair {
-                return Err(CoreError::Other(format!(
-                    "backup contains an unsupported sign-in type for {email}"
-                )));
-            }
-            if config.provider == Provider::Imap
-                && config.mail_protocol == MailProtocol::Imap
-                && (config.username.trim().is_empty()
-                    || config.imap_host.trim().is_empty()
-                    || config.smtp_host.trim().is_empty()
-                    || config.imap_port == 0
-                    || config.smtp_port == 0)
-            {
-                return Err(CoreError::Other(format!(
-                    "backup contains incomplete IMAP settings for {email}"
-                )));
-            }
-            if config.provider == Provider::Imap
-                && config.mail_protocol == MailProtocol::Jmap
-                && config.username.trim().is_empty()
-            {
-                return Err(CoreError::Other(format!(
-                    "backup contains incomplete JMAP settings for {email}"
-                )));
-            }
+            validate_portable_account(config)?;
         }
 
         self.db
