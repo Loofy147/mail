@@ -223,9 +223,19 @@ export component MailListPane inherits Rectangle {
     out property <bool> keyboard-focus-visible: list-keyboard.focus-visible;
     out property <length> scroll-y: mail-list-scroll.content-y;
     private property <int> keyboard-entry-index: -1;
-    private property <length> message-row-height: root.dense ? 44px : 96px;
+    // Message rows share one height so keyboard paging can compute positions.
+    // Each line keeps its 12px design and grows with the platform font.
+    private property <length> sender-line: max(22px, sender-line-probe.preferred-height);
+    private property <length> subject-line: max(22px, subject-line-probe.preferred-height);
+    private property <length> detail-line: max(20px, detail-line-probe.preferred-height);
+    private property <length> message-row-height: root.dense ? 44px
+        : 32px + root.sender-line + root.subject-line + root.detail-line;
     private property <length> group-row-height: root.compact ? 44px : 40px;
     forward-focus: list-keyboard;
+
+    sender-line-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.body-large; font-weight: 700; }
+    subject-line-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.body; font-weight: 700; }
+    detail-line-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.secondary; }
 
     function reveal-target(target: MailNavigationTarget) {
         if mail-list-scroll.visible-height <= 0px { return; }
@@ -541,7 +551,7 @@ export component MailListPane inherits Rectangle {
                                 width: max(0px, mail-list-scroll.visible-width - LayoutMetrics.list-scrollbar-gutter);
                                 height: entry.is_header ? (root.compact ? 44px : 40px)
                                     : entry.show_row && (mail-row.reveal-ready || !MotionSettings.enabled)
-                                        ? (root.dense ? 44px : 96px) : 0px;
+                                        ? root.message-row-height : 0px;
                                 border-radius: 6px;
                                 clip: true;
                                 opacity: !entry.is_header && row-drag.dragging ? 0.55 : 1;
@@ -621,20 +631,25 @@ export component MailListPane inherits Rectangle {
                                     avatar-border-color: root.border;
                                 }
 
-                                Rectangle {
+                                message-content := Rectangle {
+                                    // Dense rows keep everything on one line: the account
+                                    // comes before the indicators, thread count and time,
+                                    // and the subject and preview end before it.
+                                    property <length> dense-account-x: (sender-indicators.width > 0px ? sender-indicators.x
+                                        : mail-data.message_count > 1 ? thread-count.x : sender-time.x) - 54px;
                                     visible: !entry.is_header;
                                     x: root.show-avatars ? (root.dense ? 52px : 64px) : 14px;
                                     y: root.dense ? 0px : 8px;
                                     // The row already ends before the scrollbar
                                     // gutter, so only its 12px padding remains.
                                     width: max(0px, parent.width - self.x - 12px);
-                                    height: root.dense ? 44px : 80px;
+                                    height: root.message-row-height - (root.dense ? 0px : 16px);
 
                                     sender-time := Text {
                                         x: parent.width - self.width;
                                         y: 0px;
                                         width: min(72px, self.preferred-width);
-                                        height: root.dense ? 44px : 22px;
+                                        height: root.dense ? 44px : root.sender-line;
                                         text: mail-data.time;
                                         color: root.muted-text;
                                         font-size: TypeScale.caption;
@@ -649,7 +664,7 @@ export component MailListPane inherits Rectangle {
                                         y: 0px;
                                         width: mail-data.has_attachments && mail-data.has_replied && mail-data.message_count <= 1 ? 32px
                                             : mail-data.has_attachments || (mail-data.has_replied && mail-data.message_count <= 1) ? 14px : 0px;
-                                        height: root.dense ? 44px : 22px;
+                                        height: root.dense ? 44px : root.sender-line;
                                         spacing: 4px;
                                         cross-axis-alignment: center;
 
@@ -673,7 +688,7 @@ export component MailListPane inherits Rectangle {
                                     thread-count := Rectangle {
                                         visible: mail-data.message_count > 1;
                                         x: sender-time.x - self.width - 8px;
-                                        y: root.dense ? 10px : 2px;
+                                        y: root.dense ? 10px : 2px + (root.sender-line - 22px) / 2;
                                         width: mail-data.message_count >= 100 ? 48px : mail-data.message_count >= 10 ? 42px : 36px;
                                         height: 22px;
                                         border-radius: 11px;
@@ -706,13 +721,13 @@ export component MailListPane inherits Rectangle {
                                     sender-title := Text {
                                         x: 0px;
                                         y: 0px;
-                                        width: mail-data.message_count > 1
-                                            ? max(0px, (sender-indicators.width > 0px ? sender-indicators.x : thread-count.x) - 8px)
-                                            : root.dense ? min(170px, max(0px, parent.width - 190px))
+                                        width: root.dense ? min(170px, max(0px, parent.width - 190px))
+                                            : mail-data.message_count > 1
+                                                ? max(0px, (sender-indicators.width > 0px ? sender-indicators.x : thread-count.x) - 8px)
                                             : mail-data.has_attachments || mail-data.has_replied
                                                 ? max(0px, sender-indicators.x - 8px)
                                                 : max(0px, sender-time.x - 22px);
-                                        height: root.dense ? 44px : 22px;
+                                        height: root.dense ? 44px : root.sender-line;
                                         text: mail-data.sender;
                                         color: root.heading;
                                         font-size: root.dense ? TypeScale.body : TypeScale.body-large;
@@ -725,7 +740,7 @@ export component MailListPane inherits Rectangle {
                                         x: root.dense
                                             ? min(sender-title.preferred-width + 6px, sender-title.width - 9px)
                                             : min(sender-title.preferred-width + 6px, sender-title.width - 9px);
-                                        y: root.dense ? 18px : 8px;
+                                        y: root.dense ? 18px : 8px + (root.sender-line - 22px) / 2;
                                         width: 7px;
                                         height: 7px;
                                         border-radius: 4px;
@@ -733,9 +748,9 @@ export component MailListPane inherits Rectangle {
                                     }
                                     subject-label := Text {
                                         x: root.dense ? min(190px, sender-time.x) : 0px;
-                                        y: root.dense ? 0px : 27px;
-                                        width: root.dense ? min(260px, max(0px, sender-time.x - self.x - 56px)) : parent.width;
-                                        height: root.dense ? 44px : 22px;
+                                        y: root.dense ? 0px : root.sender-line + 5px;
+                                        width: root.dense ? min(260px, max(0px, message-content.dense-account-x - self.x - 2px)) : parent.width;
+                                        height: root.dense ? 44px : root.subject-line;
                                         text: mail-data.subject == "" ? @tr("(No subject)") : mail-data.subject;
                                         color: root.body-text;
                                         font-size: TypeScale.body;
@@ -746,9 +761,9 @@ export component MailListPane inherits Rectangle {
                                     account-label := Text {
                                         visible: !root.dense;
                                         x: parent.width - 88px;
-                                        y: 54px;
+                                        y: root.sender-line + root.subject-line + 10px;
                                         width: 88px;
-                                        height: 20px;
+                                        height: root.detail-line;
                                         text: mail-data.account;
                                         color: root.muted-text;
                                         font-size: TypeScale.caption;
@@ -758,7 +773,7 @@ export component MailListPane inherits Rectangle {
                                     }
                                     Rectangle {
                                         visible: root.dense;
-                                        x: sender-time.x - 54px;
+                                        x: message-content.dense-account-x;
                                         y: 11px;
                                         width: 48px;
                                         height: 22px;
@@ -788,9 +803,9 @@ export component MailListPane inherits Rectangle {
                                     }
                                     HorizontalBox {
                                         x: root.dense ? subject-label.x + subject-label.width + 12px : 0px;
-                                        y: root.dense ? 0px : 54px;
-                                        width: root.dense ? max(0px, sender-time.x - self.x - 12px) : max(0px, parent.width - 98px);
-                                        height: root.dense ? 44px : 20px;
+                                        y: root.dense ? 0px : root.sender-line + root.subject-line + 10px;
+                                        width: root.dense ? max(0px, message-content.dense-account-x - self.x - 12px) : max(0px, parent.width - 98px);
+                                        height: root.dense ? 44px : root.detail-line;
                                         padding: 0px;
                                         spacing: 4px;
                                         cross-axis-alignment: center;
@@ -958,7 +973,7 @@ export component MailListPane inherits Rectangle {
                                 x: 0px;
                                 y: index * self.height;
                                 width: parent.width;
-                                row-height: root.dense ? 44px : 96px;
+                                row-height: root.message-row-height;
                                 leading-size: root.dense ? 28px : 38px;
                                 show-leading: root.show-avatars;
                                 line-count: root.dense ? 2 : 3;

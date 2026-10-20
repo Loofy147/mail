@@ -58,17 +58,20 @@ export component SettingsCard inherits Rectangle {
     in property <color> card-border-color;
     in property <color> heading;
     in property <color> secondary-text;
+    // Where content placed below the header starts. Larger platform fonts
+    // make the header taller than its 58px design, so callers offset from it.
+    out property <length> content-y: description-text.y + description-text.height;
 
     background: root.surface;
     border-radius: 10px;
     border-width: 1px;
     border-color: root.card-border-color;
 
-    Text {
+    title-text := Text {
         x: 20px;
         y: 17px;
         width: parent.width - 40px;
-        height: 20px;
+        height: max(20px, self.preferred-height);
         text: root.title;
         color: root.heading;
         font-size: TypeScale.subtitle;
@@ -77,11 +80,11 @@ export component SettingsCard inherits Rectangle {
         vertical-alignment: center;
         overflow: elide;
     }
-    Text {
+    description-text := Text {
         x: 20px;
-        y: 41px;
+        y: title-text.y + title-text.height + 4px;
         width: parent.width - 40px;
-        height: 17px;
+        height: max(17px, self.preferred-height);
         text: root.description;
         color: root.secondary-text;
         font-size: TypeScale.caption;
@@ -106,9 +109,10 @@ export component SettingsSwitchRow inherits Rectangle {
     in property <color> description-color;
     callback toggled(bool);
 
+    // Both texts grow past their designed heights with larger platform fonts.
     height: root.compact
-        ? 27px + root.compact-title-height + root.compact-description-height
-        : root.desktop-height;
+        ? 27px + title-text.height + description-text.height
+        : root.desktop-height + title-text.height + description-text.height - 34px;
     opacity: root.enabled ? 1 : 0.5;
 
     HorizontalBox {
@@ -117,8 +121,8 @@ export component SettingsSwitchRow inherits Rectangle {
             horizontal-stretch: 1;
             min-width: 0px;
             spacing: 2px;
-            Text {
-                height: root.compact ? root.compact-title-height : 17px;
+            title-text := Text {
+                height: max(root.compact ? root.compact-title-height : 17px, self.preferred-height);
                 text: root.title;
                 color: root.title-color;
                 font-size: TypeScale.body;
@@ -126,8 +130,8 @@ export component SettingsSwitchRow inherits Rectangle {
                 wrap: root.compact ? word-wrap : no-wrap;
                 overflow: root.compact ? clip : elide;
             }
-            Text {
-                height: root.compact ? root.compact-description-height : 17px;
+            description-text := Text {
+                height: max(root.compact ? root.compact-description-height : 17px, self.preferred-height);
                 text: root.description;
                 color: root.description-color;
                 font-size: TypeScale.caption;
@@ -171,22 +175,29 @@ export component SettingsSelectRow inherits Rectangle {
     in property <color> description-color;
     callback selected(int, string);
 
-    // Two 8px insets, the 20px title, two 7px gaps and the 36px selector.
-    height: root.compact ? 86px + root.compact-description-height : 58px;
+    // Desktop: the texts overhang the box padding by design. Compact: two 8px
+    // insets, two 7px gaps and the 36px selector around the stacked texts.
+    // Both layouts stay instantiated so the row can measure its texts.
+    height: root.compact
+        ? 66px + compact-title.height + compact-description.height
+        : 23px + desktop-title.height + desktop-description.height;
     vertical-stretch: 0;
 
-    if !root.compact : HorizontalBox {
+    HorizontalBox {
+        visible: !root.compact;
         spacing: 20px;
         VerticalBox {
             spacing: 2px;
-            Text {
+            desktop-title := Text {
+                height: max(18px, self.preferred-height);
                 text: root.title;
                 color: root.title-color;
                 font-size: TypeScale.body;
                 font-weight: 600;
+                overflow: elide;
             }
-            Text {
-                height: 17px;
+            desktop-description := Text {
+                height: max(17px, self.preferred-height);
                 text: root.description;
                 color: root.description-color;
                 font-size: TypeScale.caption;
@@ -202,18 +213,20 @@ export component SettingsSelectRow inherits Rectangle {
         }
     }
 
-    if root.compact : VerticalBox {
+    VerticalBox {
+        visible: root.compact;
         padding: 8px;
         spacing: 7px;
-        Text {
-            height: 20px;
+        compact-title := Text {
+            height: max(20px, self.preferred-height);
             text: root.title;
             color: root.title-color;
             font-size: TypeScale.body;
             font-weight: 600;
+            wrap: word-wrap;
         }
-        Text {
-            height: root.compact-description-height;
+        compact-description := Text {
+            height: max(root.compact-description-height, self.preferred-height);
             text: root.description;
             color: root.description-color;
             font-size: TypeScale.caption;
@@ -239,7 +252,7 @@ export component SettingsLinkRow inherits Rectangle {
     in property <color> hover-background;
     callback clicked;
 
-    height: 52px;
+    height: 18px + link-title.height + link-description.height;
     border-radius: 7px;
     background: link-hit.has-hover ? root.hover-background : transparent;
     accessible-role: button;
@@ -263,8 +276,8 @@ export component SettingsLinkRow inherits Rectangle {
         width: parent.width - 80px;
         height: parent.height - 14px;
         spacing: 1px;
-        Text { text: root.text; color: root.body-text; font-size: TypeScale.body; font-weight: 600; overflow: elide; }
-        Text { text: root.description; color: root.muted-text; font-size: TypeScale.caption; overflow: elide; }
+        link-title := Text { height: max(18px, self.preferred-height); text: root.text; color: root.body-text; font-size: TypeScale.body; font-weight: 600; overflow: elide; }
+        link-description := Text { height: max(16px, self.preferred-height); text: root.description; color: root.muted-text; font-size: TypeScale.caption; overflow: elide; }
     }
     Text {
         x: parent.width - 28px;
@@ -334,7 +347,7 @@ export component FormField inherits VerticalBox {
     padding: 0px;
     spacing: 5px;
     Text {
-        height: 16px;
+        height: max(16px, self.preferred-height);
         text: root.label;
         color: root.label-color;
         font-size: TypeScale.caption;

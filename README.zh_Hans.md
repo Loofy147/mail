@@ -300,7 +300,7 @@ Flectar Mail 目前仍在开发中，尚未稳定。
 
 预览构建发布后，请从 [GitHub Releases](https://github.com/flectar/mail/releases) 下载，并留意 **Pre-release** 标记：
 
-- **Linux x64：** AppImage、Debian/Ubuntu `.deb`、Fedora `.rpm`，或手动侧载（sideload）的 Flatpak 预览包
+- **Linux x64：** AppImage、Debian/Ubuntu `.deb`、Fedora 43/44 `.rpm`，或手动侧载（sideload）的 Flatpak 预览包
 - **Windows x64：** 安装程序 `.exe` 或便携版 ZIP
 - **macOS Apple 芯片或 Intel（macOS 14+）：** DMG 或应用程序 ZIP
 - **Android arm64（Android 8.0+）：** 预发布版本中的实验性测试 APK
@@ -310,6 +310,10 @@ Windows 预览版未签名；macOS 预览版采用临时签名（ad-hoc）且未
 Flatpak 预览版以独立测试包的形式提供。它目前还不是 Flathub 软件包，因此不会获得 Flathub 的自动更新。在托盘后端能够使用沙箱安全的 D-Bus 名称之前，其「关闭到托盘」选项处于禁用状态。登录时自动启动通过桌面的后台门户实现，由于没有托盘可用，会直接打开窗口。
 
 使用 `sudo dnf install ./flectar-mail-<version>-linux-x64.rpm` 或 `flatpak install --user ./flectar-mail-<version>-linux-x64.flatpak` 安装下载的 Linux 软件包。用 `flatpak run com.flectar.mail` 启动 Flatpak 版本。
+
+RPM 支持 x86_64 架构的 Fedora 43 和 44。发布构建以 Fedora 43 为兼容性基线；同一个 RPM 必须在这两个版本的干净容器中通过安装、PDF 渲染、X11 和 Wayland 启动及卸载检查后才能发布。其他基于 RPM 的发行版尚未经过测试。如果 Discover 只提示软件包冲突，请运行上面的 `dnf install` 命令，并在问题报告中附上具体的依赖错误。
+
+旧版 `0.1.0-alpha.7` RPM 在 Fedora 44 上构建，依赖 glibc 2.43，因此无法在 Fedora 43 上安装。在等待通过上述兼容性检查的新 RPM 发布期间，可以使用该版本的 Flatpak 包。
 
 每个 GitHub 发布版本都包含 `SHA256SUMS` 和已签名的构建来源证明。安装 GitHub CLI 后，可用 `gh attestation verify <download> --repo flectar/mail` 校验下载内容。
 

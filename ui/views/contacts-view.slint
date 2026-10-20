@@ -6,6 +6,7 @@ import { Button } from "../components/button.slint";
 import { DetailEmptyState } from "../components/detail-empty-state.slint";
 import { FloatingActionButton, LineEdit, TextEdit, ToolbarIconButton } from "../components/controls.slint";
 import { SidebarItem, SidebarSectionHeader } from "../components/sidebar-controls.slint";
+import { SidebarStyle } from "../components/sidebar-row.slint";
 import { TypeScale } from "../typography.slint";
 import { LayoutMetrics } from "../design-system.slint";
 import { ScrollFade } from "../components/scroll-fade.slint";
@@ -16,7 +17,7 @@ import { WindowControlsClearance } from "../window-chrome.slint";
 component FieldLabel inherits Text {
     in property <string> label;
     text: root.label;
-    height: 18px;
+    height: max(18px, self.preferred-height);
     color: #7a7b78;
     font-size: TypeScale.caption;
     font-weight: 700;
@@ -173,6 +174,17 @@ export component ContactsView inherits Rectangle {
                     vertical-stretch: 1;
                     background: transparent;
 
+                    // Account and hint rows grow with the platform font.
+                    account-name-line := Text { visible: false; text: "Ag"; font-size: SidebarStyle.label-size; font-weight: SidebarStyle.selected-weight; }
+                    account-detail-line := Text { visible: false; text: "Ag"; font-size: TypeScale.caption; }
+                    hint-measure := Text {
+                        visible: false;
+                        width: max(0px, contact-nav-scroll.visible-width - LayoutMetrics.sidebar-scrollbar-gutter);
+                        text: @tr("Suggested people stay local and separate until you save them as contacts.");
+                        font-size: TypeScale.caption;
+                        wrap: word-wrap;
+                    }
+
                     contact-nav-scroll := ListView {
                         // Keep a direct ListView repeater; Slint does not
                         // virtualize through a wrapper or inherited ListView.
@@ -184,9 +196,10 @@ export component ContactsView inherits Rectangle {
                             width: max(0px, contact-nav-scroll.visible-width - LayoutMetrics.sidebar-scrollbar-gutter);
                             height: entry.kind == ContactSidebarRowKind.unified-heading ? 34px
                                 : entry.kind == ContactSidebarRowKind.accounts-heading ? 26px
-                                : entry.kind == ContactSidebarRowKind.account ? (entry.account.email == "" ? 35px : 45px)
+                                : entry.kind == ContactSidebarRowKind.account ? (entry.account.email == "" ? 35px
+                                    : 10px + max(20px, account-name-line.preferred-height) + max(15px, account-detail-line.preferred-height))
                                 : entry.kind == ContactSidebarRowKind.unified-section ? 40px
-                                : entry.kind == ContactSidebarRowKind.hint ? 62px : 39px;
+                                : entry.kind == ContactSidebarRowKind.hint ? max(54px, hint-measure.preferred-height) + 8px : 39px;
 
                             if entry.kind == ContactSidebarRowKind.unified-heading || entry.kind == ContactSidebarRowKind.accounts-heading: WorkspaceMiniHeading {
                                 x: 0px;
@@ -244,7 +257,7 @@ export component ContactsView inherits Rectangle {
                                 x: 0px;
                                 y: 0px;
                                 width: parent.width;
-                                height: 54px;
+                                height: max(54px, self.preferred-height);
                                 text: @tr("Suggested people stay local and separate until you save them as contacts.");
                                 color: root.muted-text;
                                 font-size: TypeScale.caption;
@@ -340,7 +353,7 @@ export component ContactsView inherits Rectangle {
                             for contact in root.contacts : Rectangle {
                                 x: LayoutMetrics.list-row-inset;
                                 width: max(0px, contact-list.visible-width - 2 * LayoutMetrics.list-row-inset);
-                                height: 82px;
+                                height: contact-lines.y + contact-lines.height + 9px;
                                 border-radius: 6px;
                                 background: contact.selected ? root.selected-row : root.surface;
 
@@ -355,16 +368,16 @@ export component ContactsView inherits Rectangle {
                                     foreground-color: contact.selected ? root.accent : root.secondary-text;
                                 }
 
-                                Rectangle {
+                                contact-lines := Rectangle {
                                     x: 64px;
                                     y: 9px;
                                     width: max(0px, parent.width - 78px);
-                                    height: 64px;
-                                    Text {
+                                    height: contact-detail.y + contact-detail.height + 3px;
+                                    contact-name := Text {
                                         x: 0px;
                                         y: 0px;
                                         width: max(0px, parent.width - 28px);
-                                        height: 22px;
+                                        height: max(22px, self.preferred-height);
                                         text: contact.name == "" ? contact.email : contact.name;
                                         color: root.heading;
                                         font-size: TypeScale.body-large;
@@ -383,22 +396,22 @@ export component ContactsView inherits Rectangle {
                                         image-fit: contain;
                                         accessible-role: none;
                                     }
-                                    Text {
+                                    contact-email := Text {
                                         x: 0px;
-                                        y: 22px;
+                                        y: contact-name.y + contact-name.height;
                                         width: parent.width;
-                                        height: 20px;
+                                        height: max(20px, self.preferred-height);
                                         text: contact.email;
                                         color: root.body-text;
                                         font-size: TypeScale.secondary;
                                         overflow: elide;
                                         vertical-alignment: center;
                                     }
-                                    Text {
+                                    contact-detail := Text {
                                         x: 0px;
-                                        y: 43px;
+                                        y: contact-email.y + contact-email.height + 1px;
                                         width: parent.width;
-                                        height: 18px;
+                                        height: max(18px, self.preferred-height);
                                         text: contact.suggested ? @tr("Suggested from mail")
                                             : contact.detail != "" ? contact.detail : contact.last_contacted;
                                         color: root.muted-text;
@@ -606,7 +619,7 @@ export component ContactsView inherits Rectangle {
                         spacing: 7px;
 
                         HorizontalBox {
-                            height: 58px;
+                            height: 6px + detail-name.height + detail-interactions.height;
                             spacing: 14px;
                             Avatar {
                                 size: 52px;
@@ -616,8 +629,8 @@ export component ContactsView inherits Rectangle {
                             }
                             VerticalBox {
                                 spacing: 0px;
-                                Text {
-                                    height: 30px;
+                                detail-name := Text {
+                                    height: max(30px, self.preferred-height);
                                     text: root.edit-name == "" ? (root.edit-email == "" ? @tr("New contact") : root.edit-email) : root.edit-name;
                                     color: root.title-color;
                                     font-size: TypeScale.display;
@@ -625,8 +638,8 @@ export component ContactsView inherits Rectangle {
                                     overflow: elide;
                                     vertical-alignment: center;
                                 }
-                                Text {
-                                    height: 22px;
+                                detail-interactions := Text {
+                                    height: max(22px, self.preferred-height);
                                     text: root.interaction-label;
                                     color: root.muted-text;
                                     font-size: TypeScale.caption;
@@ -637,7 +650,7 @@ export component ContactsView inherits Rectangle {
 
                         Rectangle { height: 8px; }
                         if root.is-suggested : Rectangle {
-                            height: root.compact ? 66px : 52px;
+                            height: max(root.compact ? 66px : 52px, suggested-note.preferred-height + 24px);
                             background: root.accent-soft;
                             border-radius: 8px;
                             HorizontalBox {
@@ -651,7 +664,7 @@ export component ContactsView inherits Rectangle {
                                     image-fit: contain;
                                     accessible-role: none;
                                 }
-                                Text {
+                                suggested-note := Text {
                                     text: @tr("Learned from mail. Save this person to add them to your address book.");
                                     color: root.body-text;
                                     font-size: TypeScale.secondary;

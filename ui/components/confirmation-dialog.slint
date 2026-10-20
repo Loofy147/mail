@@ -93,7 +93,7 @@ export component ConfirmationDialog inherits Rectangle {
                 spacing: 12px;
 
                 HorizontalBox {
-                    height: panel.width < 360px ? 56px : 42px;
+                    height: max(panel.width < 360px ? 56px : 42px, dialog-title.preferred-height + 16px);
                     spacing: 12px;
                     Rectangle {
                         width: 42px;
@@ -102,7 +102,7 @@ export component ConfirmationDialog inherits Rectangle {
                         background: #d04a4324;
                         Image { x: 11px; y: 11px; width: 20px; height: 20px; source: root.icon; colorize: root.danger-color; image-fit: contain; accessible-role: none; }
                     }
-                    Text { text: root.title; color: root.title-color; font-size: TypeScale.heading; font-weight: 700; vertical-alignment: center; wrap: word-wrap; }
+                    dialog-title := Text { text: root.title; color: root.title-color; font-size: TypeScale.heading; font-weight: 700; vertical-alignment: center; wrap: word-wrap; }
                 }
 
                 if root.subject != "" : Text { text: root.subject; color: root.body-color; font-size: TypeScale.secondary; font-weight: 600; wrap: char-wrap; }

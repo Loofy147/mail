@@ -12,9 +12,10 @@ component ThemePresetCard inherits FocusVisibleScope {
     in property <color> preview-surface;
     in property <color> preview-text;
     in property <bool> selected: false;
+    in property <length> label-bottom-padding: 10px;
     callback chosen;
 
-    height: 72px;
+    height: 44px + preset-name.height + root.label-bottom-padding;
     min-width: 112px;
     focus-on-click: true;
     accessible-role: radio-button;
@@ -62,11 +63,11 @@ component ThemePresetCard inherits FocusVisibleScope {
                 background: root.preview-primary;
             }
         }
-        Text {
+        preset-name := Text {
             x: 10px;
             y: 44px;
             width: parent.width - 20px;
-            height: 18px;
+            height: max(18px, self.preferred-height);
             text: root.name;
             color: root.selected ? AppTheme.accent : AppTheme.body;
             font-size: TypeScale.caption;
@@ -88,7 +89,7 @@ component ThemeModeCard inherits FocusVisibleScope {
     in property <bool> selected: false;
     callback chosen;
 
-    height: 68px;
+    height: 51px + mode-name.height;
     min-width: 92px;
     focus-on-click: true;
     accessible-role: radio-button;
@@ -117,11 +118,11 @@ component ThemeModeCard inherits FocusVisibleScope {
             }
             Rectangle { x: 10px; y: 11px; width: 28%; height: 3px; border-radius: 2px; background: #3b82f6; }
         }
-        Text {
-            x: 8px; y: 44px; width: parent.width - 16px; height: 17px;
+        mode-name := Text {
+            x: 8px; y: 44px; width: parent.width - 16px; height: max(17px, self.preferred-height);
             text: root.name; color: root.selected ? AppTheme.accent : AppTheme.body;
             font-size: TypeScale.caption; font-weight: root.selected ? 700 : 600;
-            horizontal-alignment: center; vertical-alignment: center;
+            horizontal-alignment: center; vertical-alignment: center; overflow: elide;
         }
         mode-hit := TouchArea { clicked => { root.pointer-activated(); root.chosen(); } mouse-cursor: pointer; }
     }
@@ -347,8 +348,10 @@ export component RuntimeColorPicker inherits Rectangle {
                 border-color: AppTheme.border;
                 background: root.value;
             }
+            // As tall as the swatch and field beside it, so all three share a center.
             Text {
-                width: 30px;
+                width: max(30px, self.preferred-width);
+                height: max(32px, self.preferred-height);
                 text: "HEX";
                 color: AppTheme.secondary;
                 font-size: TypeScale.caption;
@@ -454,9 +457,11 @@ export component ThemeEditor inherits Rectangle {
     ];
 
     vertical-stretch: 0;
-    min-height: AppTheme.preset == "custom"
-        ? (root.compact ? 970px : 690px)
-        : (root.compact ? 420px : 272px);
+    height: max(
+        AppTheme.preset == "custom"
+            ? (root.compact ? 970px : 690px)
+            : (root.compact ? 420px : 272px),
+        editor-content.preferred-height);
     border-radius: 8px;
     border-width: 1px;
     border-color: AppTheme.border-subtle;
@@ -570,7 +575,7 @@ export component ThemeEditor inherits Rectangle {
 
     discard-changes => { root.revert(); }
 
-    VerticalBox {
+    editor-content := VerticalBox {
         padding-top: 16px;
         padding-right: 18px;
         padding-bottom: 16px;
@@ -578,7 +583,7 @@ export component ThemeEditor inherits Rectangle {
         spacing: 10px;
 
         Text {
-            height: 22px;
+            height: max(22px, self.preferred-height);
             text: @tr("Theme");
             color: AppTheme.heading;
             font-size: TypeScale.subtitle;
@@ -586,9 +591,8 @@ export component ThemeEditor inherits Rectangle {
             vertical-alignment: center;
         }
 
-        Text { height: 18px; text: @tr("Color scheme"); color: AppTheme.secondary; font-size: TypeScale.secondary; vertical-alignment: center; }
+        Text { height: max(18px, self.preferred-height); text: @tr("Color scheme"); color: AppTheme.secondary; font-size: TypeScale.secondary; vertical-alignment: center; }
         HorizontalBox {
-            height: 68px;
             padding: 0px;
             spacing: 8px;
             ThemeModeCard { horizontal-stretch: 1; min-width: 0px; name: @tr("System"); mode: "system"; selected: root.theme-mode == "system"; chosen => { root.choose-mode("system"); } }
@@ -597,10 +601,9 @@ export component ThemeEditor inherits Rectangle {
         }
 
         Rectangle { height: 1px; background: AppTheme.border-subtle; }
-        Text { height: 18px; text: @tr("Palette"); color: AppTheme.secondary; font-size: TypeScale.caption; font-weight: 700; vertical-alignment: center; }
+        Text { height: max(18px, self.preferred-height); text: @tr("Palette"); color: AppTheme.secondary; font-size: TypeScale.caption; font-weight: 700; vertical-alignment: center; }
 
         if !root.compact : HorizontalBox {
-            height: 72px;
             padding: 0px;
             spacing: 8px;
             ThemePresetCard { horizontal-stretch: 1; name: @tr("Default"); preview-primary: #0969da; preview-page: AppTheme.dark ? #111213 : #f2f2f0; preview-surface: AppTheme.dark ? #18191a : white; preview-text: AppTheme.dark ? #f3f3f2 : #202120; selected: AppTheme.preset == "default"; chosen => { root.choose-preset("default"); } }
@@ -610,37 +613,46 @@ export component ThemeEditor inherits Rectangle {
             ThemePresetCard { horizontal-stretch: 1; name: @tr("Custom"); preview-primary: root.current-primary; preview-page: root.current-page-bg; preview-surface: root.current-surface; preview-text: root.current-text; selected: AppTheme.preset == "custom"; chosen => { root.choose-preset("custom"); } }
         }
         if root.compact : VerticalBox {
-            height: 220px;
             padding: 0px;
             spacing: 8px;
             HorizontalBox {
-                height: 68px;
                 padding: 0px;
                 spacing: 8px;
-                ThemePresetCard { horizontal-stretch: 1; min-width: 0px; height: 68px; name: @tr("Default"); preview-primary: #0969da; preview-page: AppTheme.dark ? #111213 : #f2f2f0; preview-surface: AppTheme.dark ? #18191a : white; preview-text: AppTheme.dark ? #f3f3f2 : #202120; selected: AppTheme.preset == "default"; chosen => { root.choose-preset("default"); } }
-                ThemePresetCard { horizontal-stretch: 1; min-width: 0px; height: 68px; name: @tr("Teal"); preview-primary: #006b7a; preview-page: AppTheme.dark ? #0b1519 : #edf5f7; preview-surface: AppTheme.dark ? #122026 : #fbfefe; preview-text: AppTheme.dark ? #e5f0f2 : #173039; selected: AppTheme.preset == "teal"; chosen => { root.choose-preset("teal"); } }
+                ThemePresetCard { horizontal-stretch: 1; min-width: 0px; label-bottom-padding: 6px; name: @tr("Default"); preview-primary: #0969da; preview-page: AppTheme.dark ? #111213 : #f2f2f0; preview-surface: AppTheme.dark ? #18191a : white; preview-text: AppTheme.dark ? #f3f3f2 : #202120; selected: AppTheme.preset == "default"; chosen => { root.choose-preset("default"); } }
+                ThemePresetCard { horizontal-stretch: 1; min-width: 0px; label-bottom-padding: 6px; name: @tr("Teal"); preview-primary: #006b7a; preview-page: AppTheme.dark ? #0b1519 : #edf5f7; preview-surface: AppTheme.dark ? #122026 : #fbfefe; preview-text: AppTheme.dark ? #e5f0f2 : #173039; selected: AppTheme.preset == "teal"; chosen => { root.choose-preset("teal"); } }
             }
             HorizontalBox {
-                height: 68px;
                 padding: 0px;
                 spacing: 8px;
-                ThemePresetCard { horizontal-stretch: 1; min-width: 0px; height: 68px; name: @tr("Green"); preview-primary: #2f6f44; preview-page: AppTheme.dark ? #101711 : #f1f5ef; preview-surface: AppTheme.dark ? #182019 : #fcfdfb; preview-text: AppTheme.dark ? #e9f0e6 : #213026; selected: AppTheme.preset == "green"; chosen => { root.choose-preset("green"); } }
-                ThemePresetCard { horizontal-stretch: 1; min-width: 0px; height: 68px; name: @tr("Purple"); preview-primary: #78418a; preview-page: AppTheme.dark ? #171119 : #f6f1f7; preview-surface: AppTheme.dark ? #201722 : #fdfbfe; preview-text: AppTheme.dark ? #f1e8f3 : #332537; selected: AppTheme.preset == "purple"; chosen => { root.choose-preset("purple"); } }
+                ThemePresetCard { horizontal-stretch: 1; min-width: 0px; label-bottom-padding: 6px; name: @tr("Green"); preview-primary: #2f6f44; preview-page: AppTheme.dark ? #101711 : #f1f5ef; preview-surface: AppTheme.dark ? #182019 : #fcfdfb; preview-text: AppTheme.dark ? #e9f0e6 : #213026; selected: AppTheme.preset == "green"; chosen => { root.choose-preset("green"); } }
+                ThemePresetCard { horizontal-stretch: 1; min-width: 0px; label-bottom-padding: 6px; name: @tr("Purple"); preview-primary: #78418a; preview-page: AppTheme.dark ? #171119 : #f6f1f7; preview-surface: AppTheme.dark ? #201722 : #fdfbfe; preview-text: AppTheme.dark ? #f1e8f3 : #332537; selected: AppTheme.preset == "purple"; chosen => { root.choose-preset("purple"); } }
             }
             HorizontalBox {
-                height: 68px;
                 padding: 0px;
                 spacing: 8px;
                 Rectangle { horizontal-stretch: 1; }
-                ThemePresetCard { horizontal-stretch: 1; min-width: 0px; height: 68px; name: @tr("Custom"); preview-primary: root.current-primary; preview-page: root.current-page-bg; preview-surface: root.current-surface; preview-text: root.current-text; selected: AppTheme.preset == "custom"; chosen => { root.choose-preset("custom"); } }
+                ThemePresetCard { horizontal-stretch: 1; min-width: 0px; label-bottom-padding: 6px; name: @tr("Custom"); preview-primary: root.current-primary; preview-page: root.current-page-bg; preview-surface: root.current-surface; preview-text: root.current-text; selected: AppTheme.preset == "custom"; chosen => { root.choose-preset("custom"); } }
                 Rectangle { horizontal-stretch: 1; }
             }
         }
 
         if AppTheme.preset == "custom" : Rectangle { height: 1px; background: AppTheme.border-subtle; }
+        // A phone row only fits the mode choice, so the heading and the save
+        // state get their own lines there.
+        if AppTheme.preset == "custom" && root.compact : Text {
+            text: @tr("Custom palette");
+            color: AppTheme.heading;
+            font-size: TypeScale.body;
+            font-weight: 700;
+            wrap: word-wrap;
+        }
+        // The radio buttons set the row height; vertical padding would leave
+        // the texts beside them too short to show.
         if AppTheme.preset == "custom" : HorizontalBox {
-            height: 26px;
-            Text {
+            height: max(26px, self.preferred-height);
+            padding-top: 0px;
+            padding-bottom: 0px;
+            if !root.compact : Text {
                 text: @tr("Custom palette");
                 color: AppTheme.heading;
                 font-size: TypeScale.body;
@@ -660,12 +672,18 @@ export component ThemeEditor inherits Rectangle {
                 clicked => { root.editing-dark = true; }
             }
             Rectangle { horizontal-stretch: 1; }
-            Text {
+            if !root.compact : Text {
                 text: root.dirty ? @tr("Unsaved changes") : @tr("Saved");
                 color: root.dirty ? AppTheme.accent : AppTheme.secondary;
                 font-size: TypeScale.caption;
                 vertical-alignment: center;
             }
+        }
+        if AppTheme.preset == "custom" && root.compact : Text {
+            text: root.dirty ? @tr("Unsaved changes") : @tr("Saved");
+            color: root.dirty ? AppTheme.accent : AppTheme.secondary;
+            font-size: TypeScale.caption;
+            wrap: word-wrap;
         }
 
         if AppTheme.preset == "custom" && !root.compact : HorizontalBox {
@@ -745,13 +763,14 @@ export component ThemeEditor inherits Rectangle {
             }
         }
 
+        // A phone row may be too narrow for three long translated labels.
         if AppTheme.preset == "custom" : HorizontalBox {
             height: 32px;
             spacing: 8px;
-            Button { text: root.compact ? @tr("Reset") : @tr("Reset this palette"); clicked => { root.reset-current-palette(); } }
+            Button { text: root.compact ? @tr("Reset") : @tr("Reset this palette"); label-overflow: elide; clicked => { root.reset-current-palette(); } }
             Rectangle { horizontal-stretch: 1; }
-            Button { text: @tr("Revert"); enabled: root.dirty; clicked => { root.revert(); } }
-            Button { text: root.compact ? @tr("Save") : @tr("Save palette"); primary: true; enabled: root.dirty; clicked => { root.persist(); } }
+            Button { text: @tr("Revert"); label-overflow: elide; enabled: root.dirty; clicked => { root.revert(); } }
+            Button { text: root.compact ? @tr("Save") : @tr("Save palette"); label-overflow: elide; primary: true; enabled: root.dirty; clicked => { root.persist(); } }
         }
     }
 }
