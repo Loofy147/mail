@@ -631,7 +631,12 @@ export component MailListPane inherits Rectangle {
                                     avatar-border-color: root.border;
                                 }
 
-                                Rectangle {
+                                message-content := Rectangle {
+                                    // Dense rows keep everything on one line: the account
+                                    // comes before the indicators, thread count and time,
+                                    // and the subject and preview end before it.
+                                    property <length> dense-account-x: (sender-indicators.width > 0px ? sender-indicators.x
+                                        : mail-data.message_count > 1 ? thread-count.x : sender-time.x) - 54px;
                                     visible: !entry.is_header;
                                     x: root.show-avatars ? (root.dense ? 52px : 64px) : 14px;
                                     y: root.dense ? 0px : 8px;
@@ -716,9 +721,9 @@ export component MailListPane inherits Rectangle {
                                     sender-title := Text {
                                         x: 0px;
                                         y: 0px;
-                                        width: mail-data.message_count > 1
-                                            ? max(0px, (sender-indicators.width > 0px ? sender-indicators.x : thread-count.x) - 8px)
-                                            : root.dense ? min(170px, max(0px, parent.width - 190px))
+                                        width: root.dense ? min(170px, max(0px, parent.width - 190px))
+                                            : mail-data.message_count > 1
+                                                ? max(0px, (sender-indicators.width > 0px ? sender-indicators.x : thread-count.x) - 8px)
                                             : mail-data.has_attachments || mail-data.has_replied
                                                 ? max(0px, sender-indicators.x - 8px)
                                                 : max(0px, sender-time.x - 22px);
@@ -744,7 +749,7 @@ export component MailListPane inherits Rectangle {
                                     subject-label := Text {
                                         x: root.dense ? min(190px, sender-time.x) : 0px;
                                         y: root.dense ? 0px : root.sender-line + 5px;
-                                        width: root.dense ? min(260px, max(0px, sender-time.x - self.x - 56px)) : parent.width;
+                                        width: root.dense ? min(260px, max(0px, message-content.dense-account-x - self.x - 2px)) : parent.width;
                                         height: root.dense ? 44px : root.subject-line;
                                         text: mail-data.subject == "" ? @tr("(No subject)") : mail-data.subject;
                                         color: root.body-text;
@@ -768,7 +773,7 @@ export component MailListPane inherits Rectangle {
                                     }
                                     Rectangle {
                                         visible: root.dense;
-                                        x: sender-time.x - 54px;
+                                        x: message-content.dense-account-x;
                                         y: 11px;
                                         width: 48px;
                                         height: 22px;
@@ -799,7 +804,7 @@ export component MailListPane inherits Rectangle {
                                     HorizontalBox {
                                         x: root.dense ? subject-label.x + subject-label.width + 12px : 0px;
                                         y: root.dense ? 0px : root.sender-line + root.subject-line + 10px;
-                                        width: root.dense ? max(0px, sender-time.x - self.x - 12px) : max(0px, parent.width - 98px);
+                                        width: root.dense ? max(0px, message-content.dense-account-x - self.x - 12px) : max(0px, parent.width - 98px);
                                         height: root.dense ? 44px : root.detail-line;
                                         padding: 0px;
                                         spacing: 4px;

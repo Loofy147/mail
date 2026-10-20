@@ -2461,7 +2461,7 @@ msgstr "删除全局标签"
 msgid "Delete label from {}"
 msgstr "删除 {} 中的标签"
 
-#: ui/components/sidebar.slint:67 ui/views/mail-list-pane.slint:1013
+#: ui/components/sidebar.slint:67 ui/views/mail-list-pane.slint:1018
 msgid "New email"
 msgstr "新建邮件"
 
@@ -5081,7 +5081,7 @@ msgstr "重新加载邮件"
 msgid "Select all messages on this page"
 msgstr "全选本页邮件"
 
-#: ui/views/mail-list-pane.slint:448 ui/views/mail-list-pane.slint:932
+#: ui/views/mail-list-pane.slint:448 ui/views/mail-list-pane.slint:937
 #: ui/views/mail-reading-pane.slint:403
 msgid "Move to spam"
 msgstr "移到垃圾邮件"
@@ -5094,22 +5094,22 @@ msgstr ""
 msgid "More message actions"
 msgstr "更多邮件操作"
 
-#: ui/views/mail-list-pane.slint:476 ui/views/mail-list-pane.slint:930
+#: ui/views/mail-list-pane.slint:476 ui/views/mail-list-pane.slint:935
 #: ui/views/mail-reading-pane.slint:401
 msgid "Mark as read"
 msgstr "标记为已读"
 
-#: ui/views/mail-list-pane.slint:477 ui/views/mail-list-pane.slint:930
+#: ui/views/mail-list-pane.slint:477 ui/views/mail-list-pane.slint:935
 #: ui/views/mail-reading-pane.slint:401
 msgid "Mark as unread"
 msgstr "标记为未读"
 
-#: ui/views/mail-list-pane.slint:478 ui/views/mail-list-pane.slint:929
+#: ui/views/mail-list-pane.slint:478 ui/views/mail-list-pane.slint:934
 #: ui/views/mail-reading-pane.slint:393
 msgid "Star message"
 msgstr "加星标"
 
-#: ui/views/mail-list-pane.slint:479 ui/views/mail-list-pane.slint:929
+#: ui/views/mail-list-pane.slint:479 ui/views/mail-list-pane.slint:934
 #: ui/views/mail-reading-pane.slint:393
 msgid "Remove star"
 msgstr "取消星标"
@@ -5118,7 +5118,7 @@ msgstr "取消星标"
 msgid "{}, {}"
 msgstr "{}，{}"
 
-#: ui/views/mail-list-pane.slint:571 ui/views/mail-list-pane.slint:749
+#: ui/views/mail-list-pane.slint:571 ui/views/mail-list-pane.slint:754
 msgid "(No subject)"
 msgstr "（无主题）"
 
@@ -5134,40 +5134,40 @@ msgstr "{} 封邮件"
 msgid "Replied"
 msgstr "已回复"
 
-#: ui/views/mail-list-pane.slint:692
+#: ui/views/mail-list-pane.slint:697
 msgid "{} messages in this conversation"
 msgstr "此会话中有 {} 封邮件"
 
-#: ui/views/mail-list-pane.slint:777
+#: ui/views/mail-list-pane.slint:782
 msgid "Account: {}"
 msgstr "账户：{}"
 
-#: ui/views/mail-list-pane.slint:919
+#: ui/views/mail-list-pane.slint:924
 msgid "Deselect {}"
 msgstr "取消选择 {}"
 
-#: ui/views/mail-list-pane.slint:927
+#: ui/views/mail-list-pane.slint:932
 msgid "Open in new tab"
 msgstr ""
 
-#: ui/views/mail-list-pane.slint:931 ui/views/mail-reading-pane.slint:385
+#: ui/views/mail-list-pane.slint:936 ui/views/mail-reading-pane.slint:385
 msgid "Archive"
 msgstr "归档"
 
-#: ui/views/mail-list-pane.slint:933 ui/views/mail-reading-pane.slint:369
+#: ui/views/mail-list-pane.slint:938 ui/views/mail-reading-pane.slint:369
 #: ui/views/mail-reading-pane.slint:404
 msgid "Delete permanently…"
 msgstr ""
 
-#: ui/views/mail-list-pane.slint:990 ui/views/onboarding-view.slint:131
+#: ui/views/mail-list-pane.slint:995 ui/views/onboarding-view.slint:131
 msgid "Opening your mailbox…"
 msgstr "正在打开您的邮箱…"
 
-#: ui/views/mail-list-pane.slint:990
+#: ui/views/mail-list-pane.slint:995
 msgid "Nothing here"
 msgstr "这里没有内容"
 
-#: ui/views/mail-list-pane.slint:991
+#: ui/views/mail-list-pane.slint:996
 msgid "Try another folder or search term."
 msgstr "请尝试其他文件夹或搜索词。"
 

@@ -2493,7 +2493,7 @@ msgstr "Genel etiketi sil"
 msgid "Delete label from {}"
 msgstr "{} içindeki etiketi sil"
 
-#: ui/components/sidebar.slint:67 ui/views/mail-list-pane.slint:1013
+#: ui/components/sidebar.slint:67 ui/views/mail-list-pane.slint:1018
 msgid "New email"
 msgstr "Yeni e-posta"
 
@@ -5185,7 +5185,7 @@ msgstr "E-postaları yeniden yükle"
 msgid "Select all messages on this page"
 msgstr "Bu sayfadaki tüm iletileri seç"
 
-#: ui/views/mail-list-pane.slint:448 ui/views/mail-list-pane.slint:932
+#: ui/views/mail-list-pane.slint:448 ui/views/mail-list-pane.slint:937
 #: ui/views/mail-reading-pane.slint:403
 msgid "Move to spam"
 msgstr "İstenmeyene taşı"
@@ -5198,22 +5198,22 @@ msgstr ""
 msgid "More message actions"
 msgstr "Diğer ileti işlemleri"
 
-#: ui/views/mail-list-pane.slint:476 ui/views/mail-list-pane.slint:930
+#: ui/views/mail-list-pane.slint:476 ui/views/mail-list-pane.slint:935
 #: ui/views/mail-reading-pane.slint:401
 msgid "Mark as read"
 msgstr "Okundu olarak işaretle"
 
-#: ui/views/mail-list-pane.slint:477 ui/views/mail-list-pane.slint:930
+#: ui/views/mail-list-pane.slint:477 ui/views/mail-list-pane.slint:935
 #: ui/views/mail-reading-pane.slint:401
 msgid "Mark as unread"
 msgstr "Okunmadı olarak işaretle"
 
-#: ui/views/mail-list-pane.slint:478 ui/views/mail-list-pane.slint:929
+#: ui/views/mail-list-pane.slint:478 ui/views/mail-list-pane.slint:934
 #: ui/views/mail-reading-pane.slint:393
 msgid "Star message"
 msgstr "İletiye yıldız ekle"
 
-#: ui/views/mail-list-pane.slint:479 ui/views/mail-list-pane.slint:929
+#: ui/views/mail-list-pane.slint:479 ui/views/mail-list-pane.slint:934
 #: ui/views/mail-reading-pane.slint:393
 msgid "Remove star"
 msgstr "Yıldızı kaldır"
@@ -5222,7 +5222,7 @@ msgstr "Yıldızı kaldır"
 msgid "{}, {}"
 msgstr "{}, {}"
 
-#: ui/views/mail-list-pane.slint:571 ui/views/mail-list-pane.slint:749
+#: ui/views/mail-list-pane.slint:571 ui/views/mail-list-pane.slint:754
 msgid "(No subject)"
 msgstr "(Konu yok)"
 
@@ -5238,40 +5238,40 @@ msgstr "{} ileti"
 msgid "Replied"
 msgstr "Yanıtlandı"
 
-#: ui/views/mail-list-pane.slint:692
+#: ui/views/mail-list-pane.slint:697
 msgid "{} messages in this conversation"
 msgstr "Bu konuşmada {} ileti"
 
-#: ui/views/mail-list-pane.slint:777
+#: ui/views/mail-list-pane.slint:782
 msgid "Account: {}"
 msgstr "Hesap: {}"
 
-#: ui/views/mail-list-pane.slint:919
+#: ui/views/mail-list-pane.slint:924
 msgid "Deselect {}"
 msgstr "Seçimini kaldır: {}"
 
-#: ui/views/mail-list-pane.slint:927
+#: ui/views/mail-list-pane.slint:932
 msgid "Open in new tab"
 msgstr ""
 
-#: ui/views/mail-list-pane.slint:931 ui/views/mail-reading-pane.slint:385
+#: ui/views/mail-list-pane.slint:936 ui/views/mail-reading-pane.slint:385
 msgid "Archive"
 msgstr "Arşivle"
 
-#: ui/views/mail-list-pane.slint:933 ui/views/mail-reading-pane.slint:369
+#: ui/views/mail-list-pane.slint:938 ui/views/mail-reading-pane.slint:369
 #: ui/views/mail-reading-pane.slint:404
 msgid "Delete permanently…"
 msgstr ""
 
-#: ui/views/mail-list-pane.slint:990 ui/views/onboarding-view.slint:131
+#: ui/views/mail-list-pane.slint:995 ui/views/onboarding-view.slint:131
 msgid "Opening your mailbox…"
 msgstr "Posta kutunuz açılıyor…"
 
-#: ui/views/mail-list-pane.slint:990
+#: ui/views/mail-list-pane.slint:995
 msgid "Nothing here"
 msgstr "Burada hiçbir şey yok"
 
-#: ui/views/mail-list-pane.slint:991
+#: ui/views/mail-list-pane.slint:996
 msgid "Try another folder or search term."
 msgstr "Başka bir klasör veya arama terimi deneyin."
 

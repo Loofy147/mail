@@ -2543,7 +2543,7 @@ msgstr "Eliminar etiqueta global"
 msgid "Delete label from {}"
 msgstr "Eliminar etiqueta de {}"
 
-#: ui/components/sidebar.slint:67 ui/views/mail-list-pane.slint:1013
+#: ui/components/sidebar.slint:67 ui/views/mail-list-pane.slint:1018
 msgid "New email"
 msgstr "Nuevo correo"
 
@@ -5281,7 +5281,7 @@ msgstr "Recargar correo"
 msgid "Select all messages on this page"
 msgstr "Seleccionar todos los mensajes de esta página"
 
-#: ui/views/mail-list-pane.slint:448 ui/views/mail-list-pane.slint:932
+#: ui/views/mail-list-pane.slint:448 ui/views/mail-list-pane.slint:937
 #: ui/views/mail-reading-pane.slint:403
 msgid "Move to spam"
 msgstr "Mover a spam"
@@ -5294,22 +5294,22 @@ msgstr "Eliminar seleccionados permanentemente"
 msgid "More message actions"
 msgstr "Más acciones del mensaje"
 
-#: ui/views/mail-list-pane.slint:476 ui/views/mail-list-pane.slint:930
+#: ui/views/mail-list-pane.slint:476 ui/views/mail-list-pane.slint:935
 #: ui/views/mail-reading-pane.slint:401
 msgid "Mark as read"
 msgstr "Marcar como leído"
 
-#: ui/views/mail-list-pane.slint:477 ui/views/mail-list-pane.slint:930
+#: ui/views/mail-list-pane.slint:477 ui/views/mail-list-pane.slint:935
 #: ui/views/mail-reading-pane.slint:401
 msgid "Mark as unread"
 msgstr "Marcar como no leído"
 
-#: ui/views/mail-list-pane.slint:478 ui/views/mail-list-pane.slint:929
+#: ui/views/mail-list-pane.slint:478 ui/views/mail-list-pane.slint:934
 #: ui/views/mail-reading-pane.slint:393
 msgid "Star message"
 msgstr "Destacar mensaje"
 
-#: ui/views/mail-list-pane.slint:479 ui/views/mail-list-pane.slint:929
+#: ui/views/mail-list-pane.slint:479 ui/views/mail-list-pane.slint:934
 #: ui/views/mail-reading-pane.slint:393
 msgid "Remove star"
 msgstr "Quitar destacado"
@@ -5318,7 +5318,7 @@ msgstr "Quitar destacado"
 msgid "{}, {}"
 msgstr "{}, {}"
 
-#: ui/views/mail-list-pane.slint:571 ui/views/mail-list-pane.slint:749
+#: ui/views/mail-list-pane.slint:571 ui/views/mail-list-pane.slint:754
 msgid "(No subject)"
 msgstr "(Sin asunto)"
 
@@ -5334,40 +5334,40 @@ msgstr "{} mensajes"
 msgid "Replied"
 msgstr "Respondido"
 
-#: ui/views/mail-list-pane.slint:692
+#: ui/views/mail-list-pane.slint:697
 msgid "{} messages in this conversation"
 msgstr "{} mensajes en esta conversación"
 
-#: ui/views/mail-list-pane.slint:777
+#: ui/views/mail-list-pane.slint:782
 msgid "Account: {}"
 msgstr "Cuenta: {}"
 
-#: ui/views/mail-list-pane.slint:919
+#: ui/views/mail-list-pane.slint:924
 msgid "Deselect {}"
 msgstr "Deseleccionar {}"
 
-#: ui/views/mail-list-pane.slint:927
+#: ui/views/mail-list-pane.slint:932
 msgid "Open in new tab"
 msgstr "Abrir en una pestaña nueva"
 
-#: ui/views/mail-list-pane.slint:931 ui/views/mail-reading-pane.slint:385
+#: ui/views/mail-list-pane.slint:936 ui/views/mail-reading-pane.slint:385
 msgid "Archive"
 msgstr "Archivar"
 
-#: ui/views/mail-list-pane.slint:933 ui/views/mail-reading-pane.slint:369
+#: ui/views/mail-list-pane.slint:938 ui/views/mail-reading-pane.slint:369
 #: ui/views/mail-reading-pane.slint:404
 msgid "Delete permanently…"
 msgstr "Eliminar permanentemente…"
 
-#: ui/views/mail-list-pane.slint:990 ui/views/onboarding-view.slint:131
+#: ui/views/mail-list-pane.slint:995 ui/views/onboarding-view.slint:131
 msgid "Opening your mailbox…"
 msgstr "Abriendo tu buzón…"
 
-#: ui/views/mail-list-pane.slint:990
+#: ui/views/mail-list-pane.slint:995
 msgid "Nothing here"
 msgstr "No hay nada aquí"
 
-#: ui/views/mail-list-pane.slint:991
+#: ui/views/mail-list-pane.slint:996
 msgid "Try another folder or search term."
 msgstr "Prueba otra carpeta o término de búsqueda."
 
