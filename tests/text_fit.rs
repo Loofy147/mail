@@ -3,11 +3,11 @@
 // fallback cuts the bottom off glyphs where KDE reports 10pt (13.3px) or
 // GNOME 11pt (14.7px). This lays out the real window in each state below at
 // those base sizes, in English and the translations the bundled font covers.
-// Each text element must get the size its own content needs, and no clipping
-// container may cut it. Compared with the English layout at the fallback
-// size, it must not spill out of a surface that held it or overlap its
-// neighbors more, and an input that keeps its width must still show its
-// whole value.
+// Each text element must get the size its own content needs, no clipping
+// container may cut it, and a button's label must stay inside the button.
+// Compared with the English layout at the fallback size, a text must not
+// spill out of a surface that held it or overlap its neighbors more, and an
+// input that keeps its width must still show its whole value.
 //
 // Build with SLINT_EMIT_DEBUG_INFO=1 to name the offending elements. Set
 // FLECTAR_TEXT_FIT_SNAPSHOTS to a directory to save a render of each state.
@@ -25,8 +25,8 @@ use i_slint_core::accessibility::{
 use i_slint_core::item_rendering::{PlainOrStyledText, RenderString, RenderText};
 use i_slint_core::item_tree::{ItemRc, ParentItemTraversalMode};
 use i_slint_core::items::{
-    BasicBorderRectangle, BorderRectangle, Clip, ComplexText, Flickable, Opacity, Rectangle,
-    SimpleText, StyledTextItem, TextHorizontalAlignment, TextInput, TextOverflow,
+    AccessibleRole, BasicBorderRectangle, BorderRectangle, Clip, ComplexText, Flickable, Opacity,
+    Rectangle, SimpleText, StyledTextItem, TextHorizontalAlignment, TextInput, TextOverflow,
     TextVerticalAlignment, TextWrap,
 };
 use i_slint_core::layout::Orientation;
@@ -83,6 +83,8 @@ fn message(key: &str) -> LocalizedMessage {
     }
 }
 
+// Between them, the accounts show every calendar and contacts control an
+// account card can have.
 fn accounts() -> Vec<AccountRow> {
     vec![
         AccountRow {
@@ -90,7 +92,7 @@ fn accounts() -> Vec<AccountRow> {
             drag_key: "1".into(),
             name: "Alex Morgan".into(),
             email: "alex.morgan@example.com".into(),
-            provider: "IMAP".into(),
+            provider: "imap".into(),
             mail_protocol: "imap".into(),
             status: "Synced".into(),
             initials: "AM".into(),
@@ -111,6 +113,10 @@ fn accounts() -> Vec<AccountRow> {
             calendar_status: "Connected".into(),
             caldav_url: "https://dav.example.com/calendars/alex/".into(),
             caldav_username: "alex.morgan@example.com".into(),
+            carddav_connected: true,
+            carddav_enabled: true,
+            carddav_url: "https://dav.example.com/addressbooks/alex/".into(),
+            carddav_username: "alex.morgan@example.com".into(),
             ..Default::default()
         },
         AccountRow {
@@ -118,12 +124,29 @@ fn accounts() -> Vec<AccountRow> {
             drag_key: "2".into(),
             name: "Support Team".into(),
             email: "support@example.org".into(),
-            provider: "Gmail".into(),
+            provider: "gmail".into(),
             mail_protocol: "gmail".into(),
             status: "Sync failed".into(),
             sync_error: "The server closed the connection before the mailbox was selected.".into(),
             initials: "ST".into(),
             mail_history: "sixMonths".into(),
+            ..Default::default()
+        },
+        AccountRow {
+            id: 3,
+            drag_key: "3".into(),
+            name: "Sam Rivera".into(),
+            email: "sam@example.net".into(),
+            provider: "imap".into(),
+            mail_protocol: "imap".into(),
+            status: "idle".into(),
+            initials: "SR".into(),
+            username: "sam@example.net".into(),
+            imap_security: "auto".into(),
+            smtp_security: "auto".into(),
+            mail_history: "sixMonths".into(),
+            carddav_connected: true,
+            carddav_status: "Authentication failed".into(),
             ..Default::default()
         },
     ]
@@ -1054,6 +1077,7 @@ enum Problem {
     Spill,
     Overlap,
     Hidden,
+    Outside,
 }
 
 struct Finding {
@@ -1179,6 +1203,18 @@ fn backdrop(item: &ItemRc) -> Option<ItemRc> {
     None
 }
 
+/// The button a text is the label of, if any.
+fn button(item: &ItemRc) -> Option<ItemRc> {
+    let mut current = item.parent_item(ParentItemTraversalMode::StopAtPopups);
+    while let Some(ancestor) = current {
+        if ancestor.accessible_role() == AccessibleRole::Button {
+            return Some(ancestor);
+        }
+        current = ancestor.parent_item(ParentItemTraversalMode::StopAtPopups);
+    }
+    None
+}
+
 fn overlaps(inks: &[Ink]) -> Overlaps {
     let mut overlaps = Overlaps::new();
     for (index, ink) in inks.iter().enumerate() {
@@ -1289,8 +1325,19 @@ fn check(app: &AppWindow) -> (Vec<Finding>, Placements, Overlaps) {
             );
             let rect = window_rect(item);
             let content = LogicalSize::new(width.preferred, vertical.preferred);
-            if let Some(ink) = ink_rect(&text, rect, content).intersection(&clip_area(item, window))
-            {
+            let ink = ink_rect(&text, rect, content);
+            // A label belongs inside its button at every size, the fallback included.
+            if let Some(button) = button(item) {
+                let bounds = window_rect(&button);
+                let outside = (bounds.min_x() - ink.min_x())
+                    .max(ink.max_x() - bounds.max_x())
+                    .max(bounds.min_y() - ink.min_y())
+                    .max(ink.max_y() - bounds.max_y());
+                if outside > TOLERANCE {
+                    report(Problem::Outside, outside, 0.0);
+                }
+            }
+            if let Some(ink) = ink.intersection(&clip_area(item, window)) {
                 inks.push(Ink {
                     instance,
                     backdrop: (root_index, backdrop(item)),
@@ -1488,6 +1535,7 @@ fn text_fits_at_desktop_font_sizes() {
                 Problem::Hidden => {
                     format!("hides {actual:.1}px of a value that shows whole at the fallback size")
                 }
+                Problem::Outside => format!("reaches {actual:.1}px outside its button"),
             };
             let location = hints
                 .get(&(element.clone(), *index))
