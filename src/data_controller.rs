@@ -327,33 +327,31 @@ fn storage_rows(scan: &StorageScan) -> Vec<StorageUsageRow> {
         .collect()
 }
 
-fn read_account_backup(path: &std::path::Path) -> Result<Vec<u8>, String> {
-    use std::io::Read;
+/// Outcome of restoring a Flectar account backup.
+pub(super) struct BackupRestore {
+    pub(super) imported: usize,
+    /// Accounts in the backup that this device already had.
+    pub(super) already_present: usize,
+    /// The backup carried preferences, which replaced the current ones.
+    pub(super) preferences: bool,
+}
 
-    let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
-    let mut bytes = Vec::with_capacity(MAX_ACCOUNT_BACKUP_BYTES as usize);
-    file.take(MAX_ACCOUNT_BACKUP_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|error| error.to_string())?;
+/// Restores a Flectar Mail account backup: account settings, profiles,
+/// colors, and preferences. Existing accounts are kept unchanged.
+pub(super) fn restore_account_backup(
+    app: &AppWindow,
+    bytes: &[u8],
+    core: &CoreMailSource,
+    state: &Rc<RefCell<InboxState>>,
+    runtime: &tokio::runtime::Runtime,
+) -> Result<BackupRestore, String> {
     if bytes.len() as u64 > MAX_ACCOUNT_BACKUP_BYTES {
         return Err("backup is larger than the 1 MB safety limit".into());
     }
-    Ok(bytes)
-}
-
-/// Applies an account backup the host already imported. The caller keeps the
-/// imported document alive until this returns.
-fn import_account_backup_document(
-    app: &AppWindow,
-    path: &std::path::Path,
-    core: &CoreMailSource,
-    state: &Rc<RefCell<InboxState>>,
-    runtime: &Rc<tokio::runtime::Runtime>,
-) {
-    let result = (|| -> Result<(usize, Settings, Vec<Account>, Vec<AccountConfig>), String> {
-        let bytes = read_account_backup(path)?;
+    type Restored = (BackupRestore, Settings, Vec<Account>, Vec<AccountConfig>);
+    let result = (|| -> Result<Restored, String> {
         let backup: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(|error| format!("invalid JSON: {error}"))?;
+            serde_json::from_slice(bytes).map_err(|error| format!("invalid JSON: {error}"))?;
         if backup.get("format").and_then(|value| value.as_str())
             != Some("flectar-mail-account-backup")
         {
@@ -391,6 +389,7 @@ fn import_account_backup_document(
         let portable_colors = portable_colors.unwrap_or_default();
 
         let mut settings = runtime.block_on(core.load_settings())?;
+        let has_preferences = backup.get("preferences").is_some();
         if let Some(preferences) = backup.get("preferences") {
             if let Some(theme) = preferences.get("theme").and_then(|value| value.as_str())
                 && matches!(theme, "system" | "carbon" | "snow" | "dark" | "light")
@@ -525,6 +524,7 @@ fn import_account_backup_document(
             }
         }
 
+        let backup_accounts = configs.len();
         let imported = runtime.block_on(core.import_account_configs(configs))?;
         runtime.block_on(core.save_settings(settings.clone()))?;
         let accounts = runtime.block_on(core.load_accounts())?;
@@ -573,69 +573,56 @@ fn import_account_backup_document(
             }
         }
         settings = runtime.block_on(core.load_settings())?;
-        Ok((imported, settings, accounts, configs))
+        let restore = BackupRestore {
+            imported,
+            already_present: backup_accounts.saturating_sub(imported),
+            preferences: has_preferences,
+        };
+        Ok((restore, settings, accounts, configs))
     })();
 
-    match result {
-        Ok((imported, settings, accounts, configs)) => {
-            let total = accounts.len();
-            apply_language(app, &settings.language);
-            state.borrow_mut().account_presentation =
-                AccountPresentationSettings::from_settings(&settings);
-            update_connected_accounts(app, state, runtime, accounts, configs);
-            refresh_rows_only(app, state, runtime);
-            app.set_theme_mode(
-                match settings.theme.as_str() {
-                    "carbon" | "dark" => "dark",
-                    "snow" | "light" => "light",
-                    _ => "system",
-                }
-                .into(),
-            );
-            app.set_monochrome_sidebar_icons(settings.monochrome_sidebar_icons);
-            app.global::<MessageColors>()
-                .set_preference(settings.message_appearance.as_str().into());
-            app.set_show_avatars(settings.show_avatars);
-            app.set_show_account_markers(settings.show_account_badges);
-            crate::window_chrome::apply_preference(
-                app,
-                crate::window_chrome::WindowFrame::parse(&settings.window_frame),
-            );
-            app.set_workspace_layout(settings.workspace_layout.clone().into());
-            app.set_workspace_list_pane_width(normalized_workspace_list_pane_width(
-                settings.workspace_list_pane_width,
-            ) as f32);
-            app.set_notifications_enabled(settings.notifications_enabled);
-            app.set_notification_sound_enabled(settings.sound_enabled);
-            app.set_notification_scope(settings.notification_scope.clone().into());
-            app.set_sync_interval_minutes(settings.sync_interval_minutes as i32);
-            app.set_mark_read_on_open(settings.mark_read_on_open);
-            app.set_collect_outgoing_contacts(settings.collect_outgoing_contacts);
-            app.set_collect_incoming_contacts(settings.collect_incoming_contacts);
-            app.set_contact_suggest_all_accounts(settings.contact_suggest_all_accounts);
-            app.set_suggest_learned_contacts(settings.suggest_learned_contacts);
-            state.borrow_mut().mark_read_on_open = settings.mark_read_on_open;
-            app.set_remote_images_enabled(
-                settings.load_remote_images && cfg!(feature = "remote-content"),
-            );
-            #[cfg(not(any(mobile, feature = "flatpak")))]
-            app.set_close_to_tray(settings.close_to_tray);
-            #[cfg(any(mobile, feature = "flatpak"))]
-            app.set_close_to_tray(false);
-            app.set_sync_status(if imported == 0 {
-                UiMessage::detail(
-                    "Backup imported. All {} account configurations already existed.",
-                    total,
-                )
-            } else {
-                UiMessage::detail(
-                    "Imported {} account configurations. Open Accounts and sign in to each one.",
-                    imported,
-                )
-            });
+    let (restore, settings, accounts, configs) = result?;
+    apply_language(app, &settings.language);
+    state.borrow_mut().account_presentation = AccountPresentationSettings::from_settings(&settings);
+    update_connected_accounts(app, state, runtime, accounts, configs);
+    refresh_rows_only(app, state, runtime);
+    app.set_theme_mode(
+        match settings.theme.as_str() {
+            "carbon" | "dark" => "dark",
+            "snow" | "light" => "light",
+            _ => "system",
         }
-        Err(error) => app.set_sync_status(UiMessage::detail("Could not import backup: {}", error)),
-    }
+        .into(),
+    );
+    app.set_monochrome_sidebar_icons(settings.monochrome_sidebar_icons);
+    app.global::<MessageColors>()
+        .set_preference(settings.message_appearance.as_str().into());
+    app.set_show_avatars(settings.show_avatars);
+    app.set_show_account_markers(settings.show_account_badges);
+    crate::window_chrome::apply_preference(
+        app,
+        crate::window_chrome::WindowFrame::parse(&settings.window_frame),
+    );
+    app.set_workspace_layout(settings.workspace_layout.clone().into());
+    app.set_workspace_list_pane_width(normalized_workspace_list_pane_width(
+        settings.workspace_list_pane_width,
+    ) as f32);
+    app.set_notifications_enabled(settings.notifications_enabled);
+    app.set_notification_sound_enabled(settings.sound_enabled);
+    app.set_notification_scope(settings.notification_scope.clone().into());
+    app.set_sync_interval_minutes(settings.sync_interval_minutes as i32);
+    app.set_mark_read_on_open(settings.mark_read_on_open);
+    app.set_collect_outgoing_contacts(settings.collect_outgoing_contacts);
+    app.set_collect_incoming_contacts(settings.collect_incoming_contacts);
+    app.set_contact_suggest_all_accounts(settings.contact_suggest_all_accounts);
+    app.set_suggest_learned_contacts(settings.suggest_learned_contacts);
+    state.borrow_mut().mark_read_on_open = settings.mark_read_on_open;
+    app.set_remote_images_enabled(settings.load_remote_images && cfg!(feature = "remote-content"));
+    #[cfg(not(any(mobile, feature = "flatpak")))]
+    app.set_close_to_tray(settings.close_to_tray);
+    #[cfg(any(mobile, feature = "flatpak"))]
+    app.set_close_to_tray(false);
+    Ok(restore)
 }
 
 /// Hands generated bytes to the document provider through a private staging
@@ -1208,51 +1195,6 @@ pub(super) fn register_data_management_callbacks(
                 ));
             }
         }
-    });
-
-    let app_weak = app.as_weak();
-    let state_for_backup_import = Rc::clone(state);
-    let runtime_for_backup_import = Rc::clone(runtime);
-    let documents_for_backup_import = documents.clone();
-    let importing_backup = Rc::new(Cell::new(false));
-    app.on_import_account_backup(move || {
-        let Some(app) = app_weak.upgrade() else {
-            return;
-        };
-        // A second click while the picker is open would apply two backups.
-        if importing_backup.get() {
-            return;
-        }
-        let Some(core) = state_for_backup_import.borrow().core.clone() else {
-            app.set_sync_status(UiMessage::plain(
-                "Local data storage is unavailable. Retry startup.",
-            ));
-            return;
-        };
-        // The import keeps its synchronous shape on the UI thread so the
-        // existing state updates stay on the main loop.
-        let dialog = backup_dialog(&app, UiMessage::plain("Import Flectar Mail account backup"));
-        let request = documents_for_backup_import.import_with(dialog);
-        let app_weak = app.as_weak();
-        let state = Rc::clone(&state_for_backup_import);
-        let runtime = Rc::clone(&runtime_for_backup_import);
-        let importing = Rc::clone(&importing_backup);
-        importing.set(true);
-        documents::run_request(&runtime_for_backup_import, request, move |imported| {
-            importing.set(false);
-            let Some(app) = app_weak.upgrade() else {
-                return;
-            };
-            let document = match imported {
-                Ok(Some(document)) => document,
-                Ok(None) => return,
-                Err(error) => {
-                    app.set_sync_status(UiMessage::detail("Could not import backup: {}", error));
-                    return;
-                }
-            };
-            import_account_backup_document(&app, document.path(), &core, &state, &runtime);
-        });
     });
 
     let (data_reset_raw_tx, data_reset_rx) = bounded_ui_channel::<Result<(), String>>();

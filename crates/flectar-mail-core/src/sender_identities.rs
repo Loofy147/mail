@@ -24,8 +24,8 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 const GMAIL_SEND_AS_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs";
-const MAX_IDENTITIES: usize = 256;
-const MAX_DISPLAY_NAME_CHARS: usize = 256;
+pub(crate) const MAX_IDENTITIES: usize = 256;
+pub(crate) const MAX_DISPLAY_NAME_CHARS: usize = 256;
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
 #[derive(Deserialize)]
@@ -164,27 +164,8 @@ impl Core {
         display_name: Option<String>,
         reply_to_email: Option<String>,
     ) -> Result<SenderIdentity> {
-        let email = email.trim().to_owned();
-        if !valid_email(&email) || email.starts_with("*@") {
-            return Err(CoreError::Other(format!(
-                "{email} is not a valid email address"
-            )));
-        }
-        let display_name = clean_optional(display_name);
-        if display_name
-            .as_deref()
-            .is_some_and(|name| name.chars().count() > MAX_DISPLAY_NAME_CHARS)
-        {
-            return Err(CoreError::Other("the sender name is too long".into()));
-        }
-        let reply_to_email = clean_optional(reply_to_email);
-        if let Some(reply_to) = reply_to_email.as_deref()
-            && (!valid_email(reply_to) || reply_to.starts_with("*@"))
-        {
-            return Err(CoreError::Other(format!(
-                "{reply_to} is not a valid reply-to address"
-            )));
-        }
+        let (email, display_name, reply_to_email) =
+            manual_identity_fields(email, display_name, reply_to_email)?;
         self.db
             .write(move |conn| {
                 let account = repo::accounts::get_config(conn, account_id)?
@@ -370,8 +351,46 @@ pub enum ManualIdentityPolicy {
     Never,
 }
 
+/// Checks and cleans the fields of a user-declared sender identity. Wildcard
+/// addresses are provider grants only; a manual one would claim a domain.
+pub(crate) fn manual_identity_fields(
+    email: String,
+    display_name: Option<String>,
+    reply_to_email: Option<String>,
+) -> Result<(String, Option<String>, Option<String>)> {
+    let email = email.trim().to_owned();
+    if !valid_email(&email) || email.starts_with("*@") {
+        return Err(CoreError::Other(format!(
+            "{email} is not a valid email address"
+        )));
+    }
+    let display_name = clean_optional(display_name);
+    if display_name
+        .as_deref()
+        .is_some_and(|name| name.chars().count() > MAX_DISPLAY_NAME_CHARS)
+    {
+        return Err(CoreError::Other("the sender name is too long".into()));
+    }
+    let reply_to_email = clean_optional(reply_to_email);
+    if let Some(reply_to) = reply_to_email.as_deref()
+        && (!valid_email(reply_to) || reply_to.starts_with("*@"))
+    {
+        return Err(CoreError::Other(format!(
+            "{reply_to} is not a valid reply-to address"
+        )));
+    }
+    Ok((email, display_name, reply_to_email))
+}
+
 pub fn manual_identity_policy(account: &AccountConfig) -> ManualIdentityPolicy {
-    match (account.provider, account.mail_protocol) {
+    manual_identity_policy_for(account.provider, account.mail_protocol)
+}
+
+pub(crate) fn manual_identity_policy_for(
+    provider: Provider,
+    protocol: MailProtocol,
+) -> ManualIdentityPolicy {
+    match (provider, protocol) {
         (Provider::Gmail, _) => ManualIdentityPolicy::Never,
         (_, MailProtocol::Jmap) => ManualIdentityPolicy::WithinWildcard,
         (Provider::Imap | Provider::Microsoft, MailProtocol::Imap) => ManualIdentityPolicy::Any,

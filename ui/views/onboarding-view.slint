@@ -58,7 +58,7 @@ export component OnboardingView inherits Rectangle {
     callback suggest-account-settings(string);
     callback start-oauth(string);
     callback cancel-oauth();
-    callback import-account-backup();
+    callback import-accounts();
 
     private property <bool> imap-form-valid: root.account-email != ""
         && root.account-password != ""
@@ -204,18 +204,19 @@ export component OnboardingView inherits Rectangle {
                 }
                 Rectangle { height: 8px; }
                 Text {
-                    text: @tr("Already used Flectar Mail?");
+                    text: @tr("Moving from Thunderbird, K-9 Mail, or another device?");
                     color: root.muted-text;
                     font-size: TypeScale.caption;
                     horizontal-alignment: center;
+                    wrap: word-wrap;
                 }
                 Button {
                     height: 40px;
-                    text: @tr("Import a backup");
+                    text: @tr("Import accounts");
                     icon: @image-url("../icons/lucide/outline/download.svg");
                     has-icon: true;
                     enabled: !root.account-setup-in-progress && !root.oauth-in-progress && !root.oauth-settings-saving;
-                    clicked => { root.import-account-backup(); }
+                    clicked => { root.import-accounts(); }
                 }
                 if root.oauth-in-progress && root.oauth-authorization-url != "" : OAuthBrowserHelp {
                     launch-failed: root.oauth-browser-error;
