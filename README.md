@@ -417,8 +417,21 @@ Each GitHub release includes `SHA256SUMS` and signed build-provenance
 attestations. With GitHub CLI installed, verify a download with
 `gh attestation verify <download> --repo flectar/mail`.
 
-Android APK updates require the same signing key; builds without a persistent
-test key may require uninstalling the previous app, which deletes local app data.
+Starting with alpha 8, Android preview releases use a persistent signing key so
+later previews can update the app in place and retain local data. Alpha 6 and
+alpha 7 used different keys and cannot update to this new signing identity.
+
+CI requires the `FLECTAR_ANDROID_TEST_KEYSTORE_BASE64` repository secret and checks
+its public certificate against `platform/android/test-signing-certificate.sha256`
+before building and when verifying the final APK. A missing or different key
+blocks publication. Keep a secure backup of the original keystore; restore it if
+the secret is lost. **Do not generate a replacement key or change the pinned
+fingerprint for a routine release.** The keystore uses alias `androiddebugkey`
+and password `android`, matching the preview build script. Its private key must
+remain outside the repository. Production signing is managed separately.
+
+Local developer builds can still generate a local test key. They only update
+installations signed with that same local key.
 
 You can also build Flectar Mail from source with the
 [Rust toolchain](https://rustup.rs/):

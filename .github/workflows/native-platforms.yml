@@ -481,6 +481,21 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+
+      - name: Restore required persistent alpha signing key
+        env:
+          TEST_KEYSTORE_BASE64: ${{ secrets.FLECTAR_ANDROID_TEST_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "$TEST_KEYSTORE_BASE64" ]]; then
+            echo '::error::FLECTAR_ANDROID_TEST_KEYSTORE_BASE64 is required. Restore the original alpha signing key; a new key breaks installed-app updates.'
+            exit 1
+          fi
+          keystore="$RUNNER_TEMP/flectar-android-test.keystore"
+          umask 077
+          printf '%s' "$TEST_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          FLECTAR_ANDROID_TEST_KEYSTORE="$keystore" bash scripts/verify-android-test-keystore.sh
+          echo "FLECTAR_ANDROID_TEST_KEYSTORE=$keystore" >> "$GITHUB_ENV"
+
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           toolchain: stable
@@ -503,19 +518,6 @@ jobs:
             echo "AR_aarch64_linux_android=$toolchain/llvm-ar"
             echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$toolchain/aarch64-linux-android26-clang"
           } >> "$GITHUB_ENV"
-
-      - name: Restore persistent test signing key when configured
-        env:
-          TEST_KEYSTORE_BASE64: ${{ secrets.FLECTAR_ANDROID_TEST_KEYSTORE_BASE64 }}
-        run: |
-          if [[ -n "$TEST_KEYSTORE_BASE64" ]]; then
-            keystore="$RUNNER_TEMP/flectar-android-test.keystore"
-            umask 077
-            printf '%s' "$TEST_KEYSTORE_BASE64" | base64 --decode > "$keystore"
-            echo "FLECTAR_ANDROID_TEST_KEYSTORE=$keystore" >> "$GITHUB_ENV"
-          else
-            echo '::warning::No persistent Android test key configured. This APK will not update installations signed by a previous CI run.'
-          fi
 
       - name: Build test-signed release APK
         env:

@@ -14,6 +14,11 @@
 # Local OAuth application registrations (see .env.example)
 /.env
 
+# Android private signing keys (the public certificate fingerprint is tracked)
+*.keystore
+*.jks
+*.p12
+
 # Editor and operating-system files
 *~
 .vscode/

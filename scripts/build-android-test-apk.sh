@@ -6,6 +6,12 @@ target_dir="$project_dir/target"
 android_sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 android_ndk="${ANDROID_NDK_ROOT:-${ANDROID_NDK_HOME:-}}"
 
+# CI must never fall back to a fresh per-run key, even when this script is
+# invoked outside the native-platforms workflow.
+if [[ "${CI:-}" == true || "${GITHUB_ACTIONS:-}" == true ]]; then
+  bash "$project_dir/scripts/verify-android-test-keystore.sh" >/dev/null
+fi
+
 # Missing registrations are supported: the app shows Sign-in settings instead
 # of sending a placeholder client ID to a provider. Reject invalid supplied IDs.
 python3 "$project_dir/scripts/verify-android-oauth.py"
@@ -44,8 +50,8 @@ export CXX_aarch64_linux_android="$toolchain/aarch64-linux-android26-clang++"
 export AR_aarch64_linux_android="$toolchain/llvm-ar"
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$toolchain/aarch64-linux-android26-clang"
 
-# Gradle signs the final package with this app-specific test key, keeping
-# production signing credentials out of the test build.
+# Local development may generate its own key. CI has already required and
+# verified the persistent alpha key above.
 data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
 keystore_dir="$data_home/flectar-mail/android"
 keystore="${FLECTAR_ANDROID_TEST_KEYSTORE:-$keystore_dir/test-signing.keystore}"
@@ -56,6 +62,7 @@ if [[ -n "${FLECTAR_ANDROID_TEST_KEYSTORE:-}" && ! -f "$keystore" ]]; then
   exit 1
 fi
 if [[ ! -f "$keystore" ]]; then
+  umask 077
   keytool \
     -genkeypair \
     -noprompt \

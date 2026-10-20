@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Exercise release validation and publishing without contacting GitHub."""
 
+import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -8,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import tomllib
 import unittest
 import xml.etree.ElementTree as ET
@@ -35,6 +38,86 @@ stage_linux_metadata = linux_metadata.stage
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_android_ci_never_generates_a_release_key(self):
+        for ci_variable in ("CI", "GITHUB_ACTIONS"):
+            with self.subTest(ci_variable=ci_variable), tempfile.TemporaryDirectory() as directory:
+                environment = {
+                    **os.environ,
+                    "CI": "", "GITHUB_ACTIONS": "", ci_variable: "true",
+                    "FLECTAR_ANDROID_TEST_KEYSTORE": "",
+                    "XDG_DATA_HOME": directory,
+                }
+                result = subprocess.run(
+                    ["bash", str(SCRIPTS / "build-android-test-apk.sh")],
+                    env=environment, capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("CI requires an existing FLECTAR_ANDROID_TEST_KEYSTORE", result.stderr)
+                self.assertEqual(list(Path(directory).rglob("*")), [])
+
+    def test_android_persistent_key_restore_and_pin(self):
+        # Exercise the workflow's actual restore command and its verifier.
+        # Stand in for keytool's public DER export; no private keys in fixtures.
+        workflow = (SCRIPTS.parent / ".github/workflows/native-platforms.yml").read_text()
+        restore = workflow.split("- name: Restore required persistent alpha signing key\n", 1)[1]
+        restore = restore.split("        run: |\n", 1)[1].split("\n      - ", 1)[0]
+        restore = textwrap.dedent(restore)
+        certificate = b"original public certificate"
+        digest = hashlib.sha256(certificate).hexdigest()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "scripts").mkdir()
+            (root / "platform/android").mkdir(parents=True)
+            pin = root / "platform/android/test-signing-certificate.sha256"
+            pin.write_text(digest + "\n")
+            shutil.copyfile(SCRIPTS / "verify-android-test-keystore.sh", root / "scripts/verify-android-test-keystore.sh")
+            keytool = root / "keytool"
+            keytool.write_text(
+                "#!/usr/bin/env python3\n"
+                "import pathlib, sys\n"
+                "assert sys.argv[1:3] == ['-exportcert', '-keystore']\n"
+                "assert sys.argv[4:] == ['-alias', 'androiddebugkey', '-storepass', 'android']\n"
+                "data = pathlib.Path(sys.argv[3]).read_bytes()\n"
+                "if data == b'unreadable keystore': sys.exit(1)\n"
+                "sys.stdout.buffer.write(data)\n"
+            )
+            keytool.chmod(0o755)
+            output = root / "github-env"
+            environment = {
+                **os.environ, "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                "RUNNER_TEMP": str(root), "GITHUB_ENV": str(output),
+            }
+            for encoded, success, message in (
+                ("", False, "FLECTAR_ANDROID_TEST_KEYSTORE_BASE64 is required"),
+                ("not base64!", False, ""),
+                (base64.b64encode(b"unreadable keystore").decode(), False, ""),
+                (base64.b64encode(b"replacement public certificate").decode(), False, "differs from the pinned"),
+                (base64.b64encode(certificate).decode(), True, digest),
+            ):
+                with self.subTest(encoded=encoded):
+                    output.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        ["bash", "-euo", "pipefail", "-c", restore], cwd=root,
+                        env={**environment, "TEST_KEYSTORE_BASE64": encoded},
+                        capture_output=True, text=True,
+                    )
+                    self.assertEqual(result.returncode == 0, success, result.stderr)
+                    self.assertIn(message, result.stdout + result.stderr)
+                    if success:
+                        self.assertIn("FLECTAR_ANDROID_TEST_KEYSTORE=", output.read_text())
+                        self.assertEqual((root / "flectar-android-test.keystore").stat().st_mode & 0o777, 0o600)
+                    else:
+                        self.assertFalse(output.exists())
+            for value in ("", "not-a-digest"):
+                pin.write_text(value)
+                result = subprocess.run(
+                    ["bash", str(root / "scripts/verify-android-test-keystore.sh")],
+                    env={**environment, "FLECTAR_ANDROID_TEST_KEYSTORE": str(root / "flectar-android-test.keystore")},
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("pinned Android test signing certificate SHA-256 is invalid", result.stderr)
+
     def test_flatpak_pdfium_archive_keeps_expected_layout(self):
         manifest = (
             SCRIPTS.parent / "packaging/flatpak/com.flectar.mail.yml"
