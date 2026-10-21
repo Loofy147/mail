@@ -140,7 +140,7 @@ async function syncRemote(append){
  }catch(error){if(seq===remoteSequence){remoteLoading=false;render();remoteError(error)}}
 }
 async function loadRemoteDetail(id){
- if(!remoteMode||!id)return;var item=remoteMessages.find(function(m){return m.id===id});if(!item||item.bodyLoaded!==false||item.folder==="drafts")return;
+ if(!remoteMode||!id)return;var item=remoteMessages.find(function(m){return m.id===id});if(!item||item.bodyLoaded!==false)return;
  var seq=remoteSequence,params=new URLSearchParams({id:id,folder:state.activeFolder});
  try{var data=await apiJson("/api/messages?"+params.toString());if(!remoteMode||seq!==remoteSequence||selectedId!==id)return;var index=remoteMessages.findIndex(function(m){return m.id===id});if(index>=0)remoteMessages[index]=Object.assign({},remoteMessages[index],data.message,{bodyLoaded:true});render()}
  catch(error){if(seq===remoteSequence)remoteError(error)}
