@@ -89,7 +89,9 @@ export async function dbRequest(path, options = {}) {
 export function cookie(req, name) {
   for (const item of String(req.headers?.cookie || "").split(";")) {
     const i = item.indexOf("=");
-    if (i >= 0 && item.slice(0, i).trim() === name) return decodeURIComponent(item.slice(i + 1).trim());
+    if (i >= 0 && item.slice(0, i).trim() === name) {
+      try { return decodeURIComponent(item.slice(i + 1).trim()); } catch { return null; }
+    }
   }
   return null;
 }
@@ -101,8 +103,10 @@ export function setCookie(req, name, value, maxAge) {
 }
 export function clearCookie(req, name) { return setCookie(req, name, "", 0); }
 export function stateEquals(a, b) {
-  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length || !a.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  if (typeof a !== "string" || typeof b !== "string" || !a.length || a.length > 2048 || b.length > 2048) return false;
+  const left = Buffer.from(a), right = Buffer.from(b);
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
 }
 export function requireSameOrigin(req) {
   const origin = req.headers?.origin;
