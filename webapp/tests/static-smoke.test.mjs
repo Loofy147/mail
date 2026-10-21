@@ -51,8 +51,8 @@ test("service worker caches only same-origin static assets and bypasses APIs", a
   }
   assert.match(worker, /url\.origin!==self\.location\.origin/);
   assert.match(worker, /request\.method!=="GET"/);
-  assert.ok(worker.includes("url.pathname"));
   assert.ok(worker.includes("/api"));
+  assert.match(worker, /test\(url\.pathname\)\)return;event\.respondWith/);
 });
 
 test("browser uses only same-origin endpoints and never holds provider secrets", async () => {
@@ -75,6 +75,13 @@ test("server token encryption is authenticated and round-trips", () => {
   const parts = sealed.split(".");
   parts[2] = (parts[2][0] === "A" ? "B" : "A") + parts[2].slice(1);
   assert.throws(() => decryptJson(parts.join(".")), (error) => error instanceof AppError && error.code === "session_unavailable");
+});
+
+test("invalid cookie escapes are rejected without crashing the request", async () => {
+  const { cookie, stateEquals } = await import("../lib/server.js");
+  assert.equal(cookie({ headers: { cookie: "mailroom_session=%ZZ" } }, "mailroom_session"), null);
+  assert.equal(stateEquals("é", "x"), false);
+  assert.equal(stateEquals("same-state", "same-state"), true);
 });
 
 test("mail header construction validates recipient and rejects CRLF injection", () => {
