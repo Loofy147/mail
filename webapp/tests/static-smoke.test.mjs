@@ -107,6 +107,15 @@ test("mutating APIs reject cross-origin browser requests", () => {
   assert.throws(() => requireSameOrigin(bad), (error) => error instanceof AppError && error.code === "origin_rejected");
 });
 
+test("Gmail draft listings request metadata rather than sending every draft body", async () => {
+  const messages = await read("api/messages.js");
+  assert.match(messages, /drafts\/" \+ encodeURIComponent\(draft\.id\) \+ "\?" \+ metadataParams\.toString\(\)/);
+  assert.match(messages, /mapMessage\(detail\.message, "drafts", \{ draftId: detail\.id \|\| draft\.id \}\)/);
+  assert.match(messages, /return String\(\(plain \|\| html\)\?\.text \|\| ""\)\.slice\(0, 300000\)/);
+  const app = await read("app.js");
+  assert.match(app, /if\(!item\|\|item\.bodyLoaded!==false\)return/);
+});
+
 test("Supabase bootstrap has closed SQL function blocks and private send idempotency", async () => {
   const sql = await read("supabase/bootstrap.sql");
   assert.equal((sql.match(/\$\$/g) || []).length, 4, "both PL/pgSQL function bodies must have opening and closing delimiters");
