@@ -61,9 +61,47 @@ test("browser uses only same-origin endpoints and never holds provider secrets",
   assert.match(app, /localStorage\.getItem\(KEY\)/);
   assert.match(app, /localStorage\.setItem\(KEY/);
   assert.match(app, /send_status_unknown/);
+  assert.match(app, /if\(error\.status&&error\.status<500&&error\.code!==\"send_status_unknown\"\)activeSendRequestId=null/);
   assert.doesNotMatch(app, /gmail\.googleapis\.com/i);
   assert.doesNotMatch(app, /oauth2\.googleapis\.com/i);
   assert.doesNotMatch(app, /GOOGLE_CLIENT_SECRET|SUPABASE_SECRET_KEY|TOKEN_ENCRYPTION_KEY/);
+});
+
+test("OAuth is configured only with a same-origin HTTPS callback and server secrets", async () => {
+  const { hasGoogleConfig, readJsonBody } = await import("../lib/server.js");
+  const keys = ["APP_ORIGIN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI", "SUPABASE_URL", "SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY", "TOKEN_ENCRYPTION_KEY"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]));
+  try {
+    process.env.APP_ORIGIN = "https://mailroom.example";
+    process.env.GOOGLE_CLIENT_ID = "client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "client-secret";
+    process.env.GOOGLE_REDIRECT_URI = "https://mailroom.example/api/auth/callback";
+    process.env.SUPABASE_URL = "https://project.example.supabase.co";
+    process.env.SUPABASE_SECRET_KEY = "server-secret-key-placeholder";
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    process.env.TOKEN_ENCRYPTION_KEY = "31".repeat(32);
+    assert.equal(hasGoogleConfig(), true);
+    process.env.GOOGLE_REDIRECT_URI = "https://evil.example/api/auth/callback";
+    assert.equal(hasGoogleConfig(), false);
+    process.env.GOOGLE_REDIRECT_URI = "https://mailroom.example/api/auth/callback";
+    process.env.APP_ORIGIN = "https://mailroom.example/unexpected-path";
+    assert.equal(hasGoogleConfig(), false);
+    assert.throws(() => readJsonBody({
+      headers: { "content-type": "application/json", "content-length": "0" },
+      body: { payload: "x".repeat(200) }
+    }, 100), (error) => error instanceof AppError && error.code === "body_too_large");
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+test("email threading references reject control characters", () => {
+  assert.throws(() => buildRawEmail({
+    to: "recipient@example.com", subject: "Reply", body: "Hello", inReplyTo: "<valid@example.com\\u0000X>"
+  }), (error) => error instanceof AppError && error.code === "invalid_reply_reference");
 });
 
 test("server token encryption is authenticated and round-trips", () => {
