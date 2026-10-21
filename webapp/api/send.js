@@ -2,16 +2,12 @@ import { AppError, buildRawEmail, dbRequest, fail, googleApi, json, methodNotAll
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 async function claimRequest(sessionHash, requestId) {
-  const inserted = await dbRequest("mailroom_send_requests", {
+  const result = await dbRequest("rpc/mailroom_claim_send_request", {
     method: "POST",
-    headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
-    body: { session_hash: sessionHash, request_id: requestId, status: "pending", created_at: new Date().toISOString() }
+    body: { p_session_hash: sessionHash, p_request_id: requestId }
   });
-  if (Array.isArray(inserted) && inserted.length) return { claimed: true };
-  const q = new URLSearchParams({ session_hash: "eq." + sessionHash, request_id: "eq." + requestId, select: "status,gmail_message_id" });
-  const rows = await dbRequest("mailroom_send_requests?" + q.toString());
-  const prior = Array.isArray(rows) ? rows[0] : null;
-  if (prior?.status === "sent") return { duplicate: true, messageId: prior.gmail_message_id || null };
+  if (result?.claimed === true) return { claimed: true };
+  if (result?.status === "sent") return { duplicate: true, messageId: result.messageId || null };
   throw new AppError(409, "send_status_unknown", "A previous send attempt with this request ID is unresolved. Check Sent in Gmail before retrying.");
 }
 async function setRequestResult(sessionHash, requestId, patch) {
@@ -27,6 +23,7 @@ export default async function handler(req, res) {
     await rateLimit(req, "send-hour", 50, 3600, session.sessionHash);
     const body = readJsonBody(req, 256 * 1024);
     if (typeof body.requestId !== "string" || !UUID.test(body.requestId)) throw new AppError(400, "invalid_request_id", "The send request ID is invalid.");
+    if (body.draftId !== undefined && (typeof body.draftId !== "string" || !/^[A-Za-z0-9_-]{1,180}$/.test(body.draftId))) throw new AppError(400, "invalid_draft_id", "The draft identifier is invalid.");
     const threadId = typeof body.threadId === "string" && /^[A-Za-z0-9_-]{1,180}$/.test(body.threadId) ? body.threadId : null;
     const inReplyTo = body.inReplyTo == null ? null : body.inReplyTo;
     const raw = buildRawEmail({ to: body.to, subject: body.subject, body: body.body, inReplyTo });
@@ -34,7 +31,7 @@ export default async function handler(req, res) {
     if (claim.duplicate) return json(res, 200, { ok: true, duplicate: true, messageId: claim.messageId });
     let result;
     try {
-      if (typeof body.draftId === "string" && /^[A-Za-z0-9_-]{1,180}$/.test(body.draftId)) {
+      if (typeof body.draftId === "string") {
         const draft = await googleApi(session, "drafts/" + encodeURIComponent(body.draftId) + "?format=full");
         const currentMessage = draft.message || {};
         const update = { message: { raw, ...(currentMessage.threadId ? { threadId: currentMessage.threadId } : threadId ? { threadId } : {}) } };
