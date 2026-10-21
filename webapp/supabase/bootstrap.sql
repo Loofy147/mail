@@ -86,3 +86,60 @@ $$;
 
 revoke all on function public.mailroom_consume_rate_limit(text, integer, integer) from public, anon, authenticated;
 grant execute on function public.mailroom_consume_rate_limit(text, integer, integer) to service_role;
+
+-- Atomically claim a send idempotency key; a duplicate pending key must
+-- never cause a second provider send. This RPC is backend-only.
+create or replace function public.mailroom_claim_send_request(
+  p_session_hash text,
+  p_request_id uuid
+) returns jsonb
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $
+declare
+  existing public.mailroom_send_requests%rowtype;
+begin
+  if p_session_hash !~ '^[a-f0-9]{64}
+ or p_request_id is null then
+    raise exception 'invalid send idempotency parameters';
+  end if;
+
+  delete from public.mailroom_send_requests
+  where created_at < clock_timestamp() - interval '90 days';
+
+  insert into public.mailroom_send_requests(session_hash, request_id, status, created_at, updated_at)
+  values (p_session_hash, p_request_id, 'pending', clock_timestamp(), clock_timestamp())
+  on conflict (session_hash, request_id) do nothing;
+
+  if found then
+    return jsonb_build_object('claimed', true, 'status', 'pending');
+  end if;
+
+  select * into existing
+  from public.mailroom_send_requests
+  where session_hash = p_session_hash and request_id = p_request_id
+  for update;
+
+  if not found then
+    raise exception 'send request record disappeared';
+  end if;
+
+  if existing.status = 'sent' then
+    return jsonb_build_object('claimed', false, 'status', 'sent', 'messageId', existing.gmail_message_id);
+  end if;
+
+  if existing.status = 'failed' then
+    update public.mailroom_send_requests
+    set status = 'pending', gmail_message_id = null, completed_at = null, updated_at = clock_timestamp()
+    where session_hash = p_session_hash and request_id = p_request_id;
+    return jsonb_build_object('claimed', true, 'status', 'pending');
+  end if;
+
+  return jsonb_build_object('claimed', false, 'status', 'pending');
+end;
+$;
+
+revoke all on function public.mailroom_claim_send_request(text, uuid) from public, anon, authenticated;
+grant execute on function public.mailroom_claim_send_request(text, uuid) to service_role;
+
