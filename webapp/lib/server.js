@@ -246,7 +246,7 @@ export function buildRawEmail({ to, subject, body, inReplyTo = null }) {
   const encodedSubject = "=?UTF-8?B?" + Buffer.from(subject.trim(), "utf8").toString("base64") + "?=";
   const headers = ["To: " + to, "Subject: " + encodedSubject, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit"];
   if (inReplyTo !== null) {
-    if (typeof inReplyTo !== "string" || !/^<[^<>\r\n]{1,250}>$/.test(inReplyTo)) throw new AppError(400, "invalid_reply_reference", "The reply reference is invalid.");
+    if (typeof inReplyTo !== "string" || !/^<[^ - <>]{1,250}>$/.test(inReplyTo)) throw new AppError(400, "invalid_reply_reference", "The reply reference is invalid.");
     headers.push("In-Reply-To: " + inReplyTo, "References: " + inReplyTo);
   }
   return Buffer.from(headers.join("\r\n") + "\r\n\r\n" + normalized, "utf8").toString("base64url");
