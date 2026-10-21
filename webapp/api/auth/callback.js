@@ -56,7 +56,7 @@ export default async function handler(req, res) {
       signal: AbortSignal.timeout(12000)
     });
     const token = await tokenResponse.json().catch(() => ({}));
-    if (!tokenResponse.ok || typeof token.access_token !== "string") {
+    if (!tokenResponse.ok || typeof token.access_token !== "string" || typeof token.refresh_token !== "string") {
       redirectCookies(req, res, [clearState]);
       return redirect(res, "oauth_failed");
     }
