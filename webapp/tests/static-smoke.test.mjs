@@ -70,7 +70,7 @@ test("browser uses only same-origin endpoints and never holds provider secrets",
 test("OAuth is configured only with a same-origin HTTPS callback and server secrets", async () => {
   const { hasGoogleConfig, readJsonBody } = await import("../lib/server.js");
   const keys = ["APP_ORIGIN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI", "SUPABASE_URL", "SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY", "TOKEN_ENCRYPTION_KEY"];
-  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]));
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   try {
     process.env.APP_ORIGIN = "https://mailroom.example";
     process.env.GOOGLE_CLIENT_ID = "client-id";
@@ -100,7 +100,7 @@ test("OAuth is configured only with a same-origin HTTPS callback and server secr
 
 test("email threading references reject control characters", () => {
   assert.throws(() => buildRawEmail({
-    to: "recipient@example.com", subject: "Reply", body: "Hello", inReplyTo: "<valid@example.com\\u0000X>"
+    to: "recipient@example.com", subject: "Reply", body: "Hello", inReplyTo: "<valid@example.com" + String.fromCharCode(0) + "X>"
   }), (error) => error instanceof AppError && error.code === "invalid_reply_reference");
 });
 
