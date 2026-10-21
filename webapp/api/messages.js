@@ -61,6 +61,7 @@ function mapMessage(message, folder, options = {}) {
     draftId: options.draftId || null,
     threadId: message.threadId || null,
     rfcMessageId: headers["message-id"] || null,
+    inReplyTo: headers["in-reply-to"] || null,
     folder,
     sender: sender.name,
     email: sender.email,
@@ -72,7 +73,7 @@ function mapMessage(message, folder, options = {}) {
     date,
     unread: labels.includes("UNREAD"),
     starred: labels.includes("STARRED"),
-    labels: labels.includes("Work") ? ["Work"] : (labels.includes("Personal") ? ["Personal"] : []),
+    labels: folder === "work" ? ["Work"] : (folder === "personal" ? ["Personal"] : (labels.includes("Work") ? ["Work"] : (labels.includes("Personal") ? ["Personal"] : []))),
     color: colorFor(sender.email),
     attachments: []
   };
@@ -127,7 +128,9 @@ async function listMessages(session, folder, q, pageToken) {
   const items = Array.isArray(data.messages) ? data.messages : [];
   const mapped = await mapLimit(items, 6, async (item) => {
     const id = validateId(item.id);
-    const detail = await googleApi(session, "messages/" + encodeURIComponent(id) + "?format=metadata&" + new URLSearchParams({ metadataHeaders: HEADERS }).toString());
+    const metadataParams = new URLSearchParams({ format: "metadata" });
+    for (const name of HEADERS) metadataParams.append("metadataHeaders", name);
+    const detail = await googleApi(session, "messages/" + encodeURIComponent(id) + "?" + metadataParams.toString());
     return mapMessage(detail, folder);
   });
   return { messages: mapped, nextPageToken: data.nextPageToken || null };
@@ -137,7 +140,7 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
   try {
     const session = await requireSession(req);
-    await rateLimit(req, "mail-read", 60, 60, session.sessionHash);
+    await rateLimit(req, "mail-read", 12, 60, session.sessionHash);
     const id = typeof req.query?.id === "string" ? req.query.id : "";
     const folder = typeof req.query?.folder === "string" && FOLDER_QUERY[req.query.folder] ? req.query.folder : "inbox";
     if (id) {
