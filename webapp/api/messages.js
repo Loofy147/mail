@@ -2,10 +2,10 @@ import { AppError, decodeBase64Url, fail, googleApi, hasGoogleConfig, htmlToPlai
 
 const FOLDER_QUERY = {
   inbox: "in:inbox",
-  starred: "is:starred",
+  starred: "is:starred -in:trash",
   sent: "in:sent",
   drafts: "in:drafts",
-  archive: "-in:inbox -in:trash -in:spam -in:drafts",
+  archive: "-in:inbox -in:trash -in:spam -in:drafts -in:sent",
   trash: "in:trash",
   work: "label:Work",
   personal: "label:Personal"
