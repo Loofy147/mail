@@ -15,7 +15,7 @@ The root native build and its mail engine are not changed by this browser worksp
 - Server-side encrypted token storage, HttpOnly session cookies, token refresh, same-origin checks for mutations, rate limits, send idempotency, API no-store headers and provider error handling.
 - Permanent deletion is intentionally disabled. The app requests gmail.modify plus gmail.send, not https://mail.google.com/. Gmail's narrower gmail.modify scope excludes immediate permanent deletion. This keeps deletion in Trash and avoids broader access.
 
-Attachments are shown as metadata only: uploading and downloading attachments are not implemented. HTML email is flattened to plain text for the reader, and external message images/scripts are not loaded. Other providers (Outlook/Microsoft 365, IMAP and JMAP) are not connected in this web workspace yet.
+Attachments are not integrated in connected mode yet; attachment UI in the local sample messages is illustrative only. Uploading and downloading real attachments are not implemented. HTML email is flattened to plain text for the reader, and external message images/scripts are not loaded. Other providers (Outlook/Microsoft 365, IMAP and JMAP) are not connected in this web workspace yet.
 
 ## Run the local demo
 
