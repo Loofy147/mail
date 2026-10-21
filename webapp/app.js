@@ -73,9 +73,22 @@ function renderReader(m){
 function render(){document.body.classList.toggle("light",state.theme==="light");updateConnectionUi();renderSidebar();var items=visibleMessages();if(!items.some(function(m){return m.id===selectedId}))selectedId=items.length?items[0].id:null;renderHeader(items);renderList(items);renderReader(selectedId?findMessage(selectedId):null);persist()}
 
 function closeSidebar(){sidebar.classList.remove("is-open");sidebarScrim.classList.remove("is-visible")}function openSidebar(){sidebar.classList.add("is-open");sidebarScrim.classList.add("is-visible")}
+function replyRecipient(message){
+ if(!message)return "";
+ if(!remoteMode||message.folder!=="sent")return message.email||"";
+ var raw=String(message.to||"");
+ var match=raw.match(/<\s*([^<>\s]+@[^<>\s]+)\s*>/);
+ if(match)return match[1];
+ var parts=raw.split(",");
+ for(var i=0;i<parts.length;i++){
+  var candidate=parts[i].trim().replace(/^"|"$/g,"").replace(/^[^<]*</,"").replace(/>$/,"").trim();
+  if(/^[^,\s<>]+@[^,\s<>]+$/.test(candidate))return candidate
+ }
+ return ""
+}
 function openCompose(existing,reply){
  editingId=existing?existing.id:null;replyContext=reply?{threadId:reply.threadId||null,inReplyTo:reply.rfcMessageId||reply.inReplyTo||null}:(existing?{threadId:existing.threadId||null,inReplyTo:existing.inReplyTo||existing.rfcMessageId||null}:null);
- composeForm.reset();document.getElementById("composeTitle").textContent=existing?"Edit draft":(reply?"Reply":"Compose");document.getElementById("composeTo").value=existing?(existing.to||""):(reply?(reply.email||""):"");document.getElementById("composeSubject").value=existing?(existing.subject||""):(reply?(/^re:/i.test(reply.subject||"")?reply.subject:"Re: "+(reply.subject||"")):"");document.getElementById("composeBody").value=existing?(existing.body||""):(reply?"\n\n\n— Original message —\n"+(reply.body||""):"");
+ composeForm.reset();document.getElementById("composeTitle").textContent=existing?"Edit draft":(reply?"Reply":"Compose");document.getElementById("composeTo").value=existing?(existing.to||""):(reply?replyRecipient(reply):"");document.getElementById("composeSubject").value=existing?(existing.subject||""):(reply?(/^re:/i.test(reply.subject||"")?reply.subject:"Re: "+(reply.subject||"")):"");document.getElementById("composeBody").value=existing?(existing.body||""):(reply?"\n\n\n— Original message —\n"+(reply.body||""):"");
  document.getElementById("demoWarning").innerHTML=remoteMode?'<span>✓</span><p><strong>Connected to Gmail.</strong> Sending will deliver real email. Saving a draft writes to your Gmail account.</p>':'<span>ⓘ</span><p><strong>Local demo mode.</strong> Saving to Sent only stores a sample message in this browser. It does not deliver email.</p>';
  document.getElementById("composeSubmitLabel").textContent=remoteMode?"Send email":"Save to Sent";document.getElementById("sendDemoTag").hidden=remoteMode;document.querySelector(".compose-footer-note").innerHTML=remoteMode?'<span class="lock-glyph">⌑</span> Stored in Gmail':'<span class="lock-glyph">⌑</span> Stored on this device';
  composeBackdrop.hidden=false;window.setTimeout(function(){document.getElementById("composeTo").focus()},20)
