@@ -7,9 +7,9 @@ A separate, installable web workspace prototype alongside the existing native Ru
 - Inbox, Starred, Sent, Drafts, Archive, Trash, and Work/Personal quick views.
 - Search across sender, subject, and message body; unread/starred filters; sort order.
 - Read/unread, star/unstar, archive, trash, restore, and permanent deletion.
-- Compose, save drafts, continue editing drafts, and create a local Sent item.
+- Compose, save partial drafts, continue editing drafts, and create a local Sent item.
 - Light/dark theme, responsive narrow-screen reader, keyboard shortcuts, and installable PWA shell.
-- Synthetic messages for the first run; changes persist in browser local storage.
+- Synthetic messages for first run; changes persist in browser local storage.
 - No third-party runtime libraries, external fonts, analytics, or remote scripts.
 
 ## Important boundary
@@ -44,5 +44,6 @@ Then open http://localhost:8080/webapp/. The service worker requires localhost o
 - app.js: local state and HTML escaping for stored message data.
 - sw.js: same-origin app-shell caching only.
 - manifest.webmanifest and icon.svg: PWA metadata and local icon.
+- tests/static-smoke.test.mjs: dependency-free smoke checks run in GitHub Actions.
 
 This prototype intentionally does not modify the native mail engine, transport, account authentication, cryptographic signing, or message database.
