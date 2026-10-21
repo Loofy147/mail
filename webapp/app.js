@@ -100,7 +100,7 @@ async function saveComposer(asDraft){
    var sp={requestId:activeSendRequestId,to:to,subject:subject,body:body};if(editingId)sp.draftId=editingId;if(context.threadId)sp.threadId=context.threadId;if(context.inReplyTo)sp.inReplyTo=context.inReplyTo;
    var sent=await apiJson("/api/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(sp)});
    activeSendRequestId=null;closeCompose();state.activeFolder="sent";state.filter="all";selectedId=null;searchInput.value="";await syncRemote(false);toast(sent.duplicate?"This send request was already processed.":"Email sent through Gmail.");return
-  }catch(error){if(error.code!=="send_status_unknown"&&error.code!=="provider_unavailable")activeSendRequestId=null;remoteError(error)}finally{if(submit)submit.disabled=false}
+  }catch(error){if(error.status&&error.status<500&&error.code!=="send_status_unknown")activeSendRequestId=null;remoteError(error)}finally{if(submit)submit.disabled=false}
   return
  }
  var m=editingId?findMessage(editingId):null;
