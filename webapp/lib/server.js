@@ -239,11 +239,24 @@ export function buildRawEmail({ to, subject, body, inReplyTo = null }) {
 }
 export function decodeBase64Url(value) { if (typeof value !== "string" || !value) return ""; try { return Buffer.from(value, "base64url").toString("utf8"); } catch { return ""; } }
 export function htmlToPlainText(value) {
-  return String(value || "").replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ").replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return String(value || "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]{2,}/g, "\n ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
+
 export function publicErrorCode(error) {
   if (!(error instanceof AppError)) return "oauth_failed";
   if (error.code === "setup_required" || error.code === "storage_unavailable") return "setup";
