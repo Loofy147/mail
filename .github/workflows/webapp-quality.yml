@@ -1,0 +1,24 @@
+name: Web workspace quality
+
+on:
+  pull_request:
+    paths:
+      - "webapp/**"
+      - ".github/workflows/webapp-quality.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run web workspace checks
+        run: node --test webapp/tests/*.test.mjs
