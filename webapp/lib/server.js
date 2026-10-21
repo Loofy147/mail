@@ -36,8 +36,21 @@ export function hasDatabaseConfig() {
 export function hasGoogleConfig() {
   if (!hasDatabaseConfig()) return false;
   try {
-    const id = env("GOOGLE_CLIENT_ID"), secret = env("GOOGLE_CLIENT_SECRET"), redirect = new URL(env("GOOGLE_REDIRECT_URI"));
-    return Boolean(id && secret && (redirect.protocol === "https:" || (redirect.protocol === "http:" && ["localhost", "127.0.0.1"].includes(redirect.hostname))));
+    const id = env("GOOGLE_CLIENT_ID");
+    const secret = env("GOOGLE_CLIENT_SECRET");
+    const appOriginText = env("APP_ORIGIN");
+    const appOrigin = new URL(appOriginText);
+    const redirectText = env("GOOGLE_REDIRECT_URI");
+    const redirect = new URL(redirectText);
+    const localHosts = ["localhost", "127.0.0.1"];
+    const secureOrigin = appOrigin.protocol === "https:" ||
+      (appOrigin.protocol === "http:" && localHosts.includes(appOrigin.hostname));
+    const secureRedirect = redirect.protocol === "https:" ||
+      (redirect.protocol === "http:" && localHosts.includes(redirect.hostname));
+    return Boolean(id && secret && secureOrigin && secureRedirect &&
+      appOrigin.pathname === "/" && !appOrigin.search && !appOrigin.hash &&
+      redirect.origin === appOrigin.origin &&
+      redirect.pathname === "/api/auth/callback" && !redirect.search && !redirect.hash);
   } catch { return false; }
 }
 export function encryptionKey() {
@@ -135,6 +148,7 @@ export function readJsonBody(req, maxBytes = 256 * 1024) {
     try { body = JSON.parse(body); } catch { throw new AppError(400, "invalid_json", "The request body is not valid JSON."); }
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new AppError(400, "invalid_json", "The request body is not valid JSON.");
+  if (Buffer.byteLength(JSON.stringify(body), "utf8") > maxBytes) throw new AppError(413, "body_too_large", "The request body is too large.");
   return body;
 }
 function rateKey(label, subject) { return createHmac("sha256", encryptionKey()).update(label + ":" + subject).digest("hex"); }
