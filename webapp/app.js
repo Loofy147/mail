@@ -131,7 +131,7 @@ function remoteError(error){
 }
 async function syncRemote(append){
  if(!remoteMode)return;if(append&&(!remoteNextPageToken||remoteLoading))return;
- var seq=++remoteSequence,params=new URLSearchParams({folder:state.activeFolder}),q=searchInput.value.trim();if(q)params.set("q",q);
+ var seq=++remoteSequence,params=new URLSearchParams({folder:state.activeFolder}),queries=[],q=searchInput.value.trim();if(q)queries.push(q);if(state.filter==="unread")queries.push("is:unread");if(state.filter==="starred")queries.push("is:starred");if(queries.length)params.set("q",queries.join(" "));
  if(append)params.set("pageToken",remoteNextPageToken||"");else{remoteNextPageToken=null;remoteMessages=[];selectedId=null}
  remoteLoading=true;render();
  try{var data=await apiJson("/api/messages?"+params.toString());if(seq!==remoteSequence)return;
@@ -150,7 +150,7 @@ async function remoteMutate(id,action,item){
  var actual=action;if(action==="unread")actual=item.unread?"mark-read":"mark-unread";
  if(action==="archive"||action==="delete"||action==="restore")selectedId=null;
  try{await apiJson("/api/actions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:id,action:actual,folder:item.folder})});
-  toast(({star:"Star updated.",unread:item.unread?"Marked read.":"Marked unread.","mark-read":"Marked read.","mark-unread":"Marked unread.",archive:"Moved to Archive.",delete:item.folder==="drafts"?"Draft deleted from Gmail.":"Moved to Gmail Trash.",restore:"Restored to Gmail Inbox."})[action]||"Gmail updated.");await syncRemote(false)
+  toast(({star:"Star updated.",unread:item.unread?"Marked read.":"Marked unread.","mark-read":"Marked read.","mark-unread":"Marked unread.",archive:"Moved to Archive.",delete:item.folder==="drafts"?"Draft deleted from Gmail.":"Moved to Gmail Trash.",restore:"Restored from Gmail Trash."})[action]||"Gmail updated.");await syncRemote(false)
  }catch(error){remoteError(error)}
 }
 async function initialize(){
@@ -165,7 +165,7 @@ async function initialize(){
 
 document.addEventListener("click",function(e){
  var nav=e.target.closest("[data-nav]");if(nav){selectFolder(nav.getAttribute("data-nav"));return}
- var filter=e.target.closest("[data-filter]");if(filter){state.filter=filter.getAttribute("data-filter");render();return}
+ var filter=e.target.closest("[data-filter]");if(filter){state.filter=filter.getAttribute("data-filter");render();if(remoteMode)syncRemote(false);return}
  if(e.target.closest("[data-open-compose]")){openCompose(null,null);return}
  var action=e.target.closest("[data-action]");if(action){var name=action.getAttribute("data-action"),id=action.getAttribute("data-id"),m=findMessage(id);if(name==="back"){document.body.classList.remove("show-reader");return}if(name==="edit-draft"&&m){openCompose(m,null);return}if(name==="reply"&&m){openCompose(null,m);return}mutate(id,name);return}
  if(e.target.closest("#loadMore")){syncRemote(true);return}
