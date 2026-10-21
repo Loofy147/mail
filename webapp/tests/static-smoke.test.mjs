@@ -107,6 +107,16 @@ test("mutating APIs reject cross-origin browser requests", () => {
   assert.throws(() => requireSameOrigin(bad), (error) => error instanceof AppError && error.code === "origin_rejected");
 });
 
+test("Supabase bootstrap has closed SQL function blocks and private send idempotency", async () => {
+  const sql = await read("supabase/bootstrap.sql");
+  assert.equal((sql.match(/\$\$/g) || []).length, 4, "both PL/pgSQL function bodies must have opening and closing delimiters");
+  assert.match(sql, /create or replace function public\.mailroom_consume_rate_limit/i);
+  assert.match(sql, /create or replace function public\.mailroom_claim_send_request/i);
+  assert.match(sql, /on conflict \(session_hash, request_id\) do nothing/i);
+  assert.match(sql, /grant execute on function public\.mailroom_claim_send_request\(text, uuid\) to service_role/i);
+  assert.match(sql, /revoke all on table public\.mailroom_sessions from anon, authenticated/i);
+});
+
 test("responsive and reduced-motion styles are present", async () => {
   const css = await read("styles.css");
   assert.match(css, /@media\(max-width:700px\)/);
