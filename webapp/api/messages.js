@@ -28,19 +28,20 @@ function colorFor(value) {
 }
 function extractBody(payload) {
   const parts = [];
-  function walk(part) {
-    if (!part || typeof part !== "object") return;
+  let visited = 0;
+  function walk(part, depth = 0) {
+    if (!part || typeof part !== "object" || depth > 20 || visited++ > 500) return;
     if (part.body?.data && typeof part.mimeType === "string" && part.mimeType.toLowerCase() === "text/plain") {
       parts.push({ kind: 0, text: decodeBase64Url(part.body.data) });
     } else if (part.body?.data && typeof part.mimeType === "string" && part.mimeType.toLowerCase() === "text/html") {
       parts.push({ kind: 1, text: htmlToPlainText(decodeBase64Url(part.body.data)) });
     }
-    for (const child of part.parts || []) walk(child);
+    for (const child of part.parts || []) walk(child, depth + 1);
   }
   walk(payload);
   const plain = parts.find((x) => x.kind === 0 && x.text.trim());
   const html = parts.find((x) => x.kind === 1 && x.text.trim());
-  return (plain || html)?.text || "";
+  return String((plain || html)?.text || "").slice(0, 300000);
 }
 function parseSender(value) {
   const raw = String(value || "");
@@ -111,9 +112,11 @@ async function listDrafts(session, pageToken) {
   const data = await googleApi(session, "drafts?" + params.toString());
   const drafts = Array.isArray(data.drafts) ? data.drafts : [];
   const messages = await mapLimit(drafts, 5, async (draft) => {
-    const full = await googleApi(session, "drafts/" + encodeURIComponent(draft.id) + "?format=full");
-    if (!full.message) return null;
-    return mapMessage(full.message, "drafts", { draftId: full.id || draft.id, full: true });
+    const metadataParams = new URLSearchParams({ format: "metadata" });
+    for (const name of HEADERS) metadataParams.append("metadataHeaders", name);
+    const detail = await googleApi(session, "drafts/" + encodeURIComponent(draft.id) + "?" + metadataParams.toString());
+    if (!detail.message) return null;
+    return mapMessage(detail.message, "drafts", { draftId: detail.id || draft.id });
   });
   return { messages: messages.filter(Boolean), nextPageToken: data.nextPageToken || null };
 }
