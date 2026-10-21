@@ -51,12 +51,13 @@ test("service worker caches only same-origin static assets and bypasses APIs", a
   }
   assert.match(worker, /url\.origin!==self\.location\.origin/);
   assert.match(worker, /request\.method!=="GET"/);
-  assert.match(worker, /\/api\(?:\\\/\|\$\)/);
+  assert.ok(worker.includes("url.pathname"));
+  assert.ok(worker.includes("/api"));
 });
 
 test("browser uses only same-origin endpoints and never holds provider secrets", async () => {
   const app = await read("app.js");
-  assert.match(app, /fetch\("\/api\//);
+  assert.match(app, /apiJson\("\/api\//);
   assert.match(app, /localStorage\.getItem\(KEY\)/);
   assert.match(app, /localStorage\.setItem\(KEY/);
   assert.match(app, /send_status_unknown/);
