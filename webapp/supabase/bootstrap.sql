@@ -96,12 +96,11 @@ create or replace function public.mailroom_claim_send_request(
 language plpgsql
 security invoker
 set search_path = pg_catalog, public
-as $
+as $$
 declare
   existing public.mailroom_send_requests%rowtype;
 begin
-  if p_session_hash !~ '^[a-f0-9]{64}
- or p_request_id is null then
+  if p_session_hash !~ '^[a-f0-9]{64}$' or p_request_id is null then
     raise exception 'invalid send idempotency parameters';
   end if;
 
@@ -138,7 +137,7 @@ begin
 
   return jsonb_build_object('claimed', false, 'status', 'pending');
 end;
-$;
+$$;
 
 revoke all on function public.mailroom_claim_send_request(text, uuid) from public, anon, authenticated;
 grant execute on function public.mailroom_claim_send_request(text, uuid) to service_role;
