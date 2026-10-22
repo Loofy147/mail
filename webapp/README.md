@@ -17,6 +17,25 @@ The root native build and its mail engine are not changed by this browser worksp
 
 Attachments are not integrated in connected mode yet; attachment UI in the local sample messages is illustrative only. Uploading and downloading real attachments are not implemented. HTML email is flattened to plain text for the reader, and external message images/scripts are not loaded. Other providers (Outlook/Microsoft 365, IMAP and JMAP) are not connected in this web workspace yet.
 
+## AppDeploy deployment
+
+A separate AppDeploy instance is deployed at https://mailroom-pj6ksd.v2.appdeploy.ai/ (App ID: `mailroom-pj6ksd`). The current deployment is in safe Local demo mode until its four server-only secret values are configured through AppDeploy's secure secrets form.
+
+The dedicated Supabase project `mailroom-web` is provisioned in `eu-west-1` (project ref `nalaabtzcgkhcfqcfszb`, URL `https://nalaabtzcgkhcfqcfszb.supabase.co`). The SQL in `supabase/bootstrap.sql` has been applied and its three tables verified. The quoted project cost was $0/month.
+
+For the AppDeploy deployment, register this exact Google OAuth redirect URI:
+
+    https://mailroom-pj6ksd.v2.appdeploy.ai/api/auth/callback
+
+Configure these AppDeploy backend secrets through the secure entry interface; never commit the values:
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `SUPABASE_SECRET_KEY`
+- `TOKEN_ENCRYPTION_KEY`
+
+Use a Supabase **server-side secret key** for `SUPABASE_SECRET_KEY`, not a publishable key. Generate `TOKEN_ENCRYPTION_KEY` with `openssl rand -hex 32` and enter it only in the private form. After submitting the values, the secrets must be bound to the existing AppDeploy app and the backend redeployed. A real Google OAuth sign-in and message-send test remains outstanding until those values and the registered callback are configured.
+
 ## Run the local demo
 
 From the repository root, run: python3 -m http.server 8080
