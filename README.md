@@ -37,6 +37,10 @@ Flectar Mail is a lightweight, native home for your email, calendars, and
 contacts. It is engineered to open instantly, stay responsive, and use a
 fraction of the memory of a typical web-based mail client.
 
+## Experimental web workspace
+
+This fork also contains an isolated browser workspace prototype in [webapp/](webapp/). It uses synthetic local messages and does not connect to mail accounts or deliver email. It does not alter the native app build. See the [web workspace notes](webapp/README.md) for scope and local run instructions.
+
 ## ❓ Why Flectar Mail?
 
 - **Fast from the first click.** A native interface and local-first data path

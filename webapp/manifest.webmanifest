@@ -1,0 +1,12 @@
+{
+  "id": "./",
+  "name": "Mailroom — Web Workspace",
+  "short_name": "Mailroom",
+  "description": "A privacy-first, offline-capable webmail workspace prototype.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0d1216",
+  "theme_color": "#11171c",
+  "icons": [{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

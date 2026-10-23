@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#11171c"><meta name="description" content="A fast, privacy-first webmail workspace prototype."><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
+  <title>Mailroom — Web Workspace</title><link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <button class="icon-button mobile-menu" id="mobileMenu" aria-label="Open navigation">☰</button>
+    <a class="brand" href="./" aria-label="Mailroom home"><span class="brand-mark">m</span><span class="brand-name">mailroom</span><span class="brand-divider"></span><span class="brand-context">Web workspace</span></a>
+    <label class="global-search" for="searchInput"><span class="search-glyph">⌕</span><input id="searchInput" type="search" placeholder="Search mail…" autocomplete="off" aria-label="Search email"><kbd>/</kbd></label>
+    <div class="topbar-actions"><span class="local-chip" id="localChip"><span class="status-dot"></span> <span id="accountStatusText">Local demo</span></span><button class="button button-quiet connect-button" id="connectButton" type="button">Connect Gmail</button><button class="icon-button" id="themeButton" aria-label="Switch theme" title="Switch theme">◐</button><button class="button button-primary top-compose" id="composeButton"><span>＋</span> Compose</button></div>
+  </header>
+  <div class="sidebar-scrim" id="sidebarScrim"></div>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar" aria-label="Mail navigation">
+      <button class="workspace-switcher" type="button" aria-label="Current workspace"><span class="workspace-avatar">H</span><span class="workspace-copy"><strong>Hichem’s workspace</strong><small>Personal inbox</small></span><span class="chevron">⌄</span></button>
+      <button class="button button-compose-wide" id="sidebarCompose"><span>＋</span> Compose email</button>
+      <p class="nav-caption">MAILBOX</p>
+      <nav class="nav-list" aria-label="Folders">
+        <button class="nav-item is-active" data-nav="inbox"><span class="nav-icon">▣</span><span class="nav-label">Inbox</span><span class="nav-count" id="count-inbox"></span></button>
+        <button class="nav-item" data-nav="starred"><span class="nav-icon">☆</span><span class="nav-label">Starred</span><span class="nav-count" id="count-starred"></span></button>
+        <button class="nav-item" data-nav="sent"><span class="nav-icon">↗</span><span class="nav-label">Sent</span><span class="nav-count" id="count-sent"></span></button>
+        <button class="nav-item" data-nav="drafts"><span class="nav-icon">▤</span><span class="nav-label">Drafts</span><span class="nav-count" id="count-drafts"></span></button>
+        <button class="nav-item" data-nav="archive"><span class="nav-icon">▱</span><span class="nav-label">Archive</span></button>
+        <button class="nav-item" data-nav="trash"><span class="nav-icon">⌫</span><span class="nav-label">Trash</span></button>
+      </nav>
+      <div class="sidebar-rule"></div><div class="nav-section-head"><p class="nav-caption">QUICK VIEWS</p><span class="tiny-sparkle">✳</span></div>
+      <nav class="nav-list" aria-label="Quick views"><button class="nav-item" data-nav="work"><span class="label-dot dot-violet"></span><span class="nav-label">Work</span></button><button class="nav-item" data-nav="personal"><span class="label-dot dot-amber"></span><span class="nav-label">Personal</span></button></nav>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-note"><span class="note-icon">⌁</span><div><strong>Private by default</strong><p>Demo data stays in this browser. No mail is sent.</p></div></div>
+      <div class="sidebar-bottom"><span class="keyboard-hint"><kbd>c</kbd> compose</span><span class="version-label">Web lab · 0.1</span></div>
+    </aside>
+    <main class="mail-pane" aria-label="Message list">
+      <div class="mail-heading"><div><p class="eyebrow" id="mailEyebrow">YOUR SPACE / MAIL</p><h1 id="pageTitle">Inbox</h1><p class="heading-subtitle" id="pageSubtitle">Your conversations, in one place.</p></div><div class="heading-tools"><button class="icon-button subtle" id="sortButton" title="Sort messages" aria-label="Sort messages">↕</button><button class="icon-button subtle" id="refreshButton" title="Refresh local view" aria-label="Refresh view">⟳</button></div></div>
+      <div class="list-toolbar"><div class="filter-tabs" role="group" aria-label="Filter messages"><button class="filter-tab is-selected" data-filter="all">All mail</button><button class="filter-tab" data-filter="unread">Unread</button><button class="filter-tab" data-filter="starred">Starred</button></div><span class="result-count" id="resultCount">0 messages</span></div>
+      <div class="message-list" id="messageList" aria-live="polite"></div>
+      <div class="list-bottom"><span class="list-bottom-dot"></span><span id="listBottomText">All caught up</span><button class="reader-action" id="loadMore" type="button" hidden>Load more</button></div>
+    </main>
+    <section class="reader-pane" id="readerPane" aria-label="Message reader"><div class="reader-content" id="readerContent"><div class="reader-empty"><div class="empty-art"><span>✉</span><i></i><b></b></div><h2>Your space to think.</h2><p>Choose a message to read it here, or start a new conversation.</p><button class="button button-primary" id="emptyCompose">＋ Compose a message</button><span class="reader-empty-foot">Tip: press <kbd>c</kbd> to compose</span></div></div></section>
+  </div>
+  <div class="toast-region" id="toastRegion" role="status" aria-live="polite"></div>
+</div>
+<div class="modal-backdrop" id="composeBackdrop" hidden>
+  <section class="compose-modal" role="dialog" aria-modal="true" aria-labelledby="composeTitle">
+    <header class="compose-header"><div><p class="eyebrow">NEW CONVERSATION</p><h2 id="composeTitle">Compose</h2></div><button class="icon-button" id="closeCompose" type="button" aria-label="Close compose">×</button></header>
+    <div class="demo-warning" id="demoWarning"><span>ⓘ</span><p><strong>Local demo mode.</strong> Saving to Sent only stores a sample message in this browser. It does not deliver email.</p></div>
+    <form id="composeForm">
+      <label class="compose-field"><span>To</span><input id="composeTo" type="email" placeholder="name@example.com" required autocomplete="email"></label>
+      <label class="compose-field"><span>Subject</span><input id="composeSubject" type="text" placeholder="What’s this about?" required maxlength="240"></label>
+      <label class="compose-field compose-body-field"><span>Message</span><textarea id="composeBody" rows="9" placeholder="Write something thoughtful…" required></textarea></label>
+      <footer class="compose-footer"><div class="compose-footer-note"><span class="lock-glyph">⌑</span> Stored on this device</div><div class="compose-actions"><button class="button button-quiet" type="button" id="saveDraft">Save draft</button><button class="button button-primary" type="submit"><span>↗</span> <span id="composeSubmitLabel">Save to Sent</span> <span class="send-demo-tag" id="sendDemoTag">demo</span></button></div></footer>
+    </form>
+  </section>
+</div>
+<script src="./app.js" defer></script>
+</body></html>
